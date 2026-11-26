@@ -1,10 +1,10 @@
-//! The worker: runs queued jobs (PLAN.md Phase 3) and the periodic clean-up.
+//! The worker: runs queued jobs and the periodic clean-up.
 //!
 //! - Jobs are claimed with `FOR UPDATE SKIP LOCKED` and leased; a worker that dies loses its
 //!   lease, and the job runs again elsewhere.
 //! - A failed attempt is retried with exponential backoff (10 s, 20 s, 40 s, ... up to an hour),
 //!   until the job's `max_attempts`. A handler can also fail a job for good.
-//! - Each job runs under a time limit. Memory limits come from the container (Phase 9).
+//! - Each job runs under a time limit. Memory limits come from the container.
 //! - New jobs `NOTIFY cyex_tv_jobs`, so an idle worker starts at once; it also polls, in case a
 //!   notification is missed.
 
@@ -168,7 +168,7 @@ impl Outcome {
 }
 
 /// The queue's gauges, read at scrape time: jobs not done, by kind and state. Alert when `due`
-/// stays high (PLAN.md Phase 9).
+/// stays high.
 pub async fn queue_metrics(db: &PgPool) -> String {
     let mut out = String::new();
     let mut conn = match db.acquire().await {

@@ -1,10 +1,9 @@
-//! Checking an uploaded image (PLAN.md Phase 3): what format it really is, that it decodes, and
+//! Checking an uploaded image: what format it really is, that it decodes, and
 //! that it stays inside the limits, frame by frame, so a small file can't expand into gigabytes.
 //! Also its dHash, for the near-duplicate blocklist.
 //!
 //! Inputs: PNG, APNG, GIF and WebP (still and animated), and JPEG (still). AVIF is recognised but
-//! refused for now: decoding it needs dav1d, a C library (see PROGRESS.md). SVG and video are
-//! refused.
+//! refused: decoding it needs dav1d, a C library. SVG and video are refused.
 //!
 //! Written for emotes, but nothing here is emote-specific, so cosmetic badge art can use it.
 
@@ -55,7 +54,7 @@ pub fn shown_ms(delay: u32) -> u32 {
     if delay < MIN_DELAY_MS { 100 } else { delay }
 }
 
-/// Upload limits (PLAN.md Phase 3).
+/// Upload limits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
     pub max_bytes: usize,
@@ -125,7 +124,7 @@ pub fn too_large_message(limits: &Limits) -> String {
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum MediaError {
-    /// Not a format we take (SVG, video, AVIF for now, anything else).
+    /// Not a format we take (SVG, video, AVIF, anything else).
     #[error("{0}")]
     Unsupported(&'static str),
     /// Over a limit.

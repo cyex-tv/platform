@@ -16,7 +16,7 @@ use axum::http::StatusCode;
 use bytes::Bytes;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::cosmetics::{self as db, Image, NewImage, PaintFields};
-use cyex_tv_db::{accounts, audit, ids, jobs, outbox, reads};
+use cyex_tv_db::{accounts, ids, jobs, outbox, reads};
 use cyex_tv_media::encode::Profile;
 use cyex_tv_media::{Limits, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
@@ -33,8 +33,10 @@ use sha2::{Digest, Sha256};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
-use crate::catalog::{LOOKUP_LIMIT, db_error, forbidden, holds, not_found, parse_id};
+use crate::catalog::require_any;
+use crate::catalog::{LOOKUP_LIMIT, db_error, forbidden, not_found, parse_id};
 use crate::editors::has_flag;
+use crate::errors::{self, Audit, record_audit};
 use crate::errors::{bad, conflict, limited_as, paging, sqlx_error};
 use crate::limits::AccountLimit;
 use crate::state::AppState;
@@ -63,18 +65,6 @@ pub const ENTITLEMENTS_PAGE_MAX: u32 = 100;
 
 // Errors
 
-async fn acquire(state: &AppState) -> ApiResult<sqlx::pool::PoolConnection<sqlx::Postgres>> {
-    state.db.acquire().await.map_err(sqlx_error)
-}
-
-async fn require(conn: &mut PgConnection, caller: &Caller, permission: &str) -> ApiResult<()> {
-    if holds(conn, caller, permission).await? {
-        Ok(())
-    } else {
-        Err(forbidden(&format!("This needs {permission}.")))
-    }
-}
-
 /// Cosmetics writes per account (ADR 0015).
 fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
     limited_as(
@@ -89,7 +79,7 @@ fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
 // Checks on input (pure, unit-tested below)
 
 /// Badge and paint names: 1 to 32 characters after trimming, nothing hidden or controlling.
-pub fn cosmetic_name(raw: &str) -> ApiResult<String> {
+pub fn clean_cosmetic_name(raw: &str) -> ApiResult<String> {
     let name = raw.trim();
     let len = name.chars().count();
     if len == 0 || len > NAME_MAX || text::has_unsafe(name, false) {
@@ -194,7 +184,7 @@ pub struct CheckedPaint {
 }
 
 pub fn paint_input(input: &PaintInput) -> ApiResult<CheckedPaint> {
-    let name = cosmetic_name(&input.name)?;
+    let name = clean_cosmetic_name(&input.name)?;
     let angle = input.angle.unwrap_or(90);
     if angle > 360 {
         return Err(bad("bad_angle", "The angle is 0 to 360 degrees."));
@@ -523,32 +513,6 @@ pub(crate) async fn publish_selection(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn write_audit(
-    conn: &mut PgConnection,
-    caller: &Caller,
-    action: &str,
-    target_kind: &str,
-    target_id: Uuid,
-    before: Option<Value>,
-    after: Option<Value>,
-) -> ApiResult<()> {
-    audit::write(
-        conn,
-        &audit::NewEntry {
-            actor: Some(caller.account_id),
-            action,
-            target_kind,
-            target_id: &ids::to_text(target_id),
-            before,
-            after,
-        },
-    )
-    .await
-    .map_err(db_error)?;
-    Ok(())
-}
-
 fn to_json<T: serde::Serialize>(value: &T) -> Value {
     serde_json::to_value(value).unwrap_or(Value::Null)
 }
@@ -558,7 +522,7 @@ fn to_json<T: serde::Serialize>(value: &T) -> Value {
 /// The catalog everyone sees: the cosmetics held by at least one account or for sale in the shop.
 /// Chat clients need the held ones to draw chatters; the rest stay private until released.
 pub async fn catalog(state: &AppState) -> ApiResult<CosmeticCatalog> {
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let now = chrono::Utc::now();
     let badge_ids = db::released_ids(&mut conn, CosmeticKind::Badge, now)
         .await
@@ -578,7 +542,7 @@ pub async fn catalog(state: &AppState) -> ApiResult<CosmeticCatalog> {
 
 /// The whole catalog, unreleased cosmetics too: for staff with a `cosmetics.*` permission.
 pub async fn catalog_all(state: &AppState) -> ApiResult<CosmeticCatalog> {
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let (badges, paints) = build(&mut conn, &state.cdn_url, None, None).await?;
     Ok(CosmeticCatalog { badges, paints })
 }
@@ -586,7 +550,7 @@ pub async fn catalog_all(state: &AppState) -> ApiResult<CosmeticCatalog> {
 /// The catalog for this caller: all of it for cosmetics staff, the public one for everyone else.
 pub async fn catalog_for(state: &AppState, caller: Option<&Caller>) -> ApiResult<CosmeticCatalog> {
     if let Some(caller) = caller {
-        let mut conn = acquire(state).await?;
+        let mut conn = errors::conn(state).await?;
         if sees_unreleased(&mut conn, caller).await? {
             drop(conn);
             return catalog_all(state).await;
@@ -625,7 +589,7 @@ pub async fn account_cosmetics(
     if wanted.is_empty() {
         return Ok(Vec::new());
     }
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let picks = db::selections_for_accounts(&mut conn, &wanted)
         .await
         .map_err(db_error)?;
@@ -669,7 +633,7 @@ pub async fn user_cosmetics(
     if wanted.is_empty() {
         return Ok(Vec::new());
     }
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     Ok(db::selections_for_users(&mut conn, platform, &wanted)
         .await
         .map_err(db_error)?
@@ -735,7 +699,7 @@ pub async fn my_cosmetics(
     caller: &Caller,
     account_id: Option<&str>,
 ) -> ApiResult<OwnedCosmetics> {
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let account = subject(&mut conn, caller, account_id).await?;
     owned_of(state, &mut conn, account).await
 }
@@ -766,7 +730,7 @@ pub async fn select(
     paint: &Pick,
 ) -> ApiResult<OwnedCosmetics> {
     rate_limited(state, caller)?;
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let account = subject(&mut conn, caller, owner_id).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let before = db::selection(&mut tx, account).await.map_err(db_error)?;
@@ -797,20 +761,14 @@ pub async fn select(
         if account != caller.account_id {
             after_json["via"] = json!("account_editor");
         }
-        audit::write_for(
+        record_audit(
             &mut tx,
-            &audit::NewEntry {
-                actor: Some(caller.account_id),
-                action: "cosmetics.selected",
-                target_kind: "account",
-                target_id: &ids::to_text(account),
-                before: Some(show(before)),
-                after: Some(after_json),
-            },
-            Some(account),
+            caller.account_id,
+            Audit::new("cosmetics.selected", "account", &ids::to_text(account))
+                .change(Some(show(before)), Some(after_json))
+                .subject(Some(account)),
         )
-        .await
-        .map_err(db_error)?;
+        .await?;
     }
     tx.commit().await.map_err(sqlx_error)?;
     owned_of(state, &mut conn, account).await
@@ -825,8 +783,8 @@ pub async fn upload_image(
     kind: CosmeticKind,
     file: Bytes,
 ) -> ApiResult<CosmeticImage> {
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_MANAGE]).await?;
     drop(conn);
     rate_limited(state, caller)?;
     let Some(store) = state.store.clone() else {
@@ -855,7 +813,7 @@ pub async fn upload_image(
     let key = cosmetic_original_key(&sha_hex);
     let side = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
 
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let (image, created) = db::insert_image(
         &mut tx,
@@ -922,14 +880,18 @@ pub async fn upload_image(
                 tracing::error!(error = %err, "storing a cosmetic original failed");
                 ApiError::unavailable("Uploads aren't available right now.")
             })?;
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "cosmetic_image.uploaded",
-            "cosmetic_image",
-            image.id,
-            None,
-            Some(json!({ "kind": kind.as_str(), "sha256": sha_hex })),
+            caller.account_id,
+            Audit::new(
+                "cosmetic_image.uploaded",
+                "cosmetic_image",
+                &ids::to_text(image.id),
+            )
+            .change(
+                None,
+                Some(json!({ "kind": kind.as_str(), "sha256": sha_hex })),
+            ),
         )
         .await?;
     }
@@ -955,8 +917,8 @@ pub async fn image(
     caller: &Caller,
     id: &str,
 ) -> ApiResult<Option<CosmeticImage>> {
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_MANAGE]).await?;
     let Some(id) = ids::from_text(id.trim()) else {
         return Ok(None);
     };
@@ -970,8 +932,8 @@ pub async fn image(
 /// px gets them). The files it has stay in use until the new set is recorded. Needs
 /// `cosmetics.manage`. Audited as `cosmetic_image.remade`.
 pub async fn remake_image(state: &AppState, caller: &Caller, id: &str) -> ApiResult<CosmeticImage> {
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_MANAGE]).await?;
     rate_limited(state, caller)?;
     let Some(store) = state.store.clone() else {
         return Err(ApiError::unavailable("Pictures can't be made right now."));
@@ -1000,14 +962,18 @@ pub async fn remake_image(state: &AppState, caller: &Caller, id: &str) -> ApiRes
     )
     .await
     .map_err(db_error)?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "cosmetic_image.remade",
-        "cosmetic_image",
-        image.id,
-        None,
-        Some(json!({ "kind": image.kind, "sha256": sigv4::hex(&image.sha256) })),
+        caller.account_id,
+        Audit::new(
+            "cosmetic_image.remade",
+            "cosmetic_image",
+            &ids::to_text(image.id),
+        )
+        .change(
+            None,
+            Some(json!({ "kind": image.kind, "sha256": sigv4::hex(&image.sha256) })),
+        ),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -1045,11 +1011,11 @@ pub async fn create_badge(
     caller: &Caller,
     input: &CreateBadge,
 ) -> ApiResult<Badge> {
-    let name = cosmetic_name(&input.name)?;
+    let name = clean_cosmetic_name(&input.name)?;
     let tip = tooltip(&input.tooltip)?;
     let image_id = parse_id(&input.image_id)?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_MANAGE]).await?;
     rate_limited(state, caller)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     ready_image(&mut tx, CosmeticKind::Badge, image_id).await?;
@@ -1057,14 +1023,11 @@ pub async fn create_badge(
         .await
         .map_err(db_error)?;
     let badge = one_badge(&mut tx, &state.cdn_url, row.id).await?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "badge.created",
-        "badge",
-        row.id,
-        None,
-        Some(to_json(&badge)),
+        caller.account_id,
+        Audit::new("badge.created", "badge", &ids::to_text(row.id))
+            .change(None, Some(to_json(&badge))),
     )
     .await?;
     publish_cosmetic(
@@ -1086,11 +1049,11 @@ pub async fn update_badge(
     input: &UpdateBadge,
 ) -> ApiResult<Badge> {
     let id = parse_id(id)?;
-    let name = input.name.as_deref().map(cosmetic_name).transpose()?;
+    let name = input.name.as_deref().map(clean_cosmetic_name).transpose()?;
     let tip = input.tooltip.as_deref().map(tooltip).transpose()?;
     let image_id = input.image_id.as_deref().map(parse_id).transpose()?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_MANAGE]).await?;
     rate_limited(state, caller)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let before = one_badge(&mut tx, &state.cdn_url, id).await?;
@@ -1101,14 +1064,11 @@ pub async fn update_badge(
         .await
         .map_err(db_error)?;
     let badge = one_badge(&mut tx, &state.cdn_url, id).await?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "badge.updated",
-        "badge",
-        id,
-        Some(to_json(&before)),
-        Some(to_json(&badge)),
+        caller.account_id,
+        Audit::new("badge.updated", "badge", &ids::to_text(id))
+            .change(Some(to_json(&before)), Some(to_json(&badge))),
     )
     .await?;
     publish_cosmetic(
@@ -1126,22 +1086,19 @@ pub async fn update_badge(
 /// Deletes a badge: every account loses it and stops showing it.
 pub async fn delete_badge(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bool> {
     let id = parse_id(id)?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_MANAGE]).await?;
     rate_limited(state, caller)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let Ok(before) = one_badge(&mut tx, &state.cdn_url, id).await else {
         return Ok(false);
     };
     db::delete_badge(&mut tx, id).await.map_err(db_error)?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "badge.deleted",
-        "badge",
-        id,
-        Some(to_json(&before)),
-        None,
+        caller.account_id,
+        Audit::new("badge.deleted", "badge", &ids::to_text(id))
+            .change(Some(to_json(&before)), None),
     )
     .await?;
     publish_cosmetic(
@@ -1165,8 +1122,8 @@ async fn paint_write(
     input: &PaintInput,
 ) -> ApiResult<Paint> {
     let checked = paint_input(input)?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_MANAGE]).await?;
     rate_limited(state, caller)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let before = match id {
@@ -1199,14 +1156,11 @@ async fn paint_write(
         Some(_) => ("paint.updated", EventType::CosmeticUpdated),
         None => ("paint.created", EventType::CosmeticCreated),
     };
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        action,
-        "paint",
-        row.id,
-        before.as_ref().map(to_json),
-        Some(to_json(&paint)),
+        caller.account_id,
+        Audit::new(action, "paint", &ids::to_text(row.id))
+            .change(before.as_ref().map(to_json), Some(to_json(&paint))),
     )
     .await?;
     publish_cosmetic(
@@ -1242,22 +1196,19 @@ pub async fn update_paint(
 
 pub async fn delete_paint(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bool> {
     let id = parse_id(id)?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_MANAGE]).await?;
     rate_limited(state, caller)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let Ok(before) = one_paint(&mut tx, &state.cdn_url, id).await else {
         return Ok(false);
     };
     db::delete_paint(&mut tx, id).await.map_err(db_error)?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "paint.deleted",
-        "paint",
-        id,
-        Some(to_json(&before)),
-        None,
+        caller.account_id,
+        Audit::new("paint.deleted", "paint", &ids::to_text(id))
+            .change(Some(to_json(&before)), None),
     )
     .await?;
     publish_cosmetic(
@@ -1314,8 +1265,8 @@ pub async fn grant(
     let why = reason(&input.reason)?;
     let account = parse_id(&input.account_id)?;
     let cosmetic = parse_id(&input.cosmetic_id)?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_GRANT).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_GRANT]).await?;
     rate_limited(state, caller)?;
     let live = accounts::get(&mut conn, account)
         .await
@@ -1339,18 +1290,17 @@ pub async fn grant(
     if !new {
         return Err(conflict("already_owned", "They own that already."));
     }
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "cosmetic.granted",
-        "account",
-        account,
-        None,
-        Some(json!({
-            "kind": input.kind.as_str(),
-            "cosmetic_id": ids::to_text(cosmetic),
-            "reason": why,
-        })),
+        caller.account_id,
+        Audit::new("cosmetic.granted", "account", &ids::to_text(account)).change(
+            None,
+            Some(json!({
+                "kind": input.kind.as_str(),
+                "cosmetic_id": ids::to_text(cosmetic),
+                "reason": why,
+            })),
+        ),
     )
     .await?;
     let (rows, _) = db::entitlements(&mut tx, input.kind, Some(account), Some(cosmetic), 1, 0)
@@ -1395,8 +1345,8 @@ pub async fn revoke(
         .filter(|s| !s.is_empty())
         .map(reason)
         .transpose()?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_GRANT).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_GRANT]).await?;
     rate_limited(state, caller)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let before = db::selection(&mut tx, account).await.map_err(db_error)?;
@@ -1410,19 +1360,18 @@ pub async fn revoke(
     if after != before {
         publish_selection(&mut tx, account, after).await?;
     }
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "cosmetic.revoked",
-        "account",
-        account,
-        Some(json!({
-            "kind": kind.as_str(),
-            "cosmetic_id": ids::to_text(cosmetic),
-            "source": removed.source,
-            "reason": removed.reason,
-        })),
-        Some(json!({ "reason": why })),
+        caller.account_id,
+        Audit::new("cosmetic.revoked", "account", &ids::to_text(account)).change(
+            Some(json!({
+                "kind": kind.as_str(),
+                "cosmetic_id": ids::to_text(cosmetic),
+                "source": removed.source,
+                "reason": removed.reason,
+            })),
+            Some(json!({ "reason": why })),
+        ),
     )
     .await?;
     let name = cosmetic_display_name(&mut tx, kind, cosmetic).await?;
@@ -1479,8 +1428,8 @@ pub async fn entitlements(
     let account = filter(account_id)?;
     let cosmetic = filter(cosmetic_id)?;
     let paged = paging(page, per_page, ENTITLEMENTS_PAGE, ENTITLEMENTS_PAGE_MAX);
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::COSMETICS_GRANT).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::COSMETICS_GRANT]).await?;
     let (rows, total) = db::entitlements(
         &mut conn,
         kind,
@@ -1533,8 +1482,8 @@ mod tests {
 
     #[test]
     fn names_and_tooltips() {
-        assert_eq!(cosmetic_name("  Dawn ").unwrap(), "Dawn");
-        assert_eq!(cosmetic_name(&"a".repeat(32)).unwrap().len(), 32);
+        assert_eq!(clean_cosmetic_name("  Dawn ").unwrap(), "Dawn");
+        assert_eq!(clean_cosmetic_name(&"a".repeat(32)).unwrap().len(), 32);
         for bad in [
             "",
             "   ",
@@ -1543,7 +1492,11 @@ mod tests {
             "Da\u{200B}wn",
             "a\nb",
         ] {
-            assert_eq!(cosmetic_name(bad).unwrap_err().code, "bad_name", "{bad:?}");
+            assert_eq!(
+                clean_cosmetic_name(bad).unwrap_err().code,
+                "bad_name",
+                "{bad:?}"
+            );
         }
         assert!(tooltip(&"t".repeat(64)).is_ok());
         assert_eq!(tooltip(&"t".repeat(65)).unwrap_err().code, "bad_tooltip");

@@ -1,4 +1,4 @@
-//! The `emote.transcode` job (PLAN.md Phase 3, steps 4 and 5): an uploaded original becomes its
+//! The `emote.transcode` job (queued by the upload): an uploaded original becomes its
 //! emote files (ADR 0012), stored under `emotes/{sha256}/{name}` with an immutable cache header.
 //!
 //! WebP goes first and is recorded on the file, so the emote is usable; then AVIF. Running the job

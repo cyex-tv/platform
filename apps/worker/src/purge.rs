@@ -1,4 +1,4 @@
-//! The `files.delete` job (PLAN.md Phase 7, takedown): a taken-down file's objects are deleted
+//! The `files.delete` job (takedown): a taken-down file's objects are deleted
 //! from storage, and their CDN URLs purged from Cloudflare's cache.
 //!
 //! An account deletion queues it too (`"reason": "account_deleted"`) for files no live emote

@@ -31,6 +31,8 @@ use crate::catalog::{
     db_error, forbidden, holds, load_set, member_name, not_found, parse_id, permissions_of,
     publish_member_event,
 };
+use crate::catalog::{has, holds_any, require_any};
+use crate::errors::{Audit, record_audit};
 use crate::errors::{bad, paging, sqlx_error};
 use crate::state::AppState;
 use crate::views;
@@ -115,31 +117,7 @@ pub(crate) async fn announce(
     Ok(())
 }
 
-async fn write_audit(
-    conn: &mut PgConnection,
-    caller: &Caller,
-    action: &str,
-    emote_id: Uuid,
-    before: Option<Value>,
-    after: Option<Value>,
-) -> ApiResult<()> {
-    audit::write(
-        conn,
-        &audit::NewEntry {
-            actor: Some(caller.account_id),
-            action,
-            target_kind: "emote",
-            target_id: &ids::to_text(emote_id),
-            before,
-            after,
-        },
-    )
-    .await
-    .map_err(db_error)?;
-    Ok(())
-}
-
-/// `write_audit` for a change an account editor made on the owner's emote: marked
+/// `audit` for a change an account editor made on the owner's emote: marked
 /// `"via": "account_editor"` and shown to the owner as theirs (the subject).
 async fn write_editor_audit(
     conn: &mut PgConnection,
@@ -152,21 +130,14 @@ async fn write_editor_audit(
 ) -> ApiResult<()> {
     let mut after = after.unwrap_or_else(|| json!({}));
     after["via"] = json!("account_editor");
-    audit::write_for(
+    record_audit(
         conn,
-        &audit::NewEntry {
-            actor: Some(caller.account_id),
-            action,
-            target_kind: "emote",
-            target_id: &ids::to_text(emote_id),
-            before,
-            after: Some(after),
-        },
-        Some(owner),
+        caller.account_id,
+        Audit::new(action, "emote", &ids::to_text(emote_id))
+            .change(before, Some(after))
+            .subject(Some(owner)),
     )
     .await
-    .map_err(db_error)?;
-    Ok(())
 }
 
 /// True if the caller is an account editor of the emote's owner with `flag` on every set.
@@ -274,9 +245,7 @@ pub async fn review_queue(
     filter: Option<&ReviewQueueFilter>,
 ) -> ApiResult<ReviewQueue> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    if !holds(&mut conn, caller, permissions::EMOTES_REVIEW).await? {
-        return Err(forbidden("This needs emotes.review."));
-    }
+    require_any(&mut conn, caller, &[permissions::EMOTES_REVIEW]).await?;
     let paged = paging(page, per_page, QUEUE_PAGE, QUEUE_PAGE_MAX);
     let query = QueueRead::from_filter(filter.cloned().unwrap_or_default())?;
     let (rows, total) = reads::review_queue(
@@ -422,9 +391,7 @@ async fn review(
     let why = why.map(reason).transpose()?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    if !holds(&mut tx, caller, permissions::EMOTES_REVIEW).await? {
-        return Err(forbidden("This needs emotes.review."));
-    }
+    require_any(&mut tx, caller, &[permissions::EMOTES_REVIEW]).await?;
     review_in(&mut tx, caller, id, to, why.as_deref(), visibility).await?;
     tx.commit().await.map_err(sqlx_error)?;
 
@@ -460,9 +427,7 @@ pub async fn review_batch(
     }
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    if !holds(&mut tx, caller, permissions::EMOTES_REVIEW).await? {
-        return Err(forbidden("This needs emotes.review."));
-    }
+    require_any(&mut tx, caller, &[permissions::EMOTES_REVIEW]).await?;
     let mut out = BatchOutcome::default();
     for (raw, id) in wanted {
         let Some(id) = id else {
@@ -493,9 +458,7 @@ pub async fn requeue_batch(
     let wanted = batch_ids(raw_ids)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    if !holds(&mut tx, caller, permissions::EMOTES_REVIEW).await? {
-        return Err(forbidden("This needs emotes.review."));
-    }
+    require_any(&mut tx, caller, &[permissions::EMOTES_REVIEW]).await?;
     let parsed: Vec<Uuid> = wanted.iter().filter_map(|(_, id)| *id).collect();
     let moved: BTreeSet<Uuid> = emotes::requeue(&mut tx, &parsed)
         .await
@@ -506,7 +469,12 @@ pub async fn requeue_batch(
     for (raw, id) in wanted {
         match id {
             Some(id) if moved.contains(&id) => {
-                write_audit(&mut tx, caller, "emote.requeued", id, None, None).await?;
+                record_audit(
+                    &mut tx,
+                    caller.account_id,
+                    Audit::new("emote.requeued", "emote", &ids::to_text(id)).change(None, None),
+                )
+                .await?;
                 out.done.push(ids::to_text(id));
             }
             Some(id) if row(&mut tx, id).await?.is_some() => {
@@ -667,19 +635,11 @@ fn note_view(n: &staff::EmoteNote) -> EmoteNote {
     }
 }
 
-async fn require_review(conn: &mut PgConnection, caller: &Caller) -> ApiResult<()> {
-    if holds(conn, caller, permissions::EMOTES_REVIEW).await? {
-        Ok(())
-    } else {
-        Err(forbidden("This needs emotes.review."))
-    }
-}
-
 /// Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`.
 pub async fn notes(state: &AppState, caller: &Caller, emote_id: &str) -> ApiResult<Vec<EmoteNote>> {
     let emote_id = parse_id(emote_id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    require_review(&mut conn, caller).await?;
+    require_any(&mut conn, caller, &[permissions::EMOTES_REVIEW]).await?;
     Ok(staff::emote_notes(&mut conn, emote_id, NOTES_LIMIT)
         .await
         .map_err(db_error)?
@@ -699,18 +659,18 @@ pub async fn add_note(
     let body = note_body(body)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    require_review(&mut tx, caller).await?;
+    require_any(&mut tx, caller, &[permissions::EMOTES_REVIEW]).await?;
     row(&mut tx, emote_id).await?.ok_or_else(not_found)?;
     let note = staff::add_emote_note(&mut tx, emote_id, caller.account_id, &body)
         .await
         .map_err(db_error)?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "emote.note_added",
-        emote_id,
-        None,
-        Some(json!({ "note_id": ids::to_text(note.id), "body": body })),
+        caller.account_id,
+        Audit::new("emote.note_added", "emote", &ids::to_text(emote_id)).change(
+            None,
+            Some(json!({ "note_id": ids::to_text(note.id), "body": body })),
+        ),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -722,7 +682,7 @@ pub async fn delete_note(state: &AppState, caller: &Caller, id: &str) -> ApiResu
     let id = parse_id(id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    require_review(&mut tx, caller).await?;
+    require_any(&mut tx, caller, &[permissions::EMOTES_REVIEW]).await?;
     let Some(note) = staff::emote_note(&mut tx, id).await.map_err(db_error)? else {
         return Ok(false);
     };
@@ -733,13 +693,13 @@ pub async fn delete_note(state: &AppState, caller: &Caller, id: &str) -> ApiResu
         .await
         .map_err(db_error)?;
     if done {
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "emote.note_deleted",
-            note.emote_id,
-            Some(json!({ "note_id": ids::to_text(note.id), "body": note.body })),
-            None,
+            caller.account_id,
+            Audit::new("emote.note_deleted", "emote", &ids::to_text(note.emote_id)).change(
+                Some(json!({ "note_id": ids::to_text(note.id), "body": note.body })),
+                None,
+            ),
         )
         .await?;
     }
@@ -757,7 +717,7 @@ pub async fn history(
     let emote_id = parse_id(emote_id)?;
     let key = ids::to_text(emote_id);
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    require_review(&mut conn, caller).await?;
+    require_any(&mut conn, caller, &[permissions::EMOTES_REVIEW]).await?;
     let entries = audit::list(
         &mut conn,
         &audit::Filter {
@@ -796,7 +756,8 @@ pub async fn update(
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let before = row(&mut tx, id).await?.ok_or_else(not_found)?;
     let owner = before.owner == Some(caller.account_id);
-    let edit_any = holds(&mut tx, caller, permissions::EMOTES_EDIT_ANY).await?;
+    let held = permissions_of(&mut tx, caller).await?;
+    let edit_any = has(&held, permissions::EMOTES_EDIT_ANY);
     // Staff with `emotes.edit_any` act as staff even when they also edit the account.
     let editor = !owner
         && !edit_any
@@ -824,7 +785,7 @@ pub async fn update(
     if visibility != current
         && (visibility == EmoteVisibility::Unlisted || current == EmoteVisibility::Unlisted)
         && !edit_any
-        && !holds(&mut tx, caller, permissions::EMOTES_FLAGS).await?
+        && !has(&held, permissions::EMOTES_FLAGS)
     {
         return Err(if current == EmoteVisibility::Unlisted {
             bad(
@@ -844,7 +805,7 @@ pub async fn update(
     let resubmit = before.state == EmoteState::Approved
         && (renamed || retagged)
         && !edit_any
-        && !holds(&mut tx, caller, permissions::EMOTES_REVIEW).await?;
+        && !has(&held, permissions::EMOTES_REVIEW);
     emotes::update(
         &mut tx,
         id,
@@ -869,13 +830,13 @@ pub async fn update(
     let after = row(&mut tx, id).await?.ok_or_else(not_found)?;
     let new_tags = tags.clone().unwrap_or_else(|| old_tags.clone());
     if resubmit {
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "emote.resubmitted",
-            id,
-            Some(json!({ "state": before.state, "name": before.name, "tags": old_tags })),
-            Some(json!({ "state": after.state, "name": after.name, "tags": new_tags })),
+            caller.account_id,
+            Audit::new("emote.resubmitted", "emote", &ids::to_text(id)).change(
+                Some(json!({ "state": before.state, "name": before.name, "tags": old_tags })),
+                Some(json!({ "state": after.state, "name": after.name, "tags": new_tags })),
+            ),
         )
         .await?;
     }
@@ -892,13 +853,13 @@ pub async fn update(
         )
         .await?;
     } else if !owner {
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "emote.updated",
-            id,
-            Some(snap(&before, &old_tags)),
-            Some(snap(&after, &new_tags)),
+            caller.account_id,
+            Audit::new("emote.updated", "emote", &ids::to_text(id)).change(
+                Some(snap(&before, &old_tags)),
+                Some(snap(&after, &new_tags)),
+            ),
         )
         .await?;
     }
@@ -926,8 +887,12 @@ pub async fn set_flags(
     let id = parse_id(id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    if !holds(&mut tx, caller, permissions::EMOTES_FLAGS).await?
-        && !holds(&mut tx, caller, permissions::EMOTES_EDIT_ANY).await?
+    if !holds_any(
+        &mut tx,
+        caller,
+        &[permissions::EMOTES_FLAGS, permissions::EMOTES_EDIT_ANY],
+    )
+    .await?
     {
         return Err(forbidden("This needs emotes.flags."));
     }
@@ -959,18 +924,20 @@ pub async fn set_flags(
     .await
     .map_err(db_error)?;
     let after = row(&mut tx, id).await?.ok_or_else(not_found)?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "emote.flags_changed",
-        id,
-        Some(json!({ "visibility": was, "nsfw": before.nsfw, "zero_width": before.zero_width })),
-        Some(json!({
-            "visibility": visibility,
-            "nsfw": after.nsfw,
-            "zero_width": after.zero_width,
-            "via": permissions::EMOTES_FLAGS,
-        })),
+        caller.account_id,
+        Audit::new("emote.flags_changed", "emote", &ids::to_text(id)).change(
+            Some(
+                json!({ "visibility": was, "nsfw": before.nsfw, "zero_width": before.zero_width }),
+            ),
+            Some(json!({
+                "visibility": visibility,
+                "nsfw": after.nsfw,
+                "zero_width": after.zero_width,
+                "via": permissions::EMOTES_FLAGS,
+            })),
+        ),
     )
     .await?;
     if visibility != was
@@ -1040,13 +1007,13 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
             )
             .await?;
         } else {
-            write_audit(
+            record_audit(
                 &mut tx,
-                caller,
-                "emote.deleted",
-                id,
-                Some(snapshot),
-                Some(json!({ "via": permissions::EMOTES_DELETE_ANY })),
+                caller.account_id,
+                Audit::new("emote.deleted", "emote", &ids::to_text(id)).change(
+                    Some(snapshot),
+                    Some(json!({ "via": permissions::EMOTES_DELETE_ANY })),
+                ),
             )
             .await?;
         }

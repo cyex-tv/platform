@@ -22,7 +22,7 @@ use std::collections::HashSet;
 
 use cyex_tv_auth::{Caller, rbac};
 use cyex_tv_db::sets::{self, NewMember, Set};
-use cyex_tv_db::{DbError, accounts, audit, channels, emotes, ids, outbox, reads, roles};
+use cyex_tv_db::{DbError, accounts, channels, emotes, ids, outbox, reads, roles};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
     AccountSummary, AddSetEmote, Channel, ClonedSet, CreateSet, EditorPermission, EmotePage,
@@ -36,6 +36,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::editors::{has_flag, has_flag_on_all_sets, has_flag_on_set};
+use crate::errors::{Audit, record_audit};
 use crate::errors::{bad, conflict, paging, rate_limited, sqlx_error};
 use crate::limits::AccountLimit;
 use crate::moderation::{QUEUE_PAGE, QUEUE_PAGE_MAX};
@@ -69,10 +70,38 @@ pub async fn permissions_of(conn: &mut PgConnection, caller: &Caller) -> ApiResu
 }
 
 pub async fn holds(conn: &mut PgConnection, caller: &Caller, permission: &str) -> ApiResult<bool> {
-    Ok(permissions_of(conn, caller)
-        .await?
-        .iter()
-        .any(|p| p == permission))
+    Ok(has(&permissions_of(conn, caller).await?, permission))
+}
+
+/// Whether `held` (from [`permissions_of`]) has `permission`: for a handler that asks more than
+/// once and loads the set a single time.
+pub fn has(held: &[String], permission: &str) -> bool {
+    held.iter().any(|p| p == permission)
+}
+
+/// Whether the caller holds at least one of `any`, with one load of their permissions.
+pub async fn holds_any(conn: &mut PgConnection, caller: &Caller, any: &[&str]) -> ApiResult<bool> {
+    let held = permissions_of(conn, caller).await?;
+    Ok(any.iter().any(|p| has(&held, p)))
+}
+
+/// The 403 for a caller holding none of `any`: "This needs X.", "X or Y.", "X, Y or Z.".
+fn needs(any: &[&str]) -> String {
+    match any {
+        [] => "This needs a permission.".to_owned(),
+        [one] => format!("This needs {one}."),
+        [init @ .., last] => format!("This needs {} or {last}.", init.join(", ")),
+    }
+}
+
+/// Passes when the caller holds one of `any` (the owner holds all; an app session only what
+/// everyone does), otherwise `403 forbidden` saying which are needed.
+pub async fn require_any(conn: &mut PgConnection, caller: &Caller, any: &[&str]) -> ApiResult<()> {
+    if holds_any(conn, caller, any).await? {
+        Ok(())
+    } else {
+        Err(forbidden(&needs(any)))
+    }
 }
 
 /// Whose eyes an answer is built for.
@@ -171,15 +200,12 @@ async fn audit_if_permission(
         Grant::Owner => (after, set.owner_account_id),
         Grant::Editor => return Ok(()),
     };
-    write_audit_for(
+    record_audit(
         conn,
-        caller,
-        action,
-        "set",
-        &ids::to_text(set.id),
-        before,
-        after,
-        subject,
+        caller.account_id,
+        Audit::new(action, "set", &ids::to_text(set.id))
+            .change(before, after)
+            .subject(subject),
     )
     .await
 }
@@ -194,57 +220,6 @@ fn via_account_editor(after: Option<serde_json::Value>) -> serde_json::Value {
         None => json!({ "via": "account_editor" }),
         Some(other) => json!({ "via": "account_editor", "value": other }),
     }
-}
-
-async fn write_audit(
-    conn: &mut PgConnection,
-    caller: &Caller,
-    action: &str,
-    target_kind: &str,
-    target_id: &str,
-    before: Option<serde_json::Value>,
-    after: Option<serde_json::Value>,
-) -> ApiResult<()> {
-    write_audit_for(
-        conn,
-        caller,
-        action,
-        target_kind,
-        target_id,
-        before,
-        after,
-        None,
-    )
-    .await
-}
-
-/// `subject` is the account whose public activity feed shows the change, if any.
-#[allow(clippy::too_many_arguments)]
-async fn write_audit_for(
-    conn: &mut PgConnection,
-    caller: &Caller,
-    action: &str,
-    target_kind: &str,
-    target_id: &str,
-    before: Option<serde_json::Value>,
-    after: Option<serde_json::Value>,
-    subject: Option<Uuid>,
-) -> ApiResult<()> {
-    audit::write_for(
-        conn,
-        &audit::NewEntry {
-            actor: Some(caller.account_id),
-            action,
-            target_kind,
-            target_id,
-            before,
-            after,
-        },
-        subject,
-    )
-    .await
-    .map_err(db_error)?;
-    Ok(())
 }
 
 // Events
@@ -1522,14 +1497,11 @@ pub async fn add_set_editor(
         .await
         .map_err(db_error)?;
     if added {
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "set.editor_added",
-            "set",
-            &ids::to_text(set_id),
-            None,
-            Some(json!({ "account_id": ids::to_text(target.id) })),
+            caller.account_id,
+            Audit::new("set.editor_added", "set", &ids::to_text(set_id))
+                .change(None, Some(json!({ "account_id": ids::to_text(target.id) }))),
         )
         .await?;
     }
@@ -1556,14 +1528,13 @@ pub async fn remove_set_editor(
         .await
         .map_err(db_error)?;
     if removed {
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "set.editor_removed",
-            "set",
-            &ids::to_text(set_id),
-            Some(json!({ "account_id": ids::to_text(account_id) })),
-            None,
+            caller.account_id,
+            Audit::new("set.editor_removed", "set", &ids::to_text(set_id)).change(
+                Some(json!({ "account_id": ids::to_text(account_id) })),
+                None,
+            ),
         )
         .await?;
     }
@@ -1679,22 +1650,22 @@ pub async fn update_channel_settings(
             "active_set_id": updated.active_set_id.map(ids::to_text),
             "allow_personal_emotes": updated.allow_personal_emotes,
         });
-        write_audit_for(
+        record_audit(
             &mut tx,
-            caller,
-            "channel.settings_changed",
-            "channel",
-            &ids::to_text(ch.id),
-            Some(json!({
-                "active_set_id": ch.active_set_id.map(ids::to_text),
-                "allow_personal_emotes": ch.allow_personal_emotes,
-            })),
-            Some(if by_editor {
-                via_account_editor(Some(after))
-            } else {
-                after
-            }),
-            Some(ch.account_id),
+            caller.account_id,
+            Audit::new("channel.settings_changed", "channel", &ids::to_text(ch.id))
+                .change(
+                    Some(json!({
+                        "active_set_id": ch.active_set_id.map(ids::to_text),
+                        "allow_personal_emotes": ch.allow_personal_emotes,
+                    })),
+                    Some(if by_editor {
+                        via_account_editor(Some(after))
+                    } else {
+                        after
+                    }),
+                )
+                .subject(Some(ch.account_id)),
         )
         .await?;
     }
@@ -1833,6 +1804,31 @@ mod tests {
     fn default_capacities_match_the_plan() {
         assert_eq!(default_capacity(SetKind::Channel), 1000);
         assert_eq!(default_capacity(SetKind::Personal), 5);
+    }
+
+    #[test]
+    fn a_missing_permission_is_a_403_naming_what_is_needed() {
+        let one = forbidden(&needs(&[permissions::EMOTES_REVIEW]));
+        assert_eq!(one.status, StatusCode::FORBIDDEN);
+        assert_eq!(one.code, "forbidden");
+        assert_eq!(one.message, "This needs emotes.review.");
+        let two = forbidden(&needs(&[
+            permissions::EMOTES_REVIEW,
+            permissions::REVIEW_SETTINGS,
+        ]));
+        assert_eq!(two.message, "This needs emotes.review or review.settings.");
+        let three = needs(&[
+            permissions::EMOTES_REVIEW,
+            permissions::EMOTES_TAKEDOWN,
+            permissions::REPORTS_MANAGE,
+        ]);
+        assert_eq!(
+            three,
+            "This needs emotes.review, emotes.takedown or reports.manage."
+        );
+        let held = vec!["emotes.review".to_owned()];
+        assert!(has(&held, "emotes.review"));
+        assert!(!has(&held, "emotes.takedown"));
     }
 
     #[test]

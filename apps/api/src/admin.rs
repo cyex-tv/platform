@@ -40,6 +40,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, not_found, parse_id, permissions_of};
+use crate::errors::{Audit, record_audit};
 use crate::errors::{bad, sqlx_error};
 use crate::limits::{
     AccountLimit, MAX_LIMIT, Rates, RoleOverrides, overrides_from_json, overrides_to_json,
@@ -310,31 +311,6 @@ fn snapshot(role: &Role) -> Value {
         "public": role.public,
         "invisible": role.invisible,
     })
-}
-
-async fn write_audit(
-    conn: &mut PgConnection,
-    caller: &Caller,
-    action: &str,
-    target_kind: &str,
-    target_id: &str,
-    before: Option<Value>,
-    after: Option<Value>,
-) -> ApiResult<()> {
-    audit::write(
-        conn,
-        &audit::NewEntry {
-            actor: Some(caller.account_id),
-            action,
-            target_kind,
-            target_id,
-            before,
-            after,
-        },
-    )
-    .await
-    .map_err(db_error)?;
-    Ok(())
 }
 
 async fn lock(conn: &mut PgConnection) -> ApiResult<()> {
@@ -674,14 +650,10 @@ pub async fn create(state: &AppState, caller: &Caller, input: &CreateRole) -> Ap
         role
     };
     let out = view(&mut tx, &role, &actor).await?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "role.created",
-        "role",
-        &out.id,
-        None,
-        Some(snapshot(&out)),
+        caller.account_id,
+        Audit::new("role.created", "role", &out.id).change(None, Some(snapshot(&out))),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -791,14 +763,11 @@ pub async fn update(
         .map_err(rule)?;
 
     let after = view(&mut tx, &updated, &actor).await?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "role.updated",
-        "role",
-        &after.id,
-        Some(snapshot(&before)),
-        Some(snapshot(&after)),
+        caller.account_id,
+        Audit::new("role.updated", "role", &after.id)
+            .change(Some(snapshot(&before)), Some(snapshot(&after))),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -835,14 +804,10 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
         .map_err(rule)?;
     let mut snap = snapshot(&before);
     snap["members"] = json!(members.iter().map(|m| ids::to_text(*m)).collect::<Vec<_>>());
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "role.deleted",
-        "role",
-        &before.id,
-        Some(snap),
-        None,
+        caller.account_id,
+        Audit::new("role.deleted", "role", &before.id).change(Some(snap), None),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -892,14 +857,13 @@ pub async fn assign(
         .map_err(db_error)?;
     state.limits.forget(account_id);
     if added {
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "role.assigned",
-            "account",
-            &ids::to_text(account_id),
-            None,
-            Some(json!({ "role_id": ids::to_text(role_id), "role": role.name })),
+            caller.account_id,
+            Audit::new("role.assigned", "account", &ids::to_text(account_id)).change(
+                None,
+                Some(json!({ "role_id": ids::to_text(role_id), "role": role.name })),
+            ),
         )
         .await?;
     }
@@ -947,14 +911,13 @@ pub async fn unassign(
         .keeps_a_manager(&managers_before, &managers_after)
         .map_err(rule)?;
     if removed {
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "role.unassigned",
-            "account",
-            &ids::to_text(account_id),
-            Some(json!({ "role_id": ids::to_text(role_id), "role": role.name })),
-            None,
+            caller.account_id,
+            Audit::new("role.unassigned", "account", &ids::to_text(account_id)).change(
+                Some(json!({ "role_id": ids::to_text(role_id), "role": role.name })),
+                None,
+            ),
         )
         .await?;
     }
@@ -1062,14 +1025,13 @@ pub async fn set_limits(
         roles::set_limits(&mut tx, id, &after)
             .await
             .map_err(db_error)?;
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "role.limits_changed",
-            "role",
-            &ids::to_text(id),
-            Some(json!({ "name": role.name, "limits": overrides_to_json(&before) })),
-            Some(json!({ "name": role.name, "limits": after })),
+            caller.account_id,
+            Audit::new("role.limits_changed", "role", &ids::to_text(id)).change(
+                Some(json!({ "name": role.name, "limits": overrides_to_json(&before) })),
+                Some(json!({ "name": role.name, "limits": after })),
+            ),
         )
         .await?;
     }

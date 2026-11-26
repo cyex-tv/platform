@@ -52,7 +52,7 @@ pub struct EventsState {
     pub hub: Hub,
     /// Flips to `true` on shutdown: every connection sends `reconnect`.
     pub stopping: watch::Receiver<bool>,
-    /// New connections per IP (PLAN.md Phase 7).
+    /// New connections per IP.
     pub connects: Arc<Limiter>,
     /// Connections open at once per IP (`SOCKETS_PER_IP`).
     pub sockets: Arc<OpenCap>,

@@ -5,7 +5,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use cyex_tv_auth::Caller;
-use cyex_tv_db::{accounts, audit, ids, reads, review};
+use cyex_tv_db::{accounts, ids, reads, review};
 use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{AccountSummary, DuplicateCandidate, Emote, LoginMatch, Platform};
 use cyex_tv_shared::permissions;
@@ -14,8 +14,9 @@ use serde_json::json;
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
-use crate::catalog::{db_error, forbidden, holds, not_found, parse_id, permissions_of};
-use crate::errors::{bad, sqlx_error};
+use crate::catalog::require_any;
+use crate::catalog::{db_error, not_found, parse_id, permissions_of};
+use crate::errors::{Audit, bad, forbidden, record_audit, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -52,9 +53,7 @@ pub async fn duplicates(
 ) -> ApiResult<Vec<DuplicateCandidate>> {
     let id = parse_id(emote_id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    if !holds(&mut conn, caller, permissions::EMOTES_REVIEW).await? {
-        return Err(forbidden("This needs emotes.review."));
-    }
+    require_any(&mut conn, caller, &[permissions::EMOTES_REVIEW]).await?;
     if reads::emotes(&mut conn, &[id])
         .await
         .map_err(db_error)?
@@ -111,13 +110,12 @@ pub fn parse_sha256(raw: &str) -> ApiResult<[u8; 32]> {
 /// The ready reject reasons, in order. Needs `emotes.review` or `review.settings`.
 pub async fn reasons(state: &AppState, caller: &Caller) -> ApiResult<Vec<String>> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    let held = permissions_of(&mut conn, caller).await?;
-    if !held
-        .iter()
-        .any(|p| p == permissions::EMOTES_REVIEW || p == permissions::REVIEW_SETTINGS)
-    {
-        return Err(forbidden("This needs emotes.review or review.settings."));
-    }
+    require_any(
+        &mut conn,
+        caller,
+        &[permissions::EMOTES_REVIEW, permissions::REVIEW_SETTINGS],
+    )
+    .await?;
     review::reasons(&mut conn).await.map_err(db_error)
 }
 
@@ -153,28 +151,22 @@ pub async fn set_reasons(
     let next = clean_reasons(raw)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    if !holds(&mut tx, caller, permissions::REVIEW_SETTINGS).await? {
-        return Err(forbidden("This needs review.settings."));
-    }
+    require_any(&mut tx, caller, &[permissions::REVIEW_SETTINGS]).await?;
     review::lock(&mut tx).await.map_err(db_error)?;
     let before = review::reasons(&mut tx).await.map_err(db_error)?;
     if before != next {
         review::replace_reasons(&mut tx, &next, caller.account_id)
             .await
             .map_err(db_error)?;
-        audit::write(
+        record_audit(
             &mut tx,
-            &audit::NewEntry {
-                actor: Some(caller.account_id),
-                action: "review.reasons_changed",
-                target_kind: "review_reasons",
-                target_id: "reject",
-                before: Some(json!({ "reasons": before })),
-                after: Some(json!({ "reasons": next })),
-            },
+            caller.account_id,
+            Audit::new("review.reasons_changed", "review_reasons", "reject").change(
+                Some(json!({ "reasons": before })),
+                Some(json!({ "reasons": next })),
+            ),
         )
-        .await
-        .map_err(db_error)?;
+        .await?;
     }
     tx.commit().await.map_err(sqlx_error)?;
     Ok(next)

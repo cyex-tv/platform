@@ -45,7 +45,7 @@ fn summary(summaries: &HashMap<Uuid, Summary>, id: Option<Uuid>) -> Option<Accou
     summaries.get(&id?).map(AccountSummary::from)
 }
 
-/// The files of an emote, from `files.variants` (written by the Phase 3 pipeline in this
+/// The files of an emote, from `files.variants` (written by the transcode job in this
 /// shape). Anything that doesn't parse is left out rather than failing the read.
 fn files(variants: Option<&serde_json::Value>) -> Vec<EmoteFile> {
     match variants {

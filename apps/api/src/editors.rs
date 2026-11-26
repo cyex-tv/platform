@@ -34,7 +34,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, holds, not_found, parse_id, viewer};
-use crate::errors::{bad, conflict, limited_as, sqlx_error};
+use crate::errors::{Audit, bad, conflict, limited_as, record_audit, sqlx_error};
 use crate::limits::AccountLimit;
 use crate::state::AppState;
 use crate::views;
@@ -102,22 +102,6 @@ fn names_of(flags: &Flags) -> Vec<String> {
 
 fn all_flags() -> Flags {
     EditorPermission::ALL.into_iter().collect()
-}
-
-/// The flags `editor` holds on `owner`: every flag for the owner themselves, `None` for anyone
-/// who isn't a live editor of a live account.
-pub async fn flags_on(
-    conn: &mut PgConnection,
-    owner: Uuid,
-    editor: Uuid,
-) -> ApiResult<Option<Flags>> {
-    if owner == editor {
-        return Ok(Some(all_flags()));
-    }
-    Ok(editors::permissions_of(conn, owner, editor)
-        .await
-        .map_err(db_error)?
-        .map(|names| flags_of(&names)))
 }
 
 /// The flags and set scope `editor` holds on `owner`: everything for the owner, `None` for
@@ -474,20 +458,14 @@ async fn audit(
         let mark = after.get_or_insert_with(|| json!({}));
         mark["via"] = json!("account_editor");
     }
-    cyex_tv_db::audit::write_for(
+    record_audit(
         conn,
-        &cyex_tv_db::audit::NewEntry {
-            actor: Some(caller.account_id),
-            action,
-            target_kind: "account",
-            target_id: &ids::to_text(owner),
-            before: before.map(shape),
-            after,
-        },
-        Some(owner),
+        caller.account_id,
+        Audit::new(action, "account", &ids::to_text(owner))
+            .change(before.map(shape), after)
+            .subject(Some(owner)),
     )
-    .await
-    .map_err(db_error)?;
+    .await?;
     Ok(())
 }
 

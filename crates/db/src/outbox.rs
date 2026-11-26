@@ -1,9 +1,9 @@
 //! The events outbox (ADR 0005). A write that clients should hear about inserts its event here in
 //! the same transaction. An insert trigger sends `NOTIFY cyex_tv_events, '<id>'`, which wakes the
-//! events service and the api's subscription feed (Phase 5).
+//! events service and the api's subscription feed.
 //!
 //! Event IDs come from a sequence. A transaction that started earlier can commit a lower ID after
-//! a higher one is visible, so the Phase 5 readers must allow for that gap; this module only
+//! a higher one is visible, so the readers must allow for that gap; this module only
 //! stores and reads.
 
 use std::collections::{HashMap, HashSet};

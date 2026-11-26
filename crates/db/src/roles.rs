@@ -1,8 +1,8 @@
 //! Roles, their permissions and who holds them (ADR 0010).
 //!
 //! This module stores and reads. The rules on top (the owner has everything, no escalation, no
-//! lock-out) are Phase 2 PR 4, in `crates/auth`; `highest_position` and `holders_of` are what they
-//! need from here.
+//! lock-out) are in `crates/auth`; `highest_position` and `holders_of` are what they need from
+//! here.
 
 use chrono::{DateTime, Utc};
 use std::collections::BTreeMap;
