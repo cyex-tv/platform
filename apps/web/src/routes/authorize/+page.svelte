@@ -220,5 +220,5 @@
   .btn.big:not(.btn-primary) { background: var(--bg); }
   .note { margin: 16px 0 0; }
   .note a { color: var(--text-sub, var(--muted)); text-decoration: underline; text-underline-offset: 3px; }
-  @media (max-width: 380px) { .choices.two { grid-template-columns: 1fr; } .choices.two .btn-primary { order: -1; } }
+  @media (max-width: 479.98px) { .choices.two { grid-template-columns: 1fr; } .choices.two .btn-primary { order: -1; } }
 </style>

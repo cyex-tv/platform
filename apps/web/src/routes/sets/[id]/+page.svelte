@@ -406,7 +406,7 @@
   .find :global(svg) { position: absolute; left: 12px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
   .find .input { width: 100%; height: 36px; padding-left: 36px; }
   @media (pointer: coarse) { .find .input { height: 44px; } }
-  @media (max-width: 520px) { .find { flex-basis: 100%; } }
+  @media (max-width: 639.98px) { .find { flex-basis: 100%; } }
   .more { margin-top: 24px; }
   .missing { display: grid; gap: 16px; min-height: 50svh; align-content: start; padding-bottom: 40px; }
   .back { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--muted); font-size: var(--t-small); }

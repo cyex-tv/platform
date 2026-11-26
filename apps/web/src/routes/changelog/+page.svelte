@@ -109,7 +109,7 @@
   .changelog .entry li { color: var(--muted); line-height: 1.6; }
   .changelog .entry li::marker { color: var(--dim); }
   .changelog .staff { margin: 16px 0 6px; }
-  @media (max-width: 620px) {
+  @media (max-width: 639.98px) {
     .changelog .entry { grid-template-columns: minmax(0, 1fr); }
     .changelog .when { grid-row: auto; margin: 0 0 4px; }
     .changelog .entry > :not(.when) { grid-column: 1; }

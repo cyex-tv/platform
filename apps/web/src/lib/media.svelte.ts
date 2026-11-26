@@ -3,13 +3,15 @@
 // the server and until the first mount, so hydration never disagrees with the server's page.
 // Read outside anything reactive (a handler, a transition) it gives the answer right now; `now(query)` says so.
 import { createSubscriber } from 'svelte/reactivity';
+import { BP, below, from } from './breakpoints';
 
-/** The widths the site switches layouts at, named once. */
-export const PHONE = '(max-width: 720px)'; // header search, popovers become sheets
-export const NARROW = '(max-width: 899.98px)'; // the side rail becomes a strip
-export const NO_PANEL = '(max-width: 1099.98px)'; // no right-hand panel: it opens as a sheet or on top
-export const PHONE_TABS = '(max-width: 520px)'; // the review queue's short tab names
-export const PANEL = '(min-width: 1100px)'; // a right-hand panel beside the list
+/** The widths the site switches layouts at, as queries (the numbers are in breakpoints.ts). */
+export const TINY = below(BP.tiny); // the shortest tab names and rows
+export const SMALL = below(BP.small); // one column
+export const PHONE = below(BP.phone); // header search, popovers become sheets
+export const NARROW = below(BP.narrow); // the side rail becomes a strip
+export const NO_PANEL = below(BP.panel); // no right-hand panel: it opens as a sheet or on top
+export const PANEL = from(BP.panel); // a right-hand panel beside the list
 export const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 
 const available = () => typeof matchMedia === 'function';

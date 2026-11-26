@@ -418,7 +418,7 @@
     .cols { grid-template-columns: minmax(0, 1fr); gap: 20px; }
     .left { position: static; }
   }
-  @media (max-width: 560px) {
+  @media (max-width: 639.98px) {
     .stage { padding: 52px 12px 20px; }
     /* Phones: the largest on its own row on top, the smaller ones under it. */
     .focus { order: -1; flex-basis: 100%; }
@@ -432,7 +432,7 @@
 
   /* Phones: the actions move to a bar fixed to the bottom of the screen, above the home indicator.
      The page ends higher, so the bar never covers the footer. */
-  @media (max-width: 720px) {
+  @media (max-width: 719.98px) {
     :global(html:has(.emote.with-bar)) { scroll-padding-bottom: 88px; }
     :global(body:has(.emote.with-bar)) { padding-bottom: calc(65px + env(safe-area-inset-bottom, 0px)); }
     .head-actions { display: none; }
@@ -440,11 +440,11 @@
       padding: 10px var(--page-pad) calc(10px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--border); background: var(--bg); }
   }
-  @media (max-width: 720px) and (max-height: 500px) {
+  @media (max-width: 719.98px) and (max-height: 500px) {
     .bar { position: static; margin-inline: calc(-1 * var(--page-pad)); border-bottom: 1px solid var(--border); }
     :global(body:has(.emote.with-bar)) { padding-bottom: 0; }
   }
-  @media (max-width: 720px) and ((prefers-reduced-transparency: reduce) or (prefers-contrast: more)) {
+  @media (max-width: 719.98px) and ((prefers-reduced-transparency: reduce) or (prefers-contrast: more)) {
     .bar { background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border-strong); }
   }
   @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .back :global(.icon) { transition: none; } }

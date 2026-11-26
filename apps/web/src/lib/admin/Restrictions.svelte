@@ -170,8 +170,8 @@
           </span>
           <span class="meta ui-hint">
             <span class="ui-num">{dateTime(r.createdAt)}</span> by <AccountLink id={r.createdBy} />
-            · {r.endsAt ? `until ${dateTime(r.endsAt)}` : 'for good'}
-            {#if !r.active}· {ended(r)}{#if r.liftedBy}{' '}by <AccountLink id={r.liftedBy} />{/if}{/if}
+            ï¿½ {r.endsAt ? `until ${dateTime(r.endsAt)}` : 'for good'}
+            {#if !r.active}ï¿½ {ended(r)}{#if r.liftedBy}{' '}by <AccountLink id={r.liftedBy} />{/if}{/if}
           </span>
         </li>
       {/each}
@@ -223,7 +223,7 @@
   .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :global(.ui-dialog.restrict) { width: min(560px, calc(100vw - 24px)); }
   .narrow-only { display: none; }
-  @media (max-width: 599.98px) { .wide-only { display: none; } .narrow-only { display: block; } }
+  @media (max-width: 639.98px) { .wide-only { display: none; } .narrow-only { display: block; } }
   .until { margin-top: 8px; }
   textarea { resize: vertical; min-height: 72px; }
 </style>

@@ -124,6 +124,6 @@
   .body:focus-visible, .close:focus-visible { outline-offset: -2px; }
   .body:active, .close:active { opacity: .6; }
   @media (hover: hover) and (pointer: fine) { .close:hover { color: var(--text); background: var(--row-hover); } }
-  @media (max-width: 720px) { .stack { left: var(--page-pad); right: var(--page-pad); width: auto; } }
+  @media (max-width: 719.98px) { .stack { left: var(--page-pad); right: var(--page-pad); width: auto; } }
   @media (forced-colors: active) { .toast { border-color: CanvasText; } }
 </style>

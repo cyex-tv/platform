@@ -175,6 +175,6 @@
   .adm-lv > .v { display: grid; gap: 4px; }
   .adm-lv > .v :global(.ui-input) { width: 100%; }
   .adm-lv > .v :global(.ui-input[type='datetime-local']) { font-family: var(--font-mono); font-size: var(--t-small); }
-  @media (max-width: 599.98px) { .adm-lv { grid-template-columns: minmax(0, 1fr); } .adm-lv > .l { padding-top: 0; } }
+  @media (max-width: 639.98px) { .adm-lv { grid-template-columns: minmax(0, 1fr); } .adm-lv > .l { padding-top: 0; } }
   .problem { margin: 0 0 8px; font-size: var(--t-small); color: var(--red); }
 </style>

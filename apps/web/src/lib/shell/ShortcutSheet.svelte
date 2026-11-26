@@ -93,7 +93,7 @@
     border-bottom-width: 2px; border-radius: var(--radius); background: var(--surface); color: var(--text);
     font-size: 12px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .or { font-size: 12px; color: var(--dim); }
-  @media (max-width: 480px) {
+  @media (max-width: 479.98px) {
     .row { flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 0; }
   }
   @media (forced-colors: active) { kbd { border-color: CanvasText; } }

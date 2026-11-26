@@ -346,7 +346,7 @@
   .arrow { color: var(--dim); }
   .link { justify-self: start; min-height: 32px; padding: 0; border: 0; background: none; font: inherit; font-size: var(--t-small); color: var(--accent-text); cursor: pointer; }
   .link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-  @media (max-width: 760px) {
+  @media (max-width: 719.98px) {
     .filters :is(.actor, .tid, .act) { flex: 1 1 100%; width: 100%; max-width: none; }
     .filters :is(.kind, .date) { flex: 1 1 calc(33% - 8px); width: auto; }
     .log td.det { width: auto; max-width: none; }

@@ -57,5 +57,5 @@
   @media (hover: hover) and (pointer: fine) { nav a:hover, .keys:hover { color: var(--text); } }
   /* Touch: 44px to hit; short words like Help get their width from a hit area that reaches into the gap. */
   @media (pointer: coarse) { .brand, nav a { min-height: 44px; } nav a { position: relative; } nav a::after { content: ''; position: absolute; inset: 0 -8px; } }
-  @media (max-width: 720px) { nav { gap: 0 16px; } .row { gap: 0; } }
+  @media (max-width: 719.98px) { nav { gap: 0 16px; } .row { gap: 0; } }
 </style>

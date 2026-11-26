@@ -47,7 +47,7 @@
   /* The row spans its column (the site is full width); the hint keeps a reading measure. */
   .hint { max-width: 72ch; font-size: var(--t-small); line-height: 1.45; color: var(--muted); text-wrap: pretty; overflow-wrap: anywhere; }
   .val { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; text-align: right; }
-  @media (max-width: 559.98px) {
+  @media (max-width: 639.98px) {
     .row:not(.inline) { grid-template-columns: minmax(0, 1fr); }
     .row.has-lead:not(.inline) { grid-template-columns: 24px minmax(0, 1fr); }
     .row:not(.inline) .val { grid-column: 1 / -1; justify-content: flex-start; text-align: left; }

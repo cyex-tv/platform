@@ -189,7 +189,7 @@ input.ui-input, select.ui-input { height: 40px; }
 .ui-dialog { max-height: calc(100dvh - 24px); overscroll-behavior: contain; }
 .ui-dialog footer { position: sticky; bottom: 0; z-index: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--elevated); }
 
-@media (max-width: 640px) {
+@media (max-width: 639.98px) {
   .ui-row { flex-wrap: wrap; gap: 8px 24px; }
   .ui-head .ui-actions { margin-left: 0; }
 }

@@ -166,7 +166,7 @@
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 20px; }
   .head > div { min-width: 0; }
   .head .btn { flex: none; }
-  @media (max-width: 560px) { .head { flex-direction: column; gap: 12px; } }
+  @media (max-width: 639.98px) { .head { flex-direction: column; gap: 12px; } }
   .line { margin-top: 6px; max-width: 56ch; font-size: var(--t-ui); line-height: 1.55; color: var(--muted); }
   .head .btn :global(svg) { color: var(--muted); }
   /* Flat sections: an uppercase label on a hairline, label/value rows, no boxes. */
@@ -198,7 +198,7 @@
   .bar { display: block; height: 40px; border-radius: var(--radius); background: var(--surface-2); }
   .bar.s { width: 48px; height: 12px; }
   .bar.b { width: 96px; }
-  @media (max-width: 560px) {
+  @media (max-width: 639.98px) {
     .row { grid-template-columns: minmax(0, 1fr) auto; }
     .rl { grid-column: 1 / -1; }
   }

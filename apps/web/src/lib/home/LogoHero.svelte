@@ -7,12 +7,13 @@
   // nothing on the first screen waits for it. Reduced motion, turned on at any time (the system's
   // or the site's own), puts the still image back.
   import { onMount } from 'svelte';
+  import { NO_PANEL } from '$lib/media.svelte';
   import { capable, motionReduced, readEnv } from './capable';
   import { settled } from './settle';
   import type { LogoScene } from './logo-scene';
 
   // The box is 340px wide up to 1100px and 460px above it (routes/+page.svelte): pick the 420w or 840w file.
-  const sizes = '(max-width: 1099.98px) 340px, 460px';
+  const sizes = `${NO_PANEL} 340px, 460px`;
 
   let host: HTMLDivElement;
   let live = $state(false);
