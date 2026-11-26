@@ -44,8 +44,6 @@ pub const PRICE_MAX: u32 = 100_000;
 pub const STOCK_MAX: u32 = 1_000_000;
 pub const BUNDLE_MAX: usize = 10;
 pub const REASON_MAX: usize = 500;
-pub const ORDERS_PAGE: u32 = 50;
-pub const ORDERS_PAGE_MAX: u32 = 100;
 
 // Errors
 
@@ -247,7 +245,7 @@ pub fn refund_reason(raw: &str) -> ApiResult<String> {
 
 /// Page and size, clamped.
 pub fn paging(page: Option<u32>, per_page: Option<u32>) -> (i64, i64) {
-    let p = crate::errors::paging(page, per_page, ORDERS_PAGE, ORDERS_PAGE_MAX);
+    let p = crate::paging::Paged::Orders.paging(page, per_page);
     (p.limit, p.offset)
 }
 

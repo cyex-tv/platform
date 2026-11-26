@@ -862,10 +862,27 @@ fn a_jpeg_is_a_still_image() {
 }
 
 #[test]
-fn emotes_may_be_up_to_8_mb() {
-    assert_eq!(Limits::emote().max_bytes, 8 * 1024 * 1024);
+fn emote_rules_are_fixed_and_one_place_holds_them() {
+    assert_eq!(EmoteRules::MAX_BYTES, 8 * 1024 * 1024);
+    assert_eq!(EmoteRules::MAX_SIDE, 1000);
+    assert_eq!(EmoteRules::MAX_FRAMES, 1000);
+    assert_eq!(EmoteRules::MAX_FPS, 50);
+    assert_eq!(EmoteRules::MIN_FRAME_MS, 20);
+    assert_eq!(EmoteRules::MAX_ASPECT, 4);
+    let l = Limits::emote();
+    assert_eq!(l, EmoteRules::limits());
+    assert_eq!(l.max_bytes, 8 * 1024 * 1024);
+    assert_eq!((l.max_side, l.max_frames), (1000, 1000));
+    // No hidden sixth rule: the work cap is exactly 1000 x 1000 px x 1000 frames, no time cap.
+    assert_eq!(l.max_total_pixels, 1_000_000_000);
+    assert_eq!(l.max_duration_ms, u64::MAX);
+    assert_eq!(l.max_aspect, Some(4));
+    assert_eq!(MIN_DELAY_MS, EmoteRules::MIN_FRAME_MS);
     assert_eq!(Limits::default().max_bytes, 5 * 1024 * 1024);
-    assert_eq!(Limits::emote().max_side, Limits::default().max_side);
+}
+
+#[test]
+fn an_emote_file_is_at_most_8_mb() {
     let six = padded_png(64, 64, 6 * 1024 * 1024);
     // Over the default (cosmetics), inside an emote's limit, and it decodes.
     assert!(matches!(
@@ -874,13 +891,88 @@ fn emotes_may_be_up_to_8_mb() {
     ));
     let p = probe(&six, &Limits::emote()).unwrap();
     assert_eq!((p.format, p.width, p.height), (Format::Png, 64, 64));
-    let exactly = padded_png(64, 64, EMOTE_MAX_BYTES);
+    let exactly = padded_png(64, 64, EmoteRules::MAX_BYTES);
     assert!(probe(&exactly, &Limits::emote()).is_ok());
-    let over = padded_png(64, 64, EMOTE_MAX_BYTES + 1);
+    let over = padded_png(64, 64, EmoteRules::MAX_BYTES + 1);
     let Err(MediaError::TooLarge(message)) = probe(&over, &Limits::emote()) else {
         panic!("an 8 MB + 1 byte file is refused");
     };
     assert_eq!(message, "The file is over 8 MB, the most an upload can be.");
+}
+
+#[test]
+fn an_emote_side_is_at_most_1000_px() {
+    let l = Limits::emote();
+    assert!(probe(&png(1000, 1000), &l).is_ok());
+    // Tall pictures have no ratio rule: 1 x 1000 is fine.
+    assert!(probe(&png(1, 1000), &l).is_ok());
+    for (w, h) in [(1001, 1000), (1000, 1001), (1001, 1001)] {
+        let Err(MediaError::TooLarge(message)) = probe(&png(w, h), &l) else {
+            panic!("{w}x{h} is refused");
+        };
+        assert!(message.contains("1000×1000 px"), "{message}");
+    }
+}
+
+#[test]
+fn an_emote_is_at_most_4_to_1_wide_and_tall_pictures_have_no_ratio_rule() {
+    let l = Limits::emote();
+    assert!(probe(&png(400, 100), &l).is_ok());
+    assert!(probe(&png(1000, 250), &l).is_ok());
+    for (w, h) in [(401, 100), (1000, 249), (5, 1)] {
+        let Err(MediaError::BadShape(message)) = probe(&png(w, h), &l) else {
+            panic!("{w}x{h} is refused as too wide");
+        };
+        assert!(message.contains("4:1"), "{message}");
+    }
+    // Tall: 10 x 1000 is 1:100 and fine.
+    assert!(probe(&png(10, 1000), &l).is_ok());
+    // Badges and paints have their own shape rules (the API's), none here.
+    assert!(probe(&png(500, 100), &Limits::badge()).is_ok());
+}
+
+#[test]
+fn an_emote_animation_has_at_most_1000_frames() {
+    let l = Limits::emote();
+    assert!(probe(&gif(2, 2, 1000), &l).is_ok());
+    let Err(MediaError::TooLarge(message)) = probe(&gif(2, 2, 1001), &l) else {
+        panic!("1001 frames is refused");
+    };
+    assert_eq!(
+        message,
+        "The animation has more than 1000 frames, the most it can have."
+    );
+}
+
+#[test]
+fn an_emote_gif_with_0_or_10_ms_delays_is_taken_and_shown_at_100_ms() {
+    // At most 50 fps: a frame is never shown for less than 20 ms. Shorter delays aren't refused;
+    // browsers show them for 100 ms and so do we.
+    assert_eq!(shown_ms(0), 100);
+    assert_eq!(shown_ms(10), 100);
+    assert_eq!(shown_ms(19), 100);
+    assert_eq!(shown_ms(20), 20);
+    let l = Limits::emote();
+    for delay in [0, 10] {
+        let file = gif_with_delay(8, 8, 3, delay);
+        let mut shown = Vec::new();
+        let (_, frames) = decode_frames(&file, &l, &mut |_, _, ms| {
+            shown.push(shown_ms(ms));
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(frames, 3);
+        assert_eq!(shown, vec![100, 100, 100], "delay {delay} ms");
+        assert!(probe(&file, &l).is_ok());
+    }
+    // 20 ms (50 fps) is kept as it is.
+    let mut shown = Vec::new();
+    decode_frames(&gif_with_delay(8, 8, 2, 20), &l, &mut |_, _, ms| {
+        shown.push(shown_ms(ms));
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(shown, vec![20, 20]);
 }
 
 fn gif_with_delay(w: u32, h: u32, frames: u32, delay_ms: u32) -> Vec<u8> {
@@ -1007,7 +1099,7 @@ fn a_set_cancel_flag_stops_a_transcode_at_once() {
 
 mod config_env {
     use crate::Limits;
-    use crate::config::{EMOTE_SIDE_CEILING, Ladder, MediaConfig};
+    use crate::config::{Ladder, MediaConfig};
     use crate::encode::Profile;
 
     fn env(pairs: &'static [(&str, &str)]) -> impl Fn(&str) -> Option<String> {
@@ -1023,14 +1115,11 @@ mod config_env {
     fn nothing_set_is_the_built_in_numbers() {
         let c = MediaConfig::from_env(|_| None).unwrap();
         assert_eq!(c, MediaConfig::builtin());
-        assert_eq!(c.emote, Limits::builtin_emote());
-        assert_eq!(c.emote.max_bytes, 8 * 1024 * 1024);
-        assert_eq!((c.emote.max_side, c.emote.max_frames), (1000, 1000));
         assert_eq!(c.badge.max_side, 2048);
         assert_eq!(c.paint.max_side, 4096);
         assert_eq!(c.ladder, Ladder::BUILTIN);
         // An empty value counts as unset.
-        let blank = MediaConfig::from_env(env(&[("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "  ")])).unwrap();
+        let blank = MediaConfig::from_env(env(&[("CYEX_TV_LIMIT_BADGE_MAX_BYTES", "  ")])).unwrap();
         assert_eq!(blank, c);
         // The compiled profiles hold the same ladder.
         let c: &'static MediaConfig = Box::leak(Box::new(c));
@@ -1043,9 +1132,6 @@ mod config_env {
     #[test]
     fn each_kind_reads_its_own_variables() {
         let c = MediaConfig::from_env(env(&[
-            ("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "4194304"),
-            ("CYEX_TV_LIMIT_EMOTE_MAX_FRAMES", "500"),
-            ("CYEX_TV_LIMIT_EMOTE_MAX_DURATION_MS", "15000"),
             ("CYEX_TV_LIMIT_BADGE_MAX_SIDE", "4096"),
             ("CYEX_TV_LIMIT_BADGE_MAX_TOTAL_PIXELS", "128000000"),
             ("CYEX_TV_LIMIT_BADGE_MAX_DURATION_MS", "none"),
@@ -1053,10 +1139,6 @@ mod config_env {
             ("CYEX_TV_LIMIT_DEFAULT_MAX_BYTES", "1048576"),
         ]))
         .unwrap();
-        assert_eq!(c.emote.max_bytes, 4 * 1024 * 1024);
-        assert_eq!(c.emote.max_frames, 500);
-        assert_eq!(c.emote.max_duration_ms, 15_000);
-        assert_eq!(c.emote.max_side, 1000);
         assert_eq!(c.badge.max_side, 4096);
         assert_eq!(c.badge.max_total_pixels, 128_000_000);
         assert_eq!(c.badge.max_duration_ms, u64::MAX);
@@ -1106,9 +1188,9 @@ mod config_env {
     #[test]
     fn a_value_that_does_not_read_is_an_error_naming_the_variable() {
         for (name, value) in [
-            ("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "eight"),
-            ("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "0"),
-            ("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "-5"),
+            ("CYEX_TV_LIMIT_BADGE_MAX_BYTES", "eight"),
+            ("CYEX_TV_LIMIT_BADGE_MAX_BYTES", "0"),
+            ("CYEX_TV_LIMIT_BADGE_MAX_BYTES", "-5"),
             ("CYEX_TV_LIMIT_BADGE_MAX_FRAMES", "1.5"),
             ("CYEX_TV_LIMIT_BADGE_MAX_DURATION_MS", "soon"),
             ("CYEX_TV_LIMIT_BADGE_MAX_DURATION_MS", "0"),
@@ -1122,31 +1204,23 @@ mod config_env {
     }
 
     #[test]
-    fn an_emote_stays_within_1000_px_whatever_is_set() {
-        assert_eq!(EMOTE_SIDE_CEILING, 1000);
-        let ok = MediaConfig::from_env(env(&[("CYEX_TV_LIMIT_EMOTE_MAX_SIDE", "512")])).unwrap();
-        assert_eq!(ok.emote.max_side, 512);
-        let err =
-            MediaConfig::from_env(env(&[("CYEX_TV_LIMIT_EMOTE_MAX_SIDE", "1001")])).unwrap_err();
-        assert!(err.starts_with("CYEX_TV_LIMIT_EMOTE_MAX_SIDE"), "{err}");
-    }
-
-    #[test]
-    fn a_configured_limit_is_what_a_check_enforces() {
-        let c = MediaConfig::from_env(env(&[("CYEX_TV_LIMIT_EMOTE_MAX_SIDE", "16")])).unwrap();
-        let bytes = super::png(20, 10);
-        assert!(crate::probe(&bytes, &Limits::builtin_emote()).is_ok());
-        assert!(matches!(
-            crate::probe(&bytes, &c.emote),
-            Err(crate::MediaError::TooLarge(_))
-        ));
+    fn emote_variables_are_not_read_any_more() {
+        // Emote rules are fixed (ADR 0031): these change nothing, and don't fail either.
+        let c = MediaConfig::from_env(env(&[
+            ("CYEX_TV_LIMIT_EMOTE_MAX_SIDE", "16"),
+            ("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "1"),
+            ("CYEX_TV_LIMIT_ROLE_EMOTE_MAX_FRAMES", "3"),
+        ]))
+        .unwrap();
+        assert_eq!(c, MediaConfig::builtin());
+        assert_eq!(Limits::emote().max_side, 1000);
     }
 
     #[test]
     fn the_process_wide_config_is_the_built_in_numbers_without_variables() {
         // The test environment sets none of the variables.
         assert_eq!(*MediaConfig::current(), MediaConfig::builtin());
-        assert_eq!(Limits::emote(), Limits::builtin_emote());
+        assert_eq!(Limits::emote(), crate::EmoteRules::limits());
         assert_eq!(Limits::badge(), Limits::builtin_badge());
         assert_eq!(Limits::paint(), Limits::builtin_paint());
         assert_eq!(Limits::default(), Limits::builtin_default());
@@ -1155,17 +1229,13 @@ mod config_env {
 
 mod role_overrides {
     use super::{gif, png};
-    use crate::config::{EMOTE_SIDE_CEILING, MediaConfig, MediaKind, Overrides};
+    use crate::config::{MediaConfig, MediaKind, Overrides};
     use crate::{Limits, MediaError, decoder_limits, probe};
 
     #[test]
     fn no_override_is_the_configured_limits() {
         let c = MediaConfig::builtin();
-        for (kind, l) in [
-            (MediaKind::Emote, c.emote),
-            (MediaKind::Badge, c.badge),
-            (MediaKind::Paint, c.paint),
-        ] {
+        for (kind, l) in [(MediaKind::Badge, c.badge), (MediaKind::Paint, c.paint)] {
             assert_eq!(c.effective(kind, Overrides::default()), l);
         }
     }
@@ -1215,38 +1285,6 @@ mod role_overrides {
     }
 
     #[test]
-    fn an_emote_only_goes_down_from_1000_px() {
-        let c = MediaConfig::builtin();
-        let up = c.effective(
-            MediaKind::Emote,
-            Overrides {
-                max_side: Some(5000),
-                max_bytes: Some(12 * 1024 * 1024),
-                max_frames: Some(1500),
-            },
-        );
-        assert_eq!(up.max_side, EMOTE_SIDE_CEILING);
-        assert_eq!(up.max_bytes, 12 * 1024 * 1024);
-        assert_eq!(up.max_frames, 1500);
-        let down = c.effective(
-            MediaKind::Emote,
-            Overrides {
-                max_side: Some(512),
-                ..Overrides::default()
-            },
-        );
-        assert_eq!(down.max_side, 512);
-        // The configuration can't ask for more either.
-        let ask = |side: &'static str| {
-            MediaConfig::from_env(move |n| {
-                (n == "CYEX_TV_LIMIT_ROLE_EMOTE_MAX_SIDE").then(|| side.to_owned())
-            })
-        };
-        assert!(ask("1001").is_err());
-        assert_eq!(ask("800").unwrap().ceiling(MediaKind::Emote).max_side, 1000);
-    }
-
-    #[test]
     fn the_ceilings_read_their_variables_and_never_sit_below_the_configured_numbers() {
         let c = MediaConfig::from_env(|n| {
             match n {
@@ -1279,7 +1317,7 @@ mod role_overrides {
         let c = MediaConfig::builtin();
         let alloc = |l: &Limits| decoder_limits(l).max_alloc.unwrap();
         // What it was for every kind: 64 MB.
-        assert_eq!(alloc(&c.emote), 64 * 1024 * 1024);
+        assert_eq!(alloc(&Limits::emote()), 64 * 1024 * 1024);
         assert_eq!(alloc(&c.badge), 64 * 1024 * 1024);
         let badge = c.effective(
             MediaKind::Badge,
@@ -1290,7 +1328,7 @@ mod role_overrides {
         );
         assert_eq!(alloc(&badge), 4096 * 4096 * 8);
         // The biggest anything can be: bounded by the ceilings and the pixel cap.
-        let biggest = [MediaKind::Emote, MediaKind::Badge, MediaKind::Paint]
+        let biggest = [MediaKind::Badge, MediaKind::Paint]
             .into_iter()
             .map(|k| {
                 let l = c.effective(

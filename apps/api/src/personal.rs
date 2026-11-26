@@ -17,21 +17,19 @@ use sqlx::Connection;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::errors::{
-    bad, conflict, conn, db_error, limited_as, not_found, paging, parse_id, sqlx_error,
-};
+use crate::errors::{bad, conn, db_error, limited_as, not_found, parse_id, sqlx_error};
 use crate::limits::AccountLimit;
+use crate::paging::Paged;
 use crate::state::AppState;
 use crate::views;
 
 pub const HIDDEN_EMOTES_MAX: i64 = 1_000;
 pub const HIDDEN_CREATORS_MAX: i64 = 200;
 pub const FAVOURITES_MAX: i64 = 1_000;
-pub const FAVOURITES_PAGE: u32 = 50;
-pub const FAVOURITES_PAGE_MAX: u32 = 100;
 
-fn limit_reached(message: &str) -> ApiError {
-    conflict("limit_reached", message)
+fn limit_reached(message: &str, cap: i64) -> ApiError {
+    let cap = cap.unsigned_abs();
+    ApiError::limit("limit_reached", message, cap, cap)
 }
 
 fn take_rate(state: &AppState, caller: &Caller) -> ApiResult<()> {
@@ -69,7 +67,7 @@ async fn add(
     match done {
         Added::Added => Ok(true),
         Added::Already => Ok(false),
-        Added::Full => Err(limit_reached(full)),
+        Added::Full => Err(limit_reached(full, cap)),
     }
 }
 
@@ -233,7 +231,7 @@ pub async fn my_favourites(
     page: Option<u32>,
     per_page: Option<u32>,
 ) -> ApiResult<EmotePage> {
-    let paged = paging(page, per_page, FAVOURITES_PAGE, FAVOURITES_PAGE_MAX);
+    let paged = Paged::MyFavourites.paging(page, per_page);
     let mut conn = conn(state).await?;
     let (wanted, total) = personal::favourites_page(
         &mut conn,

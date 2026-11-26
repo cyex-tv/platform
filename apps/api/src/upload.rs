@@ -26,8 +26,7 @@ use cyex_tv_auth::Caller;
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::files::{self, NewFile};
 use cyex_tv_db::{accounts, audit, blocklist, ids, jobs, reads};
-use cyex_tv_media::config::MediaKind;
-use cyex_tv_media::{Limits, MediaError, Probe};
+use cyex_tv_media::{EmoteRules, Limits, MediaError, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{EditorPermission, Emote, UploadQuota};
 use cyex_tv_shared::permissions;
@@ -57,6 +56,9 @@ pub fn media_error(err: MediaError) -> ApiError {
         MediaError::TooLarge(message) => {
             ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "too_large", message)
         }
+        MediaError::BadShape(message) => {
+            ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "bad_dimensions", message)
+        }
         MediaError::Encode(message) => {
             tracing::error!(%message, "encoder failed during an upload check");
             ApiError::internal()
@@ -82,6 +84,30 @@ pub const INVALID_IMAGE: &str =
 /// An emote file over 8 MB: refused while it is read, before any of it is decoded.
 pub fn too_large() -> ApiError {
     too_large_for(&Limits::emote())
+}
+
+/// A file of `size` bytes over `limits.max_bytes`: `too_large` with the cap and the size sent.
+pub fn too_large_over(limits: &Limits, size: usize) -> ApiError {
+    too_large_for(limits).with_details(
+        cyex_tv_shared::limit_errors::n(limits.max_bytes),
+        cyex_tv_shared::limit_errors::n(size),
+    )
+}
+
+/// `media_error` for a file of `size` bytes checked under `limits`: a `too_large` for the byte
+/// cap says the cap and the size (`details`); one for the side or the frames names them in its
+/// message.
+pub fn media_error_sized(err: MediaError, limits: &Limits, size: usize) -> ApiError {
+    let over = size > limits.max_bytes && matches!(err, MediaError::TooLarge(_));
+    let error = media_error(err);
+    if over {
+        error.with_details(
+            cyex_tv_shared::limit_errors::n(limits.max_bytes),
+            cyex_tv_shared::limit_errors::n(size),
+        )
+    } else {
+        error
+    }
 }
 
 /// A file over `limits.max_bytes`.
@@ -200,8 +226,7 @@ pub fn too_many_pending(max: u32, for_someone: bool) -> ApiError {
     } else {
         format!("{max} emotes")
     };
-    ApiError::new(
-        StatusCode::CONFLICT,
+    ApiError::limit(
         "too_many_pending",
         if for_someone {
             format!(
@@ -210,6 +235,8 @@ pub fn too_many_pending(max: u32, for_someone: bool) -> ApiError {
         } else {
             format!("You have {waiting} waiting for review. Upload more once some are reviewed.")
         },
+        max,
+        max,
     )
 }
 
@@ -266,11 +293,6 @@ pub async fn quota(
         .await
         .map_err(db_error)?;
     // The caller uploads, so their roles' media limits apply (to the owner's account too).
-    let emote = state
-        .limits
-        .load(&state.db, caller.account_id)
-        .await
-        .media(MediaKind::Emote);
     let int = |n: i64| i32::try_from(n).unwrap_or(i32::MAX);
     let lim = |l: AccountLimit| i32::try_from(limits.get(l)).unwrap_or(i32::MAX);
     Ok(UploadQuota {
@@ -279,11 +301,12 @@ pub async fn quota(
         pending_max: (!caller.owner).then(|| lim(AccountLimit::PendingEmotes)),
         uploads_this_hour: int(hour),
         uploads_per_hour: lim(AccountLimit::UploadsPerHour),
-        // The caller's effective media limits: `CYEX_TV_LIMIT_EMOTE_*` with their roles'
-        // overrides (`emote_max_bytes`, `emote_max_frames`; the side only goes down from 1000).
-        max_bytes: int(i64::try_from(emote.max_bytes).unwrap_or(i64::MAX)),
-        max_side: int(i64::from(emote.max_side)),
-        max_frames: int(i64::from(emote.max_frames)),
+        // The emote rules: fixed, the same for everyone (`EmoteRules`).
+        max_bytes: int(i64::try_from(EmoteRules::MAX_BYTES).unwrap_or(i64::MAX)),
+        max_side: int(i64::from(EmoteRules::MAX_SIDE)),
+        max_frames: int(i64::from(EmoteRules::MAX_FRAMES)),
+        max_fps: int(i64::from(EmoteRules::MAX_FPS)),
+        max_aspect: int(i64::from(EmoteRules::MAX_ASPECT)),
     })
 }
 
@@ -379,14 +402,15 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     early.rollback().await.map_err(sqlx_error)?;
     drop(conn);
 
-    // Decoding is CPU work; keep it off the request threads. The uploader's effective limits
-    // apply, and ride on the transcode job so the worker checks the same numbers.
+    // Decoding is CPU work; keep it off the request threads. The fixed emote rules apply (the
+    // worker checks the same ones again before it makes files).
     let file = input.file.clone();
-    let limits = allowed.mine.media(MediaKind::Emote);
+    let limits = Limits::emote();
+    let (limits_for_error, size) = (limits, input.file.len());
     let probe: Probe = tokio::task::spawn_blocking(move || cyex_tv_media::probe(&file, &limits))
         .await
         .map_err(|_| ApiError::internal())?
-        .map_err(media_error)?;
+        .map_err(|err| media_error_sized(err, &limits_for_error, size))?;
     let sha256: [u8; 32] = Sha256::digest(&input.file).into();
     let sha_hex = sigv4::hex(&sha256);
     // The first frame's hash is what `files.dhash` keeps (always the first entry).
@@ -485,11 +509,6 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             TRANSCODE_JOB,
             &json!({
                 "file_id": ids::to_text(file.id),
-                "limits": {
-                    "max_bytes": limits.max_bytes,
-                    "max_side": limits.max_side,
-                    "max_frames": limits.max_frames,
-                },
             }),
             5,
         )

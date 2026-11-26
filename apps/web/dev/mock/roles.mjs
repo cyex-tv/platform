@@ -55,8 +55,7 @@ export const LIMIT_DEFAULTS = [
   // The most slots an account may give one of its channel sets (a cap, not a rate; ADR 0017 amendment 2026/11/22).
   ['set_capacity_max', 'ACCOUNT', 1000, null],
   // The files an account uploads (crates/media config): the configured numbers and the most a role may set
-  // (an emote's side never above 1000 px; badges and paints may be raised, up to the ceiling).
-  ['emote_max_bytes', 'MEDIA', 8 * MB, null, 16 * MB], ['emote_max_side', 'MEDIA', 1000, null, 1000], ['emote_max_frames', 'MEDIA', 1000, null, 2000],
+  // (badges and paints may be raised, up to the ceiling; emote rules are fixed and not listed).
   ['badge_max_bytes', 'MEDIA', 8 * MB, null, 16 * MB], ['badge_max_side', 'MEDIA', 2048, null, 4096], ['badge_max_frames', 'MEDIA', 120, null, 240],
   ['paint_max_bytes', 'MEDIA', 8 * MB, null, 16 * MB], ['paint_max_side', 'MEDIA', 4096, null, 6144],
 ];
@@ -71,9 +70,9 @@ export const limitOf = (accountId, key) => {
 };
 // `limits` (public_limits.rs): the numbers the API enforces. `account` lists the signed-in
 // account's own per-account limits with its roles' overrides; empty signed out and on REST.
-const kind = (o) => ({ maxDurationMs: null, minSide: null, maxAspect: null, ...o });
+const kind = (o) => ({ maxDurationMs: null, minSide: null, maxAspect: null, maxFps: null, ...o });
 export const MEDIA_LIMITS = {
-  emote: kind({ maxBytes: 8 * MB, maxSide: 1000, maxFrames: 1000, maxTotalPixels: 100_000_000, maxAspect: 4, maxServedSide: 128 }),
+  emote: kind({ maxBytes: 8 * MB, maxSide: 1000, maxFrames: 1000, maxFps: 50, maxTotalPixels: 1_000_000_000, maxAspect: 4, maxServedSide: 128 }),
   badge: kind({ maxBytes: 8 * MB, maxSide: 2048, maxFrames: 120, maxTotalPixels: 64_000_000, maxDurationMs: 10_000, minSide: 72, maxAspect: 1, maxServedSide: 512 }),
   paint: kind({ maxBytes: 8 * MB, maxSide: 4096, maxFrames: 120, maxTotalPixels: 64_000_000, maxDurationMs: 10_000, minSide: 64, maxAspect: 8, maxServedSide: 512 }),
 };

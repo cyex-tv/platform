@@ -39,8 +39,9 @@ describe('upload rules', () => {
 
   it('reads the API numbers, the account caps first, with the built-in fallback', () => {
     expect(editorLimits(null, null)).toEqual(EDITOR_LIMITS);
-    const l = editorLimits({ maxBytes: 4, maxSide: 500, maxFrames: 10, maxAspect: 3, maxTotalPixels: 50, maxDurationMs: null }, { maxBytes: 9, maxSide: 600, maxFrames: 20 });
+    const l = editorLimits({ maxBytes: 4, maxSide: 500, maxFrames: 10, maxAspect: 3, maxFps: 50, maxTotalPixels: 50, maxDurationMs: null }, { maxBytes: 9, maxSide: 600, maxFrames: 20 });
     expect(l).toMatchObject({ maxBytes: 9, maxSide: 600, maxFrames: 20, maxAspect: 3, maxTotalPixels: 50, minDelayMs: 20, maxDurationMs: null });
+    expect(editorLimits(null, { maxBytes: 1, maxSide: 1, maxFrames: 1, maxFps: 25, maxAspect: 2 })).toMatchObject({ minDelayMs: 40, maxAspect: 2 });
     expect(fixLabel('fps', l)).toBe('Limit to 50 fps');
     expect(fixLabel('aspect', l)).toBe('Crop to 3:1');
   });

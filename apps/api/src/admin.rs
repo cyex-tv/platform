@@ -49,9 +49,6 @@ use crate::views;
 /// Any constant works; it only has to be the same for every role change.
 const ROLE_LOCK: i64 = 0x6379_6578_726f_6c65; // "cyexrole"
 
-/// The most audit entries one page returns.
-pub const AUDIT_PAGE_MAX: i64 = 100;
-
 pub(crate) fn rule(err: RuleError) -> ApiError {
     let status = match err {
         RuleError::LastManager => StatusCode::CONFLICT,
@@ -563,7 +560,7 @@ pub async fn audit_log(
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     require(&mut conn, caller, permissions::AUDIT_VIEW).await?;
     let before_id = before.map(parse_id).transpose()?;
-    let limit = i64::from(limit.unwrap_or(50)).clamp(1, AUDIT_PAGE_MAX);
+    let limit = i64::from(crate::paging::Paged::Audit.params().size(limit));
     let entries = audit::list(
         &mut conn,
         &audit::Filter {
@@ -945,13 +942,22 @@ fn limit_view(rates: &Rates, overrides: &RoleOverrides) -> Vec<RoleLimit> {
 }
 
 /// The overrides `setRoleLimits` was given: known keys, each once, 1 to the limit's most
-/// (`MAX_LIMIT`, or the ceiling of a media number: an emote's side never above 1000 px); a null
-/// value keeps the default.
+/// (`MAX_LIMIT`, or the ceiling of a media number); a null value keeps the default. Emote limits
+/// (`emote_max_bytes`, `emote_max_side`, `emote_max_frames`) aren't per role any more: the rules
+/// are fixed for everyone (ADR 0031), so a request that still names one gets `bad_limit`.
 pub fn parse_limits(input: &[RoleLimitInput]) -> ApiResult<RoleOverrides> {
     let mut out = RoleOverrides::new();
     let mut seen = BTreeSet::new();
     for item in input {
         let key = item.key.trim();
+        if key.starts_with("emote_max_") {
+            return Err(bad(
+                "bad_limit",
+                format!(
+                    "{key} can't be set: emote limits are fixed and the same for everyone (at most 1000×1000 px, 8 MB, 1000 frames, 50 fps, 4:1)."
+                ),
+            ));
+        }
         let Some(limit) = AccountLimit::from_key(key) else {
             return Err(bad("unknown_limit", format!("{key:?} is not a limit.")));
         };
@@ -1082,9 +1088,8 @@ mod tests {
     }
 
     #[test]
-    fn media_limits_stop_at_their_ceilings_and_an_emote_stays_inside_1000_px() {
+    fn media_limits_stop_at_their_ceilings_and_emote_limits_are_refused() {
         let got = parse_limits(&[
-            item("emote_max_side", Some(1000)),
             item("badge_max_side", Some(4096)),
             item("badge_max_bytes", Some(16 * 1024 * 1024)),
             item("paint_max_bytes", Some(1)),
@@ -1092,19 +1097,27 @@ mod tests {
         .unwrap();
         assert_eq!(got[&AccountLimit::BadgeMaxSide], 4096);
         for key in [
-            ("emote_max_side", 1001),
-            ("emote_max_side", 4096),
             ("badge_max_side", 4097),
             ("badge_max_bytes", 16 * 1024 * 1024 + 1),
-            ("emote_max_frames", 2001),
             ("paint_max_side", 0),
         ] {
             let err = parse_limits(&[item(key.0, Some(key.1))]).unwrap_err();
             assert_eq!(err.code, "bad_limit", "{key:?}");
         }
+        // An emote key is refused whatever it says, with the reason, and never unknown.
+        for (key, value) in [
+            ("emote_max_side", Some(512)),
+            ("emote_max_bytes", Some(1)),
+            ("emote_max_frames", None),
+            (" emote_max_side ", Some(5000)),
+        ] {
+            let err = parse_limits(&[item(key, value)]).unwrap_err();
+            assert_eq!(err.code, "bad_limit", "{key}");
+            assert!(err.message.contains("fixed"), "{}", err.message);
+        }
         let view = limit_view(&Rates::default(), &RoleOverrides::new());
+        assert!(view.iter().all(|l| !l.key.starts_with("emote_max_")));
         let max = |k: &str| view.iter().find(|l| l.key == k).unwrap().max;
-        assert_eq!(max("emote_max_side"), 1000);
         assert_eq!(max("badge_max_side"), 4096);
         assert_eq!(max("gql_account"), 1_000_000);
     }

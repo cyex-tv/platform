@@ -826,7 +826,9 @@ export type EmoteFile = {
   name: Scalars['String']['output'];
   /**
    * 1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14
-   * and 28; read `width` for the size.
+   * and 28; read `width` for the size. **Deprecated for badge and paint files**: `width` is
+   * the contract (`file_scale_non_emote` in `/v1/meta`). Emote files keep `scale` as it is.
+   * @deprecated For badge and paint files: read `width`. Emote files keep `scale` (1 to 4).
    */
   scale: Scalars['Int']['output'];
   /** Bytes. */
@@ -1214,18 +1216,27 @@ export type Me = {
   roles: Array<OwnRole>;
 };
 
-/** What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes. */
+/**
+ * What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.
+ * Emote numbers are fixed rules, the same for everyone; badge and paint numbers are the
+ * configured ones (a role may raise them).
+ */
 export type MediaLimits = {
   __typename?: 'MediaLimits';
   /**
-   * How many times as wide as tall a picture may be (badges 1, paints 8); null for no rule at
-   * upload (emotes wider than their `servedAspect` are scaled to fit).
+   * How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for
+   * no rule at upload. Emotes have no rule for a tall picture.
    */
   maxAspect?: Maybe<Scalars['Int']['output']>;
   /** The most bytes an uploaded file may be. */
   maxBytes: Scalars['Int']['output'];
   /** The longest one run of an animation may last, in ms; null when there is no cap. */
   maxDurationMs?: Maybe<Scalars['Int']['output']>;
+  /**
+   * The most frames a second (emotes 50; null for the others). Frames shown for under
+   * 1000 / `maxFps` ms (20 ms: a 0 or 10 ms GIF delay) are shown for 100 ms, as browsers do.
+   */
+  maxFps?: Maybe<Scalars['Int']['output']>;
   /** The most frames an animation may have. */
   maxFrames: Scalars['Int']['output'];
   /** The tallest file the CDN serves for this kind (emotes 128 px, badges the master size). */
@@ -2564,7 +2575,7 @@ export type Query = {
   channelEditableSets?: Maybe<ChannelEditableSets>;
   /**
    * Redeem code batches, newest first. Needs `codes.manage`. The codes themselves are shown
-   * only once, by `createCodeBatch`.
+   * only once, by `createCodeBatch`. `perPage` is 1 to 100, default 50.
    */
   codeBatches: CodeBatchPage;
   /**
@@ -2743,7 +2754,7 @@ export type Query = {
   myNotifications: Array<Notification>;
   /**
    * Orders you bought, and gifts you got once paid (without what the buyer paid), newest
-   * first. `perPage` 1 to 100, default 50.
+   * first. `perPage` is 1 to 100, default 50.
    */
   myOrders: OrderPage;
   /**
@@ -2765,7 +2776,8 @@ export type Query = {
   orderTopBuyers: Array<PersonCount>;
   /**
    * Every order, newest first; narrow by status, account (bought or received) and item.
-   * Needs `shop.orders`, or `billing.view` narrowed to one account.
+   * Needs `shop.orders`, or `billing.view` narrowed to one account. `perPage` is 1 to 100, default
+   * 50.
    */
   orders: OrderPage;
   /**
@@ -2789,7 +2801,10 @@ export type Query = {
    * account, or per IP signed out (`rate_limited`).
    */
   quickSearch: QuickSearch;
-  /** Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`. */
+  /**
+   * Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`. `perPage` is 1 to 100,
+   * default 50.
+   */
   reportQueue: ReportQueue;
   /**
    * Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
@@ -3518,7 +3533,7 @@ export type RoleLimit = {
    * `gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
    * `set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
    * `emote_transfers`, `prefs`, `checkout`, `redeem`, `data_export`, `set_capacity_max`, or a
-   * media limit: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`,
+   * media limit: `badge_max_bytes`,
    * `badge_max_side`, `badge_max_frames`, `paint_max_bytes` or `paint_max_side` (bytes, px
    * and frames of the largest file an account may upload).
    */
@@ -3870,11 +3885,18 @@ export type UploadQuota = {
   __typename?: 'UploadQuota';
   /** The account uploads go to. */
   accountId: Scalars['String']['output'];
-  /** The most bytes one emote file may be. */
+  /** How many times as wide as tall an emote may be (4, so 4:1). Fixed; a tall emote has no rule. */
+  maxAspect: Scalars['Int']['output'];
+  /** The most bytes one emote file may be (8 MB). Fixed, the same for everyone. */
   maxBytes: Scalars['Int']['output'];
-  /** The most frames an animated emote may have. */
+  /**
+   * The most frames a second (50). A frame shown for under 20 ms (a 0 or 10 ms GIF delay) is
+   * shown for 100 ms, as browsers do, so an animation never runs faster. Fixed.
+   */
+  maxFps: Scalars['Int']['output'];
+  /** The most frames an animated emote may have (1000). Fixed. */
   maxFrames: Scalars['Int']['output'];
-  /** The longest side of an emote, in px. */
+  /** The longest side of an emote, in px (1000). Fixed. */
   maxSide: Scalars['Int']['output'];
   /** Its emotes waiting for review, ones still being processed included. */
   pending: Scalars['Int']['output'];
@@ -4705,14 +4727,14 @@ export type UploadQuotaQueryVariables = Exact<{
 }>;
 
 
-export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax?: number | null, uploadsThisHour: number, uploadsPerHour: number, maxBytes: number, maxSide: number, maxFrames: number } };
+export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax?: number | null, uploadsThisHour: number, uploadsPerHour: number, maxBytes: number, maxSide: number, maxFrames: number, maxFps: number, maxAspect: number } };
 
-export type MediaLimitFieldsFragment = { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number };
+export type MediaLimitFieldsFragment = { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number };
 
 export type PublicLimitsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type PublicLimitsQuery = { __typename?: 'Query', limits: { __typename?: 'PublicLimits', emote: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, badge: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, paint: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, names: { __typename?: 'NameLimits', emote: { __typename?: 'TextLimit', min: number, max: number }, set: { __typename?: 'TextLimit', min: number, max: number }, badge: { __typename?: 'TextLimit', min: number, max: number }, paint: { __typename?: 'TextLimit', min: number, max: number }, tooltip: { __typename?: 'TextLimit', min: number, max: number } }, tags: { __typename?: 'TagLimits', max: number, maxLen: number }, rates: Array<{ __typename?: 'RateInfo', key: string, count: number, windowSeconds: number }>, account: Array<{ __typename?: 'EffectiveLimit', key: string, default: number, effective: number, windowSeconds?: number | null }> } };
+export type PublicLimitsQuery = { __typename?: 'Query', limits: { __typename?: 'PublicLimits', emote: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, badge: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, paint: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, names: { __typename?: 'NameLimits', emote: { __typename?: 'TextLimit', min: number, max: number }, set: { __typename?: 'TextLimit', min: number, max: number }, badge: { __typename?: 'TextLimit', min: number, max: number }, paint: { __typename?: 'TextLimit', min: number, max: number }, tooltip: { __typename?: 'TextLimit', min: number, max: number } }, tags: { __typename?: 'TagLimits', max: number, maxLen: number }, rates: Array<{ __typename?: 'RateInfo', key: string, count: number, windowSeconds: number }>, account: Array<{ __typename?: 'EffectiveLimit', key: string, default: number, effective: number, windowSeconds?: number | null }> } };
 
 export type CreateRoleMutationVariables = Exact<{
   input: CreateRoleInput;
@@ -5327,6 +5349,7 @@ export const MediaLimitFieldsFragmentDoc = new TypedDocumentString(`
   maxBytes
   maxSide
   maxFrames
+  maxFps
   maxTotalPixels
   maxDurationMs
   minSide
@@ -7910,6 +7933,8 @@ export const UploadQuotaDocument = new TypedDocumentString(`
     maxBytes
     maxSide
     maxFrames
+    maxFps
+    maxAspect
   }
 }
     `) as unknown as TypedDocumentString<UploadQuotaQuery, UploadQuotaQueryVariables>;
@@ -7968,6 +7993,7 @@ export const PublicLimitsDocument = new TypedDocumentString(`
   maxBytes
   maxSide
   maxFrames
+  maxFps
   maxTotalPixels
   maxDurationMs
   minSide

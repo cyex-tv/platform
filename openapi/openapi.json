@@ -698,17 +698,17 @@
         },
         "responses": {
           "202": {
-            "description": "Accepted; the files are being made.",
+            "description": "Accepted; the files are being made (`state` is `processing`, then `ready`). `id`, `state`, `files` and `limits_used` are the same fields `POST /v1/emotes` answers with (`UploadResult`).",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CosmeticImage"
+                  "$ref": "#/components/schemas/CosmeticImageUploaded"
                 }
               }
             }
           },
           "400": {
-            "description": "`bad_form` or `bad_kind`.",
+            "description": "`bad_form`, or `bad_kind` (kind is badge or paint).",
             "content": {
               "application/json": {
                 "schema": {
@@ -728,7 +728,17 @@
             }
           },
           "403": {
-            "description": "`forbidden` (needs `cosmetics.manage`), or `bad_origin`.",
+            "description": "`restricted`, `forbidden` (needs `cosmetics.manage`), or `bad_origin` for a cookie from another site.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not used for pictures; `too_many_pending` is for emotes.",
             "content": {
               "application/json": {
                 "schema": {
@@ -738,7 +748,7 @@
             }
           },
           "413": {
-            "description": "`too_large`.",
+            "description": "`too_large`: over the byte cap of the account's role, or the side or frame cap. For bytes, `details` has the cap and the size sent.",
             "content": {
               "application/json": {
                 "schema": {
@@ -748,7 +758,7 @@
             }
           },
           "415": {
-            "description": "`unsupported_format`.",
+            "description": "`unsupported_format`: not PNG, APNG, GIF, WebP or JPEG.",
             "content": {
               "application/json": {
                 "schema": {
@@ -758,7 +768,7 @@
             }
           },
           "422": {
-            "description": "`invalid_image` or `bad_dimensions`.",
+            "description": "`invalid_image` (doesn't decode), or `bad_dimensions`; emotes also `blocked`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -768,7 +778,7 @@
             }
           },
           "429": {
-            "description": "`rate_limited`.",
+            "description": "`rate_limited`: the per-account or per-IP limit.",
             "content": {
               "application/json": {
                 "schema": {
@@ -864,17 +874,17 @@
         },
         "responses": {
           "202": {
-            "description": "Accepted; the files are being made. The emote is `pending`.",
+            "description": "Accepted; the files are being made. The emote is `pending`. `id`, `state`, `files` and `limits_used` are the same fields `POST /v1/cosmetics/images` answers with (`UploadResult`).",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Emote"
+                  "$ref": "#/components/schemas/EmoteUploaded"
                 }
               }
             }
           },
           "400": {
-            "description": "`bad_name`, `bad_tag`, `too_many_tags`, `bad_form`, `bad_visibility` (`unlisted` without `emotes.flags`) or `nsfw_not_allowed`.",
+            "description": "`bad_form`, or for emotes `bad_name`, `bad_tag`, `too_many_tags` (with `details`), `bad_visibility` (`unlisted` without `emotes.flags`) or `nsfw_not_allowed`; for pictures `bad_kind` (kind is badge or paint).",
             "content": {
               "application/json": {
                 "schema": {
@@ -894,7 +904,7 @@
             }
           },
           "403": {
-            "description": "`restricted` (you or the owner you upload for), `forbidden` (no `EMOTE_UPLOAD` there), or `bad_origin` for a cookie from another site.",
+            "description": "`restricted` (you or the owner you upload for), `forbidden` (no `EMOTE_UPLOAD` there, or no `cosmetics.manage` for a picture), or `bad_origin` for a cookie from another site.",
             "content": {
               "application/json": {
                 "schema": {
@@ -904,7 +914,7 @@
             }
           },
           "409": {
-            "description": "`too_many_pending`: the owner already has as many emotes waiting for review as it may (20 unless its roles say otherwise; `uploadQuota`).",
+            "description": "`too_many_pending` (emotes only): the owner already has as many emotes waiting for review as it may (20 unless its roles say otherwise; `uploadQuota`). `details` has `limit` and `current`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -914,7 +924,7 @@
             }
           },
           "413": {
-            "description": "`too_large`: over 8 MB, 1000×1000 px or 1000 frames.",
+            "description": "`too_large`: over the byte cap of the account's role, or the side or frame cap. For bytes, `details` has the cap and the size sent.",
             "content": {
               "application/json": {
                 "schema": {
@@ -934,7 +944,7 @@
             }
           },
           "422": {
-            "description": "`invalid_image` (doesn't decode) or `blocked`.",
+            "description": "`invalid_image` (doesn't decode), `blocked`, or for pictures `bad_dimensions`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1691,6 +1701,30 @@
           }
         }
       },
+      "CosmeticImageUploaded": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CosmeticImage"
+          },
+          {
+            "type": "object",
+            "required": [
+              "state",
+              "limits_used"
+            ],
+            "properties": {
+              "limits_used": {
+                "$ref": "#/components/schemas/LimitsUsed"
+              },
+              "state": {
+                "type": "string",
+                "description": "`processing` until the files are made (`ready` is false), then `ready`."
+              }
+            }
+          }
+        ],
+        "description": "`POST /v1/cosmetics/images` answers: the picture, its `state` and the limits it was checked\nunder."
+      },
       "CosmeticKind": {
         "type": "string",
         "description": "A badge or a paint.",
@@ -1845,7 +1879,8 @@
           "scale": {
             "type": "integer",
             "format": "int32",
-            "description": "1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14\nand 28; read `width` for the size.",
+            "description": "1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14\nand 28; read `width` for the size. **Deprecated for badge and paint files**: `width` is\nthe contract (`file_scale_non_emote` in `/v1/meta`). Emote files keep `scale` as it is.",
+            "deprecated": true,
             "minimum": 0
           },
           "size": {
@@ -1970,6 +2005,25 @@
           "taken_down"
         ]
       },
+      "EmoteUploaded": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Emote"
+          },
+          {
+            "type": "object",
+            "required": [
+              "limits_used"
+            ],
+            "properties": {
+              "limits_used": {
+                "$ref": "#/components/schemas/LimitsUsed"
+              }
+            }
+          }
+        ],
+        "description": "`POST /v1/emotes` answers: the emote, and the limits it was checked under."
+      },
       "EmoteVisibility": {
         "type": "string",
         "description": "Who can find an emote and add it to sets (ADR 0020).",
@@ -1987,6 +2041,17 @@
           "message"
         ],
         "properties": {
+          "details": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ErrorDetails",
+                "description": "The numbers behind a limit error (`LIMIT_ERRORS`): what the limit is and where the caller\nstands, so a client can show them. Missing on every other error."
+              }
+            ]
+          },
           "error": {
             "type": "string",
             "description": "One of the `ErrorCode` values."
@@ -2469,7 +2534,7 @@
             "code": "too_large",
             "group": "Emotes",
             "meaning": "The file or the picture is too big.",
-            "when": "Bytes, size in pixels or frame count go over the limits (413)."
+            "when": "An emote's bytes (8 MB), side (1000 px) or frame count (1000) go over the fixed limits (413); also a badge or paint over its limits."
           },
           {
             "code": "blocked",
@@ -2709,7 +2774,7 @@
             "code": "bad_dimensions",
             "group": "Cosmetics",
             "meaning": "The picture's size does not fit.",
-            "when": "Badge or paint pictures outside the allowed size or aspect (422)."
+            "when": "Badge or paint pictures outside the allowed size or aspect, and an emote wider than 4:1 (422)."
           },
           {
             "code": "image_not_ready",
@@ -2943,7 +3008,7 @@
             "code": "bad_limit",
             "group": "Admin",
             "meaning": "A limit value is not valid.",
-            "when": "Role limits are 1 to 1,000,000 (a file limit up to its ceiling: an emote side at most 1000 px) and listed once."
+            "when": "Role limits are 1 to 1,000,000 (a file limit up to its ceiling) and listed once. Emote limits are fixed, not per role, and always refused."
           },
           {
             "code": "unknown_limit",
@@ -3019,6 +3084,28 @@
           }
         ]
       },
+      "ErrorDetails": {
+        "type": "object",
+        "description": "The numbers of a limit error. GraphQL carries them as `extensions.limit` and\n`extensions.current`.",
+        "required": [
+          "limit",
+          "current"
+        ],
+        "properties": {
+          "current": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What the caller has or asked for. At a state limit (`set_full`, `too_many_pending`, ...)\nthis equals `limit`: the cap is reached. At a request-size cap it is the size sent.",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What is allowed: a count, or bytes for a file.",
+            "minimum": 0
+          }
+        }
+      },
       "Health": {
         "type": "object",
         "description": "`GET /health` and `GET /health/ready`.",
@@ -3038,9 +3125,43 @@
           "avif"
         ]
       },
+      "LimitsUsed": {
+        "type": "object",
+        "description": "The file limits an upload was checked under: the uploader's own, after their roles'\noverrides (the same numbers as `uploadQuota` and `limits.account`).",
+        "required": [
+          "kind",
+          "max_bytes",
+          "max_side",
+          "max_frames"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`emote`, `badge` or `paint`."
+          },
+          "max_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The most bytes a file may have.",
+            "minimum": 0
+          },
+          "max_frames": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The most frames of an animation.",
+            "minimum": 0
+          },
+          "max_side": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The longest side in px.",
+            "minimum": 0
+          }
+        }
+      },
       "MediaLimits": {
         "type": "object",
-        "description": "What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.",
+        "description": "What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.\nEmote numbers are fixed rules, the same for everyone; badge and paint numbers are the\nconfigured ones (a role may raise them).",
         "required": [
           "max_bytes",
           "max_side",
@@ -3055,7 +3176,7 @@
               "null"
             ],
             "format": "int32",
-            "description": "How many times as wide as tall a picture may be (badges 1, paints 8); null for no rule at\nupload (emotes wider than their `servedAspect` are scaled to fit)."
+            "description": "How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for\nno rule at upload. Emotes have no rule for a tall picture."
           },
           "max_bytes": {
             "type": "integer",
@@ -3069,6 +3190,14 @@
             ],
             "format": "int64",
             "description": "The longest one run of an animation may last, in ms; null when there is no cap."
+          },
+          "max_fps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The most frames a second (emotes 50; null for the others). Frames shown for under\n1000 / `maxFps` ms (20 ms: a 0 or 10 ms GIF delay) are shown for 100 ms, as browsers do."
           },
           "max_frames": {
             "type": "integer",
@@ -3720,6 +3849,38 @@
               "null"
             ],
             "description": "`true` or `false` (also `1`/`0`, `on`/`off`); default `false`. Drawn over the emote before it."
+          }
+        }
+      },
+      "UploadResult": {
+        "type": "object",
+        "description": "The fields every upload answer has, whatever was uploaded. The routes answer with these next\nto the full object, so this is the part a generic upload client reads.",
+        "required": [
+          "id",
+          "state",
+          "files",
+          "limits_used"
+        ],
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmoteFile"
+            },
+            "description": "The files made so far; empty right after the upload, until the worker has run."
+          },
+          "id": {
+            "type": "string",
+            "description": "The new object's ID (a Snowflake for an emote)."
+          },
+          "limits_used": {
+            "$ref": "#/components/schemas/LimitsUsed",
+            "description": "What the upload was checked against."
+          },
+          "state": {
+            "type": "string",
+            "description": "An emote: `pending` (waiting for review), `approved`, `rejected` or `taken_down`. A badge\nor paint picture: `processing` while the worker makes its files, then `ready`.",
+            "example": "pending"
           }
         }
       },

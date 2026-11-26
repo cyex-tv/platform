@@ -109,7 +109,7 @@
   });
   const room = $derived(quotaView(quota, forOther));
   // The caps for this account, as the API says them (`uploadQuota`); the built-in numbers until then.
-  const caps = $derived(quota ? { maxBytes: quota.maxBytes, maxSide: quota.maxSide, maxFrames: quota.maxFrames } : DEFAULT_EMOTE_CAPS);
+  const caps = $derived(quota ? { maxBytes: quota.maxBytes, maxSide: quota.maxSide, maxFrames: quota.maxFrames, maxFps: quota.maxFps, maxAspect: quota.maxAspect } : DEFAULT_EMOTE_CAPS);
   $effect(() => {
     capsOut = quota ? caps : null;
   });
@@ -132,6 +132,7 @@
         picked.width = bmp.width;
         picked.height = bmp.height;
         if (bmp.width > caps.maxSide || bmp.height > caps.maxSide) picked.sizeError = `It’s ${bmp.width} × ${bmp.height} px; at most ${caps.maxSide} × ${caps.maxSide}.`;
+        else if (bmp.width > bmp.height * caps.maxAspect) picked.sizeError = `It’s ${bmp.width} × ${bmp.height} px; emotes are at most ${caps.maxAspect} times as wide as tall (${caps.maxAspect}:1).`;
       }
       bmp.close();
     } catch {

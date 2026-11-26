@@ -7,7 +7,7 @@ use cyex_tv_shared::model::Event;
 use futures_util::Stream;
 use std::collections::HashMap;
 
-use super::{SocketConnection, api_error, coded, state};
+use super::{SocketConnection, api_error, state};
 
 #[derive(Default)]
 pub struct Subscription;
@@ -22,7 +22,12 @@ impl Subscription {
         topics: Vec<String>,
     ) -> Result<impl Stream<Item = Event> + use<>> {
         if topics.len() > hub_topics::MAX_TOPICS {
-            return Err(coded("too_many_topics", "At most 500 topics."));
+            return Err(super::limit_error(
+                "too_many_topics",
+                "At most 500 topics.",
+                hub_topics::MAX_TOPICS as u64,
+                cyex_tv_shared::limit_errors::n(topics.len()),
+            ));
         }
         if let Some(bad) = topics.iter().find(|t| !hub_topics::is_valid(t)) {
             return Err(
@@ -32,9 +37,11 @@ impl Subscription {
         }
         let slot = match ctx.data_opt::<SocketConnection>() {
             Some(connection) => Some(connection.take_slot().ok_or_else(|| {
-                coded(
+                super::limit_error(
                     "too_many_subscriptions",
                     "At most 8 subscriptions on one socket.",
+                    super::extensions::MAX_SOCKET_SUBSCRIPTIONS as u64,
+                    super::extensions::MAX_SOCKET_SUBSCRIPTIONS as u64,
                 )
             })?),
             None => None,

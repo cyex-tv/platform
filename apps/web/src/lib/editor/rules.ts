@@ -36,9 +36,9 @@ type MediaLike = {
   maxTotalPixels?: number | null;
   maxDurationMs?: number | null;
   maxAspect?: number | null;
-  minDelayMs?: number | null;
+  maxFps?: number | null;
 };
-type CapsLike = { maxBytes: number; maxSide: number; maxFrames: number };
+type CapsLike = { maxBytes: number; maxSide: number; maxFrames: number; maxFps?: number | null; maxAspect?: number | null };
 
 /** The limits from the API's answers (either may be missing): the account's caps win. */
 export function editorLimits(emote?: MediaLike | null, caps?: CapsLike | null): EditorLimits {
@@ -48,8 +48,9 @@ export function editorLimits(emote?: MediaLike | null, caps?: CapsLike | null): 
     maxSide: caps?.maxSide ?? emote?.maxSide ?? l.maxSide,
     maxBytes: caps?.maxBytes ?? emote?.maxBytes ?? l.maxBytes,
     maxFrames: caps?.maxFrames ?? emote?.maxFrames ?? l.maxFrames,
-    minDelayMs: emote?.minDelayMs ?? l.minDelayMs,
-    maxAspect: emote?.maxAspect ?? l.maxAspect,
+    // 50 fps is 20 ms a frame; the API shows shorter frames for 100 ms, so the editor holds them to it.
+    minDelayMs: Math.ceil(1000 / (caps?.maxFps ?? emote?.maxFps ?? 1000 / l.minDelayMs)),
+    maxAspect: caps?.maxAspect ?? emote?.maxAspect ?? l.maxAspect,
     maxTotalPixels: emote ? big(emote.maxTotalPixels) : l.maxTotalPixels,
     maxDurationMs: emote ? big(emote.maxDurationMs) : l.maxDurationMs,
   };

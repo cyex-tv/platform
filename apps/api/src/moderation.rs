@@ -33,7 +33,8 @@ use crate::catalog::{
 };
 use crate::catalog::{has, holds_any, require_any};
 use crate::errors::{Audit, record_audit};
-use crate::errors::{bad, paging, sqlx_error};
+use crate::errors::{bad, sqlx_error};
+use crate::paging::Paged;
 use crate::state::AppState;
 use crate::views;
 
@@ -42,8 +43,6 @@ pub const MAX_TAGS: usize = 10;
 pub const MAX_TAG_LEN: usize = 32;
 pub const MAX_REASON_LEN: usize = 500;
 /// Review queue page size: default and most.
-pub const QUEUE_PAGE: u32 = 50;
-pub const QUEUE_PAGE_MAX: u32 = 100;
 /// The longest review queue search, and the longest emote note.
 pub const MAX_QUEUE_SEARCH: usize = 100;
 pub const MAX_NOTE_LEN: usize = 2000;
@@ -65,7 +64,12 @@ pub fn clean_tags(raw: &[String]) -> ApiResult<Vec<String>> {
         out.insert(tag);
     }
     if out.len() > MAX_TAGS {
-        return Err(bad("too_many_tags", "At most 10 tags."));
+        return Err(ApiError::limit(
+            "too_many_tags",
+            "At most 10 tags.",
+            MAX_TAGS as u64,
+            cyex_tv_shared::limit_errors::n(out.len()),
+        ));
     }
     Ok(out.into_iter().collect())
 }
@@ -247,7 +251,7 @@ pub async fn review_queue(
 ) -> ApiResult<ReviewQueue> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     require_any(&mut conn, caller, &[permissions::EMOTES_REVIEW]).await?;
-    let paged = paging(page, per_page, QUEUE_PAGE, QUEUE_PAGE_MAX);
+    let paged = Paged::ModerationQueue.paging(page, per_page);
     let query = QueueRead::from_filter(filter.cloned().unwrap_or_default())?;
     let read = reads::QueueQuery {
         tab: query.tab,
@@ -378,7 +382,7 @@ pub async fn account_emotes(
             "This needs users.view or emotes.review, or the account's emote manage permission.",
         ));
     }
-    let paged = paging(page, per_page, QUEUE_PAGE, QUEUE_PAGE_MAX);
+    let paged = Paged::ModerationQueue.paging(page, per_page);
     crate::catalog::owner_emotes(state, &mut conn, owner, paged, after).await
 }
 
@@ -513,7 +517,16 @@ pub(crate) fn batch_ids(raw: &[String]) -> ApiResult<Vec<(String, Option<Uuid>)>
         })
         .collect();
     if list.is_empty() || list.len() > BATCH_MAX {
-        return Err(bad("bad_batch", "Pick 1 to 100 at a time."));
+        return Err(if list.is_empty() {
+            bad("bad_batch", "Pick 1 to 100 at a time.")
+        } else {
+            ApiError::limit(
+                "bad_batch",
+                "Pick 1 to 100 at a time.",
+                BATCH_MAX as u64,
+                cyex_tv_shared::limit_errors::n(list.len()),
+            )
+        });
     }
     Ok(list)
 }

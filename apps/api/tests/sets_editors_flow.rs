@@ -556,6 +556,8 @@ async fn at_most_fifty_editors() {
     let extra = w.user("2500").await;
     let r = w.add(&alice, None, &extra, &["EMOTES"], &[]).await;
     assert_eq!(code(&r), "too_many_editors", "{r}");
+    assert_eq!(r["errors"][0]["extensions"]["limit"], 50, "{r}");
+    assert_eq!(r["errors"][0]["extensions"]["current"], 50, "{r}");
     let message = r["errors"][0]["message"].as_str().unwrap_or_default();
     assert!(message.contains("50 editors"), "{message}");
     w.db.close().await;

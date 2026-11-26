@@ -42,7 +42,8 @@ use crate::admin::{actor, rule};
 use crate::catalog::require_any;
 use crate::catalog::{db_error, forbidden, load_set, not_found, parse_id, publish_member_event};
 use crate::errors::{Audit, record_audit};
-use crate::errors::{bad, conflict, paging, sqlx_error};
+use crate::errors::{bad, conflict, sqlx_error};
+use crate::paging::Paged;
 use crate::state::AppState;
 use crate::views;
 
@@ -50,8 +51,6 @@ use crate::views;
 pub const REPORTS_PER_HOUR: i64 = 10;
 /// The worker job that deletes a taken-down file's objects and purges the CDN.
 pub const DELETE_JOB: &str = "files.delete";
-const PAGE: u32 = 50;
-const PAGE_MAX: u32 = 100;
 
 fn text(raw: &str, what: &'static str) -> ApiResult<String> {
     let t = raw.trim();
@@ -232,7 +231,7 @@ pub async fn queue(
 ) -> ApiResult<ReportQueue> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     moderator(&mut conn, caller).await?;
-    let paged = paging(page, per_page, PAGE, PAGE_MAX);
+    let paged = Paged::ReportQueue.paging(page, per_page);
     let (rows, total) = reports::open(&mut conn, paged.limit, paged.offset)
         .await
         .map_err(db_error)?;
