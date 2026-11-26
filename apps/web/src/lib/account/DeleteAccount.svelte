@@ -5,6 +5,7 @@
   // the API has already cleared the cookie, so the site forgets you and goes to the front page.
   // Signing in again within 30 days lands on /restore (ADR 0019).
   import { gql } from '$lib/api';
+  import Dialog from '$lib/components/Dialog.svelte';
   import Row from '$lib/components/Row.svelte';
   import Section from '$lib/components/Section.svelte';
   import { DELETE_ACCOUNT } from '$lib/queries';
@@ -13,7 +14,7 @@
   import { session } from '$lib/tool/session.svelte';
   import { deleteMessage } from './errors';
 
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let typed = $state('');
   let busy = $state(false);
   let problem = $state('');
@@ -22,7 +23,7 @@
   function open() {
     typed = '';
     problem = '';
-    dialog.showModal();
+    dialog.open();
   }
 
   async function submit(e: SubmitEvent) {
@@ -50,29 +51,24 @@
   </Row>
 </Section>
 
-<dialog class="ui-dialog" bind:this={dialog} aria-labelledby="delete-title" aria-describedby="delete-desc">
-  <form onsubmit={submit} novalidate>
-    <div class="body">
-      <h2 id="delete-title">Delete your account?</h2>
-      <p id="delete-desc" class="ui-hint">Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. To confirm, type one of your logins{#if logins.length}: <bdi class="ui-mono">{logins.join(', ')}</bdi>{/if}.</p>
-      <label class="ui-field">
-        <span class="ui-label">Login</span>
-        <input
-          class="ui-input"
-          bind:value={typed}
-          autocomplete="off"
-          autocapitalize="none"
-          spellcheck="false"
-          maxlength="100"
-          aria-invalid={problem ? 'true' : undefined}
-          aria-describedby={problem ? 'delete-err' : undefined}
-        />
-        {#if problem}<span class="ui-error" id="delete-err" role="alert">{problem}</span>{/if}
-      </label>
-    </div>
-    <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn danger" type="submit" disabled={busy || !typed.trim()}>{busy ? 'Deleting…' : 'Delete account'}</button>
-    </footer>
-  </form>
-</dialog>
+<Dialog bind:this={dialog} title="Delete your account?" titleId="delete-title" describedby="delete-desc" onsubmit={submit}>
+  <p id="delete-desc" class="ui-hint">Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. To confirm, type one of your logins{#if logins.length}: <bdi class="ui-mono">{logins.join(', ')}</bdi>{/if}.</p>
+  <label class="ui-field">
+    <span class="ui-label">Login</span>
+    <input
+      class="ui-input"
+      bind:value={typed}
+      autocomplete="off"
+      autocapitalize="none"
+      spellcheck="false"
+      maxlength="100"
+      aria-invalid={problem ? 'true' : undefined}
+      aria-describedby={problem ? 'delete-err' : undefined}
+    />
+    {#if problem}<span class="ui-error" id="delete-err" role="alert">{problem}</span>{/if}
+  </label>
+  {#snippet footer()}
+    <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
+    <button class="ui-btn danger" type="submit" disabled={busy || !typed.trim()}>{busy ? 'Deleting…' : 'Delete account'}</button>
+  {/snippet}
+</Dialog>
