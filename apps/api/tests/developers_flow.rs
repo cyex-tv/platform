@@ -22,7 +22,7 @@ use cyex_tv_auth::Via;
 use cyex_tv_auth::{Auth, AuthConfig, cookies, tokens};
 use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::sessions::{self, SessionKind};
-use cyex_tv_db::{app_auth, channels, editors, privacy};
+use cyex_tv_db::{app_auth, channels, editors};
 use cyex_tv_shared::model::{EditorPermission, Platform, RestrictionInput, RestrictionKind};
 use cyex_tv_shared::ratelimit::Rate;
 use http_body_util::BodyExt;
@@ -449,12 +449,16 @@ async fn keys_end_when_revoked_blocked_or_deleted_but_not_on_sign_out() {
         StatusCode::OK
     );
 
-    // Deleted: the keys go with it, and stay gone after a restore.
-    assert!(
-        privacy::schedule_erase(&mut conn, alice.id, chrono::Utc::now() + Duration::days(30))
-            .await
-            .unwrap()
-    );
+    // Deleted (through the website, as people do): the keys go with it at once, the cached
+    // lookup too, and stay gone after a restore.
+    let r = w
+        .gql(
+            As::Site(&alice.site),
+            "mutation($confirm: String!) { deleteAccount(confirm: $confirm) }",
+            json!({ "confirm": "user6401" }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
     let left: i64 = sqlx::query_scalar("SELECT count(*) FROM api_keys WHERE account_id = $1")
         .bind(alice.id)
         .fetch_one(&mut *conn)
