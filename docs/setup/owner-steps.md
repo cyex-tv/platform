@@ -369,3 +369,6 @@ curl -sI https://cyex.tv/ | grep -i "content-security-policy"
 ```
 Each page prints `1`. The last request (`/`) shows the long policy with `nonce-…`, not the
 short one above.
+
+## 2026/11/26: Panchang is fetched at build time
+The landing page's headline font, Panchang (Indian Type Foundry, ITF Free Font License), is not in this repository: section 02 of its licence forbids distribution through public repositories. The website image build runs `npm run fonts` (`apps/web/scripts/fetch-fonts.mjs`), which downloads Fontshare's official zip and checks the woff2's sha256, so every deploy serves its own copy from cyex.tv (section 01). The build needs network access to api.fontshare.com. Dev, tests and the CI `web` job run without it and show the Arial fallback; run `npm run fonts` locally to see the real font. If Fontshare changes the file the build fails with a message: check it, then update the pin in the script.

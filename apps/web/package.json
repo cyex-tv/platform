@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "fonts": "node scripts/fetch-fonts.mjs",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "codegen": "graphql-codegen --config codegen.ts",

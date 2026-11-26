@@ -4,3 +4,6 @@ build/
 .env
 .env.*
 !.env.example
+
+# Panchang is fetched at build time (npm run fonts); its licence forbids distribution through public repositories.
+/static/fonts/Panchang-*
