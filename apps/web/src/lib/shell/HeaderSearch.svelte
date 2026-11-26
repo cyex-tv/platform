@@ -409,8 +409,7 @@
   input::placeholder { color: var(--muted); opacity: 1; }
   input::-webkit-search-cancel-button { display: none; }
   .spin { flex: none; width: 14px; height: 14px; border: 2px solid var(--border-strong); border-top-color: var(--muted); border-radius: 50%;
-    animation: spin .7s linear infinite; }
-  @keyframes spin { to { transform: rotate(1turn); } }
+    animation: ui-spin .7s linear infinite; }
 
   /* Attached to the field: the same width (at least 380px, centred on it), straight under it. */
   .drop { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); width: max(100%, min(380px, calc(100vw - 32px)));

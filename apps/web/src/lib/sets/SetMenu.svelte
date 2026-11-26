@@ -152,8 +152,7 @@
   .item[aria-disabled='true'] :global(svg) { color: var(--accent-text); }
   .quiet { font-size: var(--t-small); }
   .spin { flex: none; width: 12px; height: 12px; border: 2px solid var(--border-strong); border-top-color: var(--muted); border-radius: 50%;
-    animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(1turn); } }
+    animation: ui-spin .8s linear infinite; }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
   .danger { color: var(--red); }
   .danger :global(svg) { color: var(--red); }
