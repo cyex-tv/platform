@@ -4,6 +4,7 @@
   // never what else the account owns, since when, or how it came. The owner and editors with
   // PROFILE get the picker (CosmeticsPicker) in this tab instead.
   import BadgeIcon from '$lib/cosmetics/BadgeIcon.svelte';
+  import BadgeOriginal from '$lib/cosmetics/BadgeOriginal.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { looks, NO_LOOK, seedLook, wantLooks, type Look } from '$lib/cosmetics/store.svelte';
   import { clean, iso } from '$lib/format';
@@ -36,6 +37,7 @@
     <h2 id="sc-badge">Badge</h2>
     {#if look.badge}
       <p class="value"><BadgeIcon badge={look.badge} size={32} /><bdi>{clean(look.badge.name)}</bdi></p>
+      <BadgeOriginal badge={look.badge} caption />
     {:else}
       <p class="value none">No badge</p>
     {/if}

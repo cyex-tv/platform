@@ -17,8 +17,8 @@ const S_FUTURE = '2027-06-01T00:00:00.000Z';
 const mkItem = (n, rest) => ({ id: shopId('01JD8XSHP', n), description: 'Sample item (mock data)', currency: 'EUR', activeFrom: null,
   activeTo: null, stockLimit: null, visible: true, sortOrder: n, deleted: false, createdAt: C_TIME, updatedAt: C_TIME, ...rest });
 export const SHOP_ITEMS = [
-  mkItem(1, { name: 'Sample: Sunset pack', priceCents: 499, paddlePriceId: 'pri_01mocksample1', badgeIds: [BADGES[0].id], paintIds: [PAINTS[0].id] }),
-  mkItem(2, { name: 'Sample: Aurora', priceCents: 299, paddlePriceId: 'pri_01mocksample2', badgeIds: [], paintIds: [PAINTS[1].id] }),
+  mkItem(1, { name: 'Sample: Sunset pack', priceCents: 499, paddlePriceId: 'pri_01mocksample1', badgeIds: [BADGES[0].id, BADGES[3].id], paintIds: [PAINTS[0].id] }),
+  mkItem(2, { name: 'Sample: Aurora', priceCents: 299, paddlePriceId: 'pri_01mocksample2', badgeIds: [BADGES[2].id], paintIds: [PAINTS[1].id] }),
   mkItem(3, { name: 'Sample: Ember collector', priceCents: 799, paddlePriceId: 'pri_01mocksample3', stockLimit: 50, badgeIds: [BADGES[1].id], paintIds: [PAINTS[2].id] }),
   mkItem(4, { name: 'Sample: Coming soon', priceCents: 999, paddlePriceId: 'pri_01mocksample4', visible: false, activeFrom: S_FUTURE, badgeIds: [BADGES[0].id], paintIds: [PAINTS[2].id] }),
 ];

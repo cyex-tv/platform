@@ -75,6 +75,22 @@ export function badgeOriginal(files: readonly { name: string; width: number; hei
   return f ? { name: f.name, width: f.width, height: f.height } : null;
 }
 
+export type FullFile = OriginalFile & { original: boolean };
+
+/**
+ * The biggest picture a badge has, for a large preview: its original at its real size, else the
+ * largest size of the ladder (a picture made before originals existed), `original` false then.
+ * Null when it has no file the picture could be drawn from.
+ */
+export function badgeFull(files: readonly { name: string; width: number; height: number }[], still = false): FullFile | null {
+  const original = badgeOriginal(files, still);
+  if (original) return { ...original, original: true };
+  const last = badgeFiles(files.map((f) => f.name), still).at(-1);
+  if (!last) return null;
+  const entry = files.find((f) => f.name === last.name);
+  return { name: last.name, width: entry?.width || last.px, height: entry?.height || last.px, original: false };
+}
+
 /** Whether a made picture lacks its original (made before it existed). Remaking fills it in. */
 export function lacksOriginal(names: Iterable<string>): boolean {
   const has = new Set(names);

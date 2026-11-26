@@ -9,6 +9,7 @@
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
   import BadgeIcon from '$lib/cosmetics/BadgeIcon.svelte';
+  import BadgeOriginal from '$lib/cosmetics/BadgeOriginal.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadOwned, picked, type Owned } from '$lib/cosmetics/store.svelte';
   import { clean, iso } from '$lib/format';
@@ -26,6 +27,8 @@
   let badgeFind = $state('');
   let paintFind = $state('');
   let preview = $state<'paint' | 'name'>('paint');
+  // The badge looked at (hovered or focused), shown large in the panel beside the options; with none, the picked one.
+  let looked = $state<string | null>(null);
   let saving = $state(false);
   // Picks go one after the other, and a failure puts back only its own field, and only while no
   // later pick of that field has been made.
@@ -93,6 +96,8 @@
       {#if !owned.badges.length}
         <State bare title="No badges yet.">{#if mine}Find them in <a href="/shop">the shop</a>, or redeem a <a href="/redeem">code</a>.{:else}They’re granted by the cyex.tv team for now.{/if}</State>
       {:else}
+        {@const look = owned.badges.find((b) => b.id === (looked ?? owned.badgeId)) ?? null}
+        <div class="split">
         <div class="opts" role="radiogroup" aria-labelledby="badge-h" aria-busy={saving}>
           {#if !badgeFind.trim()}
             <label class="opt" class:on={!owned.badgeId}>
@@ -101,14 +106,26 @@
             </label>
           {/if}
           {#each badges as b (b.id)}
-            <label class="opt" class:on={owned.badgeId === b.id}>
-              <input type="radio" name="badge" disabled={saving} checked={owned.badgeId === b.id} onchange={() => choose(owned, 'badge', b.id)} />
+            <label class="opt" class:on={owned.badgeId === b.id} onmouseenter={() => (looked = b.id)} onmouseleave={() => (looked = null)}>
+              <input type="radio" name="badge" disabled={saving} checked={owned.badgeId === b.id} onchange={() => choose(owned, 'badge', b.id)}
+                onfocus={() => (looked = b.id)} onblur={() => (looked = null)} />
               <span class="dot" aria-hidden="true"></span><BadgeIcon badge={b} size={28} />
               <span class="lb"><bdi>{clean(b.name)}</bdi></span>
             </label>
           {:else}
             <p class="none">No badge matches “{badgeFind.trim()}”.</p>
           {/each}
+        </div>
+        <aside class="view" aria-label="Badge preview">
+          <h3 class="label">Preview</h3>
+          {#if look}
+            {#key look.image.id}<BadgeOriginal badge={look} caption />{/key}
+            <p class="bn"><bdi>{clean(look.name)}</bdi></p>
+            {#if look.tooltip && look.tooltip !== look.name}<p class="tip">“<bdi>{clean(look.tooltip)}</bdi>”</p>{/if}
+          {:else}
+            <p class="none">No badge. Point at one to see it large.</p>
+          {/if}
+        </aside>
         </div>
       {/if}
     </section>
@@ -160,6 +177,13 @@
   .find :global(svg) { position: absolute; left: 10px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
   .find .input { width: 100%; height: 34px; padding-left: 32px; font-size: var(--t-small); }
 
+  /* Options left, the large preview in a flush panel on the right (the Inspector pattern); stacks under 900 px. */
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 360px); gap: 16px; align-items: start; }
+  .view { position: sticky; top: 12px; display: grid; gap: 8px; min-width: 0; padding-left: 16px; border-left: 1px solid var(--border); }
+  .label { margin: 0; font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .bn { margin: 0; font-size: var(--t-small); font-weight: 600; overflow-wrap: anywhere; }
+  .tip { margin: 0; font-size: var(--t-fine); color: var(--muted); overflow-wrap: anywhere; }
+  .view .none { padding: 0; }
   .opts { display: grid; gap: 2px 8px; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); }
   .opt { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; border-radius: var(--radius);
     cursor: pointer; color: var(--muted); font-size: var(--t-small); font-weight: 500; transition: background-color var(--fast), color var(--fast); }
@@ -175,6 +199,10 @@
   .paint { font-size: var(--t-ui); }
   .none { margin: 0; padding: 10px; color: var(--dim); font-size: var(--t-small); }
   @media (hover: hover) and (pointer: fine) { .opt:hover { color: var(--text); } }
+  @media (max-width: 899.98px) {
+    .split { grid-template-columns: minmax(0, 1fr); }
+    .view { position: static; padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--border); }
+  }
   @media (max-width: 640px) {
     .tools { width: 100%; }
     .find { order: 3; flex: 1 1 100%; width: auto; }
