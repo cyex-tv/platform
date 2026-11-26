@@ -107,6 +107,15 @@ impl World {
         serde_json::from_slice(&bytes).unwrap()
     }
 
+    async fn assign(&self, by: &User, to: &User, role: &str) -> Value {
+        self.gql(
+            by,
+            "mutation($a: String!, $r: String!) { assignRole(accountId: $a, roleId: $r) }",
+            json!({ "a": to.text_id(), "r": role }),
+        )
+        .await
+    }
+
     async fn unassign(&self, by: &User, from: &User, role: &str) -> Value {
         self.gql(
             by,
@@ -197,6 +206,36 @@ async fn unassigning_respects_seniority() {
 
     let r = w.unassign(&owner, &admin, &ids::to_text(mid)).await;
     assert_eq!(r["data"]["unassignRole"], true, "{r}");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn assigning_respects_seniority() {
+    let Some(w) = World::new().await else { return };
+    let owner = w.user("900").await;
+    let manager = w.user("911").await;
+    let admin = w.user("912").await;
+    let carol = w.user("913").await;
+    w.role("Managers", 50, &["roles.manage"], Some(&manager))
+        .await;
+    w.role("Admins", 100, &["roles.manage"], Some(&admin)).await;
+    let low = ids::to_text(w.role("Low", 10, &[], None).await);
+    let other = ids::to_text(w.role("Other", 20, &[], None).await);
+
+    // A junior manager can't hand even a low role to someone senior.
+    let r = w.assign(&manager, &admin, &low).await;
+    assert_eq!(code(&r), "not_below_you", "{r}");
+    // To someone below, or without roles, it can.
+    let r = w.assign(&manager, &carol, &low).await;
+    assert_eq!(r["data"]["assignRole"], true, "{r}");
+    // And to themselves.
+    let r = w.assign(&manager, &manager, &low).await;
+    assert_eq!(r["data"]["assignRole"], true, "{r}");
+    // The senior one and the owner still can.
+    let r = w.assign(&admin, &manager, &other).await;
+    assert_eq!(r["data"]["assignRole"], true, "{r}");
+    let r = w.assign(&owner, &admin, &low).await;
+    assert_eq!(r["data"]["assignRole"], true, "{r}");
     w.db.close().await;
 }
 

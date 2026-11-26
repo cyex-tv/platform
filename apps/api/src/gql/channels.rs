@@ -14,6 +14,7 @@ pub struct ChannelQuery;
 #[Object]
 impl ChannelQuery {
     /// A channel by its platform ID.
+    #[graphql(complexity = "10 + child_complexity")]
     async fn channel(
         &self,
         ctx: &Context<'_>,
@@ -26,6 +27,7 @@ impl ChannelQuery {
     }
 
     /// A channel by its login or slug. Logins change; store the ID, not the login.
+    #[graphql(complexity = "10 + child_complexity")]
     async fn channel_by_login(
         &self,
         ctx: &Context<'_>,

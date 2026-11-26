@@ -305,9 +305,8 @@ pub fn refund_reason(raw: &str) -> ApiResult<String> {
 
 /// Page and size, clamped.
 pub fn paging(page: Option<u32>, per_page: Option<u32>) -> (i64, i64) {
-    let per = per_page.unwrap_or(ORDERS_PAGE).clamp(1, ORDERS_PAGE_MAX);
-    let page = page.unwrap_or(1).max(1);
-    (i64::from(per), i64::from(page - 1) * i64::from(per))
+    let p = crate::errors::paging(page, per_page, ORDERS_PAGE, ORDERS_PAGE_MAX);
+    (p.limit, p.offset)
 }
 
 /// Every cosmetic of `bundle` exists (`bad_cosmetics` otherwise).

@@ -34,7 +34,7 @@ pub mod upload;
 pub mod views;
 
 use async_graphql::http::ALL_WEBSOCKET_PROTOCOLS;
-use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse, GraphQLWebSocket};
+use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse};
 use axum::Router;
 use axum::extract::{Extension, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
@@ -188,20 +188,28 @@ async fn graphql(
 
 /// `/v1/gql/ws` (`graphql-transport-ws`, or the older `graphql-ws`): subscriptions only, at most
 /// `gql::MAX_SOCKET_SUBSCRIPTIONS` at once. No caller is attached, so nothing on the socket runs
-/// as a signed-in account.
+/// as a signed-in account. Messages are at most `gql::MAX_SOCKET_MESSAGE`, `connection_init` must
+/// come within `gql::SOCKET_INIT_DEADLINE`, a socket silent for `gql::SOCKET_IDLE` is closed,
+/// and one IP holds at most `Rates::sockets_per_ip` open at once (429 past that).
 async fn graphql_ws(
+    State(state): State<AppState>,
     Extension(schema): Extension<ApiSchema>,
+    ip: Option<Extension<limits::ClientIp>>,
     protocol: GraphQLProtocol,
     upgrade: WebSocketUpgrade,
 ) -> axum::response::Response {
+    let ip = ip.map_or_else(String::new, |Extension(ip)| ip.0);
+    let Some(slot) = state.limits.sockets.try_take(&ip) else {
+        tracing::info!(%ip, "too many open sockets");
+        return limits::too_many_open();
+    };
     upgrade
         .protocols(ALL_WEBSOCKET_PROTOCOLS)
-        .on_upgrade(move |stream| {
-            let mut data = async_graphql::Data::default();
-            data.insert(gql::SocketConnection::default());
-            GraphQLWebSocket::new(stream, schema, protocol)
-                .with_data(data)
-                .serve()
+        .max_message_size(gql::MAX_SOCKET_MESSAGE)
+        .max_frame_size(gql::MAX_SOCKET_MESSAGE)
+        .on_upgrade(move |stream| async move {
+            gql::serve_socket(stream, schema, protocol).await;
+            drop(slot);
         })
 }
 

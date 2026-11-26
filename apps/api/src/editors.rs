@@ -17,7 +17,7 @@
 //!
 //! Every change writes `audit_log` with before and after, in the change's transaction.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use axum::http::StatusCode;
 use cyex_tv_auth::Caller;
@@ -556,20 +556,45 @@ pub async fn editor_of(state: &AppState, caller: &Caller) -> ApiResult<Vec<Edite
         .collect())
 }
 
-/// The sets of every account the caller edits, by account then age: the ones each grant covers.
+/// Whether a grant lets its editor work on the owner's sets: `emotes`, `sets` or `channels` (which
+/// picks a channel's active set). A grant of only `profile` or `editors`, say, lists no sets.
+fn works_on_sets(grant: &Grant) -> bool {
+    let flags = flags_of(&grant.permissions);
+    [
+        EditorPermission::Emotes,
+        EditorPermission::Sets,
+        EditorPermission::Channels,
+    ]
+    .iter()
+    .any(|f| flags.contains(f))
+}
+
+/// The sets of every account the caller edits, by account then age: the ones each grant covers,
+/// for grants that work on sets (`works_on_sets`).
 pub async fn editor_sets(state: &AppState, caller: &Caller) -> ApiResult<Vec<EmoteSet>> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    let grants = editors::list_for_editor(&mut conn, caller.account_id)
+    let grants: Vec<Grant> = editors::list_for_editor(&mut conn, caller.account_id)
         .await
-        .map_err(db_error)?;
+        .map_err(db_error)?
+        .into_iter()
+        .filter(works_on_sets)
+        .collect();
     let scoped = editors::scoped_sets_of_editor(&mut conn, caller.account_id)
         .await
         .map_err(db_error)?;
+    let owners: Vec<Uuid> = grants.iter().map(|g| g.account_id).collect();
+    let mut by_owner: HashMap<Uuid, Vec<sets::Set>> = HashMap::new();
+    for set in sets::list_for_owners(&mut conn, &owners)
+        .await
+        .map_err(db_error)?
+    {
+        if let Some(owner) = set.owner_account_id {
+            by_owner.entry(owner).or_default().push(set);
+        }
+    }
     let mut all = Vec::new();
     for g in &grants {
-        let owned = sets::list_for_owner(&mut conn, g.account_id)
-            .await
-            .map_err(db_error)?;
+        let owned = by_owner.remove(&g.account_id).unwrap_or_default();
         if g.all_sets {
             all.extend(owned);
         } else {
@@ -589,18 +614,22 @@ pub async fn editor_channels(state: &AppState, caller: &Caller) -> ApiResult<Vec
     let grants = editors::list_for_editor(&mut conn, caller.account_id)
         .await
         .map_err(db_error)?;
-    let mut out = Vec::new();
-    for g in &grants {
-        for ch in channels::list_for_account(&mut conn, g.account_id)
-            .await
-            .map_err(db_error)?
-        {
-            if let Some(view) = views::channel(&mut conn, &ch).await.map_err(db_error)? {
-                out.push(view);
-            }
-        }
+    let accounts: Vec<Uuid> = grants.iter().map(|g| g.account_id).collect();
+    let mut by_account: HashMap<Uuid, Vec<channels::Channel>> = HashMap::new();
+    for ch in channels::list_for_accounts(&mut conn, &accounts)
+        .await
+        .map_err(db_error)?
+    {
+        by_account.entry(ch.account_id).or_default().push(ch);
     }
-    Ok(out)
+    // In grant order, as before, with one query for every channel's account.
+    let ordered: Vec<channels::Channel> = grants
+        .iter()
+        .flat_map(|g| by_account.remove(&g.account_id).unwrap_or_default())
+        .collect();
+    views::channels_of(&mut conn, &ordered)
+        .await
+        .map_err(db_error)
 }
 
 /// The channels the caller can manage, each once under their highest role, ordered by role, then
@@ -746,6 +775,9 @@ pub async fn add(
     rate_limited(state, caller)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    editors::lock_owner(&mut tx, owner)
+        .await
+        .map_err(db_error)?;
     let m = manager_access(state, &mut tx, caller, owner).await?;
     no_escalation(&m.flags, &flags)?;
     let scope = requested_scope(&mut tx, owner, input.set_ids.as_deref()).await?;
@@ -821,6 +853,9 @@ pub async fn update(
     rate_limited(state, caller)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    editors::lock_owner(&mut tx, owner)
+        .await
+        .map_err(db_error)?;
     let m = manager_access(state, &mut tx, caller, owner).await?;
     let before = editors::get(&mut tx, owner, editor)
         .await
@@ -886,6 +921,9 @@ pub async fn remove(
     rate_limited(state, caller)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    editors::lock_owner(&mut tx, owner)
+        .await
+        .map_err(db_error)?;
     let current_scope = scope_of(&mut tx, owner, editor).await?;
     let mut staff = false;
     if editor != caller.account_id {

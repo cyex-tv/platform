@@ -40,7 +40,7 @@ use crate::admin::{actor, rule};
 use crate::catalog::{
     db_error, forbidden, holds, load_set, not_found, parse_id, publish_member_event,
 };
-use crate::errors::{bad, conflict, sqlx_error};
+use crate::errors::{bad, conflict, paging, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -230,15 +230,10 @@ pub async fn queue(
 ) -> ApiResult<ReportQueue> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     moderator(&mut conn, caller).await?;
-    let per_page = per_page.unwrap_or(PAGE).clamp(1, PAGE_MAX);
-    let page = page.unwrap_or(1).max(1);
-    let (rows, total) = reports::open(
-        &mut conn,
-        i64::from(per_page),
-        i64::from(page - 1) * i64::from(per_page),
-    )
-    .await
-    .map_err(db_error)?;
+    let paged = paging(page, per_page, PAGE, PAGE_MAX);
+    let (rows, total) = reports::open(&mut conn, paged.limit, paged.offset)
+        .await
+        .map_err(db_error)?;
     let mut items = Vec::with_capacity(rows.len());
     for r in &rows {
         items.push(report_view(state, &mut conn, r).await?);

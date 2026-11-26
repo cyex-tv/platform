@@ -16,6 +16,7 @@ pub struct SetQuery;
 impl SetQuery {
     /// A set with its emotes. Null when there is none, or when it is `PRIVATE` and you are not
     /// its owner, an editor or staff (a channel's active set is always public).
+    #[graphql(complexity = "10 + child_complexity")]
     async fn set(&self, ctx: &Context<'_>, id: String) -> Result<Option<EmoteSet>> {
         catalog::set(state(ctx), caller_opt(ctx), &id)
             .await
@@ -40,6 +41,7 @@ impl SetQuery {
     /// the rule of `set`; an unknown or hidden set is an empty page. `query` keeps the emotes whose
     /// name in the set or own name contains it (case-insensitive). `perPage` is 1 to 200, default
     /// 120; `total` counts every match.
+    #[graphql(complexity = "10 + child_complexity")]
     async fn set_emotes(
         &self,
         ctx: &Context<'_>,

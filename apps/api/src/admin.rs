@@ -850,7 +850,7 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
 }
 
 /// Gives an account a role. False if it had it already. You must hold every permission the role
-/// grants, and the role must be below your highest. Needs `roles.manage` or `roles.assign`; the
+/// grants, the role must be below your highest, and so must someone else's account. Needs `roles.manage` or `roles.assign`; the
 /// User and top roles are never assigned.
 pub async fn assign(
     state: &AppState,
@@ -878,6 +878,14 @@ pub async fn assign(
         .map_err(db_error)?
         .filter(|a| a.deleted_at.is_none())
         .ok_or_else(not_found)?;
+    // Like taking a role away: someone else's account must be below you, so a junior manager
+    // can't hand roles to a senior one.
+    if account_id != caller.account_id {
+        let target_highest = roles::highest_position(&mut tx, account_id)
+            .await
+            .map_err(db_error)?;
+        actor.may_act_on(target_highest).map_err(rule)?;
+    }
 
     let added = roles::assign(&mut tx, account_id, role_id, Some(caller.account_id))
         .await

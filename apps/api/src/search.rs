@@ -16,7 +16,7 @@ use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::catalog::db_error;
-use crate::errors::sqlx_error;
+use crate::errors::{paging, sqlx_error};
 use crate::limits;
 use crate::state::AppState;
 use crate::views;
@@ -55,11 +55,9 @@ pub async fn accounts(
     page: Option<u32>,
     per_page: Option<u32>,
 ) -> ApiResult<AccountResults> {
-    let per_page = per_page
-        .unwrap_or(ACCOUNTS_PER_PAGE)
-        .clamp(1, ACCOUNTS_PER_PAGE_MAX);
+    let paged = paging(page, per_page, ACCOUNTS_PER_PAGE, ACCOUNTS_PER_PAGE_MAX);
     // A page past the last one comes back empty (with the real total), not as the last page.
-    let page = page.unwrap_or(1).max(1);
+    let (page, per_page) = (paged.page, paged.per_page);
     let empty = || AccountResults {
         items: Vec::new(),
         total: 0,
@@ -73,15 +71,20 @@ pub async fn accounts(
     }
     limits::account_search(state, caller, ip)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    let hits = cyex_tv_db::search::accounts(
-        &mut conn,
-        text,
-        i64::from(per_page),
-        i64::from(page - 1) * i64::from(per_page),
-    )
-    .await
-    .map_err(db_error)?;
-    let items = account_hits(&mut conn, &hits.ids).await?;
+    // Past `MAX_PAGE`, one row is read for the total, and dropped.
+    let (limit, offset) = if paged.past_end() {
+        (1, 0)
+    } else {
+        (paged.limit, paged.offset)
+    };
+    let hits = cyex_tv_db::search::accounts(&mut conn, text, limit, offset)
+        .await
+        .map_err(db_error)?;
+    let items = if paged.past_end() {
+        Vec::new()
+    } else {
+        account_hits(&mut conn, &hits.ids).await?
+    };
     Ok(AccountResults {
         items,
         total: u64::try_from(hits.total).unwrap_or(0),
@@ -159,8 +162,8 @@ pub async fn quick(
 }
 
 pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults> {
-    let per_page = p.per_page.unwrap_or(PER_PAGE).clamp(1, PER_PAGE_MAX);
-    let page = p.page.unwrap_or(1).max(1);
+    let paged = paging(p.page, p.per_page, PER_PAGE, PER_PAGE_MAX);
+    let (page, per_page) = (paged.page, paged.per_page);
     let empty = || SearchResults {
         items: Vec::new(),
         total: 0,
@@ -189,11 +192,18 @@ pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults
             exact: p.exact,
             window: p.window,
             sort: p.sort,
-            limit: i64::from(per_page),
-            offset: i64::from(page - 1) * i64::from(per_page),
+            // Past `MAX_PAGE`, one row is read for the total, and dropped.
+            limit: if paged.past_end() { 1 } else { paged.limit },
+            offset: paged.offset,
         })
         .await
         .map_err(db_error)?;
+    if paged.past_end() {
+        return Ok(SearchResults {
+            total: u64::try_from(hits.total).unwrap_or(0),
+            ..empty()
+        });
+    }
 
     let mut conn = state.db.acquire().await.map_err(|e| db_error(e.into()))?;
     let rows = reads::emotes(&mut conn, &hits.ids)

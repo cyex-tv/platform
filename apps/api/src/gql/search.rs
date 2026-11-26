@@ -17,6 +17,7 @@ impl SearchQuery {
     /// per account, or per IP signed out (`rate_limited`). A `query` under 2 characters (after the
     /// `@`) finds nobody. Matches are counted up to 1000: `totalCapped` says there are more, and
     /// the pages end there.
+    #[graphql(complexity = "50 + child_complexity")]
     async fn search_accounts(
         &self,
         ctx: &Context<'_>,
@@ -36,6 +37,7 @@ impl SearchQuery {
     /// tier), and the top 3 accounts (`searchAccounts` ranking, a leading `@` ignored, under 2
     /// characters finds none). Approved, listed, non-NSFW emotes only. 240 searches a minute per
     /// account, or per IP signed out (`rate_limited`).
+    #[graphql(complexity = "20 + child_complexity")]
     async fn quick_search(&self, ctx: &Context<'_>, query: String) -> Result<QuickSearch> {
         let ip = client_ip(ctx);
         search::quick(state(ctx), caller_opt(ctx), ip, &query)

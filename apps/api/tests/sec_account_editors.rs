@@ -935,3 +935,71 @@ async fn editor_changes_are_rate_limited() {
     );
     w.db.close().await;
 }
+
+#[tokio::test]
+async fn a_grant_without_set_flags_lists_no_sets() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("1101").await;
+    let bob = w.user("1102").await;
+    let set = w.set(&alice, "Main").await;
+
+    let r = w.add(&alice, None, &bob, &["PROFILE"]).await;
+    assert!(r["errors"].is_null(), "{r}");
+    let r = w.gql(&bob, "{ editorSets { id } }", json!({})).await;
+    assert_eq!(r["data"]["editorSets"], json!([]), "{r}");
+
+    // With a flag that works on sets, they're listed.
+    let r = w
+        .gql(
+            &alice,
+            UPDATE,
+            json!({ "a": bob.tid(), "f": ["PROFILE", "EMOTES"] }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    let r = w.gql(&bob, "{ editorSets { id } }", json!({})).await;
+    let listed = r["data"]["editorSets"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert!(listed.iter().any(|s| s["id"] == set.as_str()), "{r}");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn editor_changes_wait_for_the_owner_row() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("1111").await;
+    let bob = w.user("1112").await;
+
+    // Another change to alice's editors holds her row. The same lock the API takes: writes that
+    // only reference the account (the grant's own foreign key) don't wait for it, so only the
+    // API's lock makes this wait.
+    let mut held = w.db.conn().await;
+    sqlx::query("BEGIN").execute(&mut *held).await.unwrap();
+    sqlx::query("SELECT 1 FROM accounts WHERE id = $1 FOR NO KEY UPDATE")
+        .bind(alice.id)
+        .execute(&mut *held)
+        .await
+        .unwrap();
+
+    let r = {
+        let add = w.add(&alice, None, &bob, &["EMOTES"]);
+        tokio::pin!(add);
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(500), &mut add)
+                .await
+                .is_err(),
+            "the change waits for the lock"
+        );
+        sqlx::query("ROLLBACK").execute(&mut *held).await.unwrap();
+        add.await
+    };
+    assert_eq!(
+        r["data"]["addAccountEditor"]["account"]["id"],
+        w.db.public(bob.id).await.as_str(),
+        "{r}"
+    );
+    drop(held);
+    w.db.close().await;
+}

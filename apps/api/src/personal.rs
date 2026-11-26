@@ -17,7 +17,9 @@ use sqlx::Connection;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::errors::{bad, conflict, conn, db_error, limited_as, not_found, parse_id, sqlx_error};
+use crate::errors::{
+    bad, conflict, conn, db_error, limited_as, not_found, paging, parse_id, sqlx_error,
+};
 use crate::limits::AccountLimit;
 use crate::state::AppState;
 use crate::views;
@@ -231,18 +233,14 @@ pub async fn my_favourites(
     page: Option<u32>,
     per_page: Option<u32>,
 ) -> ApiResult<EmotePage> {
-    let per_page = per_page
-        .unwrap_or(FAVOURITES_PAGE)
-        .clamp(1, FAVOURITES_PAGE_MAX);
-    let page = page.unwrap_or(1).clamp(1, 1_000);
-    let offset = i64::from(page - 1) * i64::from(per_page);
+    let paged = paging(page, per_page, FAVOURITES_PAGE, FAVOURITES_PAGE_MAX);
     let mut conn = conn(state).await?;
     let (wanted, total) = personal::favourites_page(
         &mut conn,
         caller.account_id,
         query,
-        i64::from(per_page),
-        offset,
+        paged.limit,
+        paged.offset,
     )
     .await
     .map_err(db_error)?;

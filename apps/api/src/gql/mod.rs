@@ -37,8 +37,11 @@ mod shop;
 mod site;
 mod subscription;
 
-use extensions::{AppScopes, SocketRunsSubscriptionsOnly};
-pub use extensions::{MAX_SOCKET_SUBSCRIPTIONS, SocketConnection};
+use extensions::{AppScopes, RootFieldCap, SocketRunsSubscriptionsOnly};
+pub use extensions::{
+    MAX_ROOT_FIELDS, MAX_SOCKET_MESSAGE, MAX_SOCKET_SUBSCRIPTIONS, SOCKET_IDLE,
+    SOCKET_INIT_DEADLINE, SOCKET_PING_EVERY, SocketConnection, serve_socket,
+};
 pub use subscription::Subscription;
 
 // The root query: one object per area, merged in the order the schema lists the fields.
@@ -85,12 +88,16 @@ pub struct Mutation(
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
-/// Depth and complexity limits apply to every request (ADR 0008).
+/// Depth and complexity limits apply to every request (ADR 0008), and an operation selects at
+/// most `MAX_ROOT_FIELDS` top-level fields. The public reads that fan out carry their own weight
+/// (`searchEmotes` and `searchAccounts` 50, the single lookups 10), so a request can't alias
+/// hundreds of them past the limit.
 pub fn builder() -> SchemaBuilder<Query, Mutation, Subscription> {
     Schema::build(Query::default(), Mutation::default(), Subscription)
         .limit_depth(12)
         .limit_complexity(1_000)
         .extension(SocketRunsSubscriptionsOnly)
+        .extension(RootFieldCap)
         .extension(AppScopes)
         .extension(crate::public_ids::PublicIds)
 }
