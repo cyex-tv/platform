@@ -4,16 +4,14 @@
   // ratio, else the largest. Its tooltip is the badge's own; the picture is decorative next to a
   // name unless `label` asks otherwise. Animated badges show their first frame under reduced
   // motion.
-  import { onMount } from 'svelte';
   import type { Badge } from './store.svelte';
-  import { reduced, watchReduced } from './reduced.svelte';
+  import { reduced } from './reduced.svelte';
   import { safeUrl } from './paint';
   import { badgeFiles, pickBadgeFile } from './badgeFile';
   import { display } from '$lib/dpr.svelte';
 
   type Props = { badge: Pick<Badge, 'name' | 'tooltip' | 'image'>; size?: number; label?: boolean };
   let { badge, size = 18, label = false }: Props = $props();
-  onMount(watchReduced);
 
   const names = $derived(badge.image.files.map((f) => f.name));
   const still = $derived(reduced.on && badge.image.animated);

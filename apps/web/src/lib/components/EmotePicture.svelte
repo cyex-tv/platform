@@ -6,10 +6,9 @@
   // with no srcset and no <picture><source media>: Chromium kept every removed page that showed
   // one in memory (see `pictureFor`). Lazy and async by default, so only pictures near the screen
   // load and decoding never blocks the page.
-  import { onMount } from 'svelte';
   import type { Action } from 'svelte/action';
   import { hasStill, pictureFor, size, type Picture } from '$lib/emote';
-  import { reduced, watchReduced } from '$lib/cosmetics/reduced.svelte';
+  import { reduced } from '$lib/cosmetics/reduced.svelte';
   import { display } from '$lib/dpr.svelte';
 
   type Props = {
@@ -23,7 +22,6 @@
     use?: Action<HTMLImageElement>;
   };
   let { emote: e, shown, eager = false, alt = '', class: cls = '', use = () => {} }: Props = $props();
-  onMount(watchReduced);
 
   const dims = $derived(size(e));
   const still = $derived(hasStill(e));

@@ -31,8 +31,7 @@
   import FactRows from '$lib/components/FactRows.svelte';
   import LinkRows from '$lib/components/LinkRows.svelte';
   import ContactSheet from '$lib/components/ContactSheet.svelte';
-  import { reduced, watchReduced } from '$lib/cosmetics/reduced.svelte';
-  import { onMount } from 'svelte';
+  import { reduced } from '$lib/cosmetics/reduced.svelte';
   import { scaleFiles } from '$lib/components/emote/emote-page';
   import PageHead from '$lib/tool/PageHead.svelte';
   import EmoteFlags from '$lib/tool/EmoteFlags.svelte';
@@ -210,7 +209,6 @@
   const files = $derived(emote ? scaleFiles(emote.files) : []);
   const biggest = $derived(files.at(-1));
   // Animated emotes play; under reduced motion they show their still frame.
-  onMount(watchReduced);
   const frozen = $derived(!!emote && emote.animated && emote.files.some((f) => f.name === '1x_static.webp') && reduced.on);
   const fileUrl = (f: { scale: number; name: string }) => (emote ? (frozen ? `${emote.host}/${f.scale}x_static.webp` : `${emote.host}/${f.name}`) : '');
 </script>

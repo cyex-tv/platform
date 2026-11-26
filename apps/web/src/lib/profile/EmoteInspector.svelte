@@ -12,17 +12,15 @@
   import { canReport, flagsOf, scaleFiles, type PageEmote } from '$lib/components/emote/emote-page';
   import { Viewer } from '$lib/components/emote/viewer.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
-  import { reduced, watchReduced } from '$lib/cosmetics/reduced.svelte';
+  import { reduced } from '$lib/cosmetics/reduced.svelte';
   import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
   import { ready } from '$lib/emote';
   import { clean, count, date } from '$lib/format';
   import { session } from '$lib/tool/session.svelte';
-  import { onMount } from 'svelte';
 
   // `head={false}`: inside InspectorLayout, whose own panel head carries the label and the buttons.
   type Props = { emote: PageEmote | null; failed?: boolean; onclose: () => void; head?: boolean };
   let { emote: e, failed = false, onclose, head = true }: Props = $props();
-  onMount(watchReduced);
 
   // One sign-in check per emote shown (the actions share it).
   const viewer = $derived(e ? new Viewer(e.id) : null);
