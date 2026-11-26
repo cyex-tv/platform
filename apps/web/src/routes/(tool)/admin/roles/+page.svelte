@@ -63,7 +63,7 @@
   const nameError = $derived(tried && !name.trim() ? 'Give it a name.' : null);
   const posOk = $derived(userRole || (Number.isInteger(position) && position >= 1 && position <= MAX_POS));
   const posError = $derived(tried && !posOk ? `Position 1 to ${count(MAX_POS)}.` : null);
-  const limitsOk = $derived(Object.values(limitValues).every((v) => !valueProblem(v)));
+  const limitsOk = $derived((limits ?? []).every((l) => !valueProblem(limitValues[l.key], l)));
 
   const mine = $derived(new Set(session.me?.permissions ?? []));
   const sorted = $derived([...(roles ?? [])].sort((a, b) => b.position - a.position));
@@ -130,7 +130,7 @@
           input: { name: name.trim(), description: description.trim() || null, position, permissions: allows, denies, public: invisible ? false : shown, invisible },
         })).createRole.id;
       }
-      if (limits && changed(limitsBefore, limitValues)) await gql(SET_ROLE_LIMITS, { id, limits: toInput(limitValues) });
+      if (limits && changed(limitsBefore, limitValues, limits)) await gql(SET_ROLE_LIMITS, { id, limits: toInput(limitValues, limits) });
       notify(`${name.trim()} ${editing ? 'saved' : 'created'}.`);
       dialog.close();
       await load();
@@ -339,7 +339,7 @@
               <p class="desc">None set: the defaults apply.</p>
             {:else}
               <dl class="adm-kv">
-                {#each set as l (l.key)}<dt>{info(l.key).label}</dt><dd>{amount(l.value ?? 0, l.windowSeconds)}</dd>{/each}
+                {#each set as l (l.key)}<dt>{info(l.key).label}</dt><dd>{amount(l, l.value ?? 0)}</dd>{/each}
               </dl>
             {/if}
           </section>

@@ -208,7 +208,8 @@ export const guides: Guide[] = [
     blocks: [
       p('Every upload and field limit is one public list: the GraphQL `limits` query, or `GET /v1/limits` over REST. Per kind (`emote`, `badge`, `paint`) it gives `maxBytes`, `maxSide`, `maxFrames`, `maxTotalPixels` and `maxDurationMs` (null: no cap), the smallest side and widest shape a picture may have, and the tallest file the CDN serves. It also lists the name and tag lengths and the per-IP request rates. Read it instead of copying numbers: an operator can change the media limits, and they change here with them.'),
       p('Signed in, the GraphQL `limits.account` lists your own per-account limits (`uploads_per_hour`, `pending_emotes`, `set_capacity_max` and the rest) with the `default` and what applies to you, `effective`, after your roles’ overrides. `uploadQuota` adds the file limits an upload for that account is checked against: `maxBytes`, `maxSide` and `maxFrames`, next to `pendingMax` and `uploadsPerHour`.'),
-      note('An emote is at most 1000 × 1000 px whatever the operator sets, and the CDN serves it at most 128 px tall.'),
+      p('A role can also change the file limits of the people who hold it: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`, `badge_max_side`, `badge_max_frames`, `paint_max_bytes` and `paint_max_side`, listed in `limits.account` with the rest. A badge or paint role may be raised above the public numbers, up to a ceiling the operator sets (16 MB; 4096 px for a badge, 6144 px for a paint, by default). An emote role can only lower its side. An upload is checked, and made by the worker, under the limits of whoever uploaded it at that moment.'),
+      note('An emote is at most 1000 × 1000 px whatever the operator or a role sets, and the CDN serves it at most 128 px tall.'),
     ],
   },
   {

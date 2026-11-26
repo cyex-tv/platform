@@ -1747,6 +1747,9 @@ pub enum LimitGroup {
     Uploads,
     /// Writes to your account: editors, cosmetics, sets, lists, settings, the shop, your data.
     Account,
+    /// How big the files an account uploads may be: bytes, side and frames of emotes, badges
+    /// and paints.
+    Media,
 }
 
 /// One per-account limit and a role's override of it (`roleLimits`, `limitDefaults`). An
@@ -1756,11 +1759,17 @@ pub enum LimitGroup {
 pub struct RoleLimit {
     /// `gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
     /// `set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
-    /// `emote_transfers`, `prefs`, `checkout`, `redeem` or `data_export`.
+    /// `emote_transfers`, `prefs`, `checkout`, `redeem`, `data_export`, `set_capacity_max`, or a
+    /// media limit: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`,
+    /// `badge_max_side`, `badge_max_frames`, `paint_max_bytes` or `paint_max_side` (bytes, px
+    /// and frames of the largest file an account may upload).
     pub key: String,
     pub group: LimitGroup,
     /// What everyone gets without an override (set when the API starts).
     pub default: i32,
+    /// The most this limit may be set to: 1,000,000 for a count, and for a media limit the
+    /// ceiling the API runs with (an emote's side never above 1000 px).
+    pub max: i32,
     /// The window the count is per, in seconds; null for `pending_emotes`, a cap on how many
     /// wait at once.
     pub window_seconds: Option<i32>,
@@ -1774,7 +1783,7 @@ pub struct RoleLimit {
 #[cfg_attr(feature = "graphql", graphql(name = "RoleLimitInput"))]
 pub struct RoleLimitInput {
     pub key: String,
-    /// 1 to 1,000,000; null keeps the default.
+    /// 1 up to the limit's `max` (1,000,000 for a count); null keeps the default.
     pub value: Option<i32>,
 }
 

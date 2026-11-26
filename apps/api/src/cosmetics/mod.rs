@@ -17,6 +17,7 @@ use bytes::Bytes;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::cosmetics::{self as db, Image, NewImage, PaintFields};
 use cyex_tv_db::{accounts, ids, jobs, outbox, reads};
+use cyex_tv_media::config::MediaKind;
 use cyex_tv_media::encode::Profile;
 use cyex_tv_media::{Limits, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
@@ -235,6 +236,27 @@ pub fn picture_limits(kind: CosmeticKind) -> Limits {
         CosmeticKind::Badge => Limits::badge(),
         CosmeticKind::Paint => Limits::paint(),
     }
+}
+
+/// The limits `limits`' account uploads a `kind` of picture under: the configured ones with its
+/// roles' overrides.
+pub fn picture_limits_for(kind: CosmeticKind, limits: &crate::limits::AccountLimits) -> Limits {
+    limits.media(match kind {
+        CosmeticKind::Badge => MediaKind::Badge,
+        CosmeticKind::Paint => MediaKind::Paint,
+    })
+}
+
+/// `stored` (what an image was made under) widened to cover `l`: a picture uploaded again by
+/// someone with bigger limits keeps the bigger ones, so making it again never fails.
+fn widen(stored: Option<&Value>, l: &Limits) -> Value {
+    let get = |k: &str| stored.and_then(|s| s.get(k)).and_then(Value::as_u64);
+    let top = |k: &str, now: u64| json!(get(k).map_or(now, |was| was.max(now)));
+    json!({
+        "max_bytes": top("max_bytes", l.max_bytes as u64),
+        "max_side": top("max_side", u64::from(l.max_side)),
+        "max_frames": top("max_frames", u64::from(l.max_frames)),
+    })
 }
 
 /// The sizes a kind of picture is made at (the worker's `cosmetics::profile`).
@@ -792,7 +814,8 @@ pub async fn upload_image(
         return Err(ApiError::unavailable("Uploads aren't available right now."));
     };
     let bytes = file.clone();
-    let limits = picture_limits(kind);
+    let own = state.limits.load(&state.db, caller.account_id).await;
+    let limits = picture_limits_for(kind, &own);
     let probe: Probe = tokio::task::spawn_blocking(move || cyex_tv_media::probe(&bytes, &limits))
         .await
         .map_err(|_| ApiError::internal())?
@@ -896,13 +919,24 @@ pub async fn upload_image(
         )
         .await?;
     }
+    // What the picture is made under: the uploader's limits, widened when the same picture was
+    // uploaded under bigger ones before. The worker and a later remake use these.
+    let stored = db::image_limits(&mut tx, image.id)
+        .await
+        .map_err(db_error)?;
+    let made_under = widen(stored.as_ref(), &limits);
+    if stored.as_ref() != Some(&made_under) {
+        db::set_image_limits(&mut tx, image.id, &made_under)
+            .await
+            .map_err(db_error)?;
+    }
     if created || !view.ready || lacks_sizes(kind, &view.files) {
         // Again for a picture whose files never got made, or were made before a size existed:
         // the job is safe to repeat.
         jobs::enqueue(
             &mut tx,
             TRANSCODE_JOB,
-            &json!({ "image_id": ids::to_text(image.id) }),
+            &json!({ "image_id": ids::to_text(image.id), "limits": made_under }),
             5,
         )
         .await
@@ -955,14 +989,17 @@ pub async fn remake_image(state: &AppState, caller: &Caller, id: &str) -> ApiRes
         ));
     }
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    jobs::enqueue(
-        &mut tx,
-        TRANSCODE_JOB,
-        &json!({ "image_id": ids::to_text(image.id) }),
-        5,
-    )
-    .await
-    .map_err(db_error)?;
+    // Made again under the limits it was uploaded under, not the remaker's.
+    let mut payload = json!({ "image_id": ids::to_text(image.id) });
+    if let Some(limits) = db::image_limits(&mut tx, image.id)
+        .await
+        .map_err(db_error)?
+    {
+        payload["limits"] = limits;
+    }
+    jobs::enqueue(&mut tx, TRANSCODE_JOB, &payload, 5)
+        .await
+        .map_err(db_error)?;
     record_audit(
         &mut tx,
         caller.account_id,

@@ -594,3 +594,31 @@ pub async fn selections_for_users(
     .fetch_all(conn)
     .await?)
 }
+
+/// The media limits an image was uploaded under (`media_limits`), if any were recorded.
+pub async fn image_limits(
+    conn: &mut PgConnection,
+    id: Uuid,
+) -> DbResult<Option<serde_json::Value>> {
+    Ok(sqlx::query_scalar::<_, Option<serde_json::Value>>(
+        "SELECT media_limits FROM cosmetic_images WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(conn)
+    .await?
+    .flatten())
+}
+
+/// Records the media limits an image is made under.
+pub async fn set_image_limits(
+    conn: &mut PgConnection,
+    id: Uuid,
+    limits: &serde_json::Value,
+) -> DbResult<()> {
+    sqlx::query("UPDATE cosmetic_images SET media_limits = $2 WHERE id = $1")
+        .bind(id)
+        .bind(limits)
+        .execute(conn)
+        .await?;
+    Ok(())
+}

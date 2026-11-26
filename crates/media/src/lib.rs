@@ -213,11 +213,16 @@ fn check_side(width: u32, height: u32, limits: &Limits) -> Result<(), MediaError
     Ok(())
 }
 
-fn decoder_limits() -> image::Limits {
+/// The decoders' allocation cap for `limits`: a frame of the biggest picture they allow (a side
+/// squared, but never more pixels than `max_total_pixels`) in RGBA, twice over for the decoders'
+/// own buffers, and at least 64 MB (what a 2048 px badge needs). It grows with a role's raised
+/// side, up to the ceiling in [`config`], and no further.
+fn decoder_limits(limits: &Limits) -> image::Limits {
+    const FLOOR: u64 = 64 * 1024 * 1024;
+    let side = u64::from(limits.max_side);
+    let frame = (side * side).min(limits.max_total_pixels) * 4 * 2;
     let mut l = image::Limits::default();
-    // One frame of at most 2048×2048 RGBA (a badge's limit) is 16 MB; leave room for the
-    // decoders' own buffers.
-    l.max_alloc = Some(64 * 1024 * 1024);
+    l.max_alloc = Some(frame.max(FLOOR));
     l
 }
 
@@ -309,7 +314,9 @@ pub fn decode_frames(
         )),
         Format::Png => {
             let mut decoder = PngDecoder::new(Cursor::new(bytes)).map_err(invalid)?;
-            decoder.set_limits(decoder_limits()).map_err(invalid)?;
+            decoder
+                .set_limits(decoder_limits(limits))
+                .map_err(invalid)?;
             let (width, height) = decoder.dimensions();
             check_side(width, height, limits)?;
             let c = canvas(width, height);
@@ -323,7 +330,9 @@ pub fn decode_frames(
         }
         Format::Gif => {
             let mut decoder = GifDecoder::new(Cursor::new(bytes)).map_err(invalid)?;
-            decoder.set_limits(decoder_limits()).map_err(invalid)?;
+            decoder
+                .set_limits(decoder_limits(limits))
+                .map_err(invalid)?;
             let (width, height) = decoder.dimensions();
             check_side(width, height, limits)?;
             let c = canvas(width, height);
@@ -332,7 +341,9 @@ pub fn decode_frames(
         }
         Format::Jpeg => {
             let mut decoder = JpegDecoder::new(Cursor::new(bytes)).map_err(invalid)?;
-            decoder.set_limits(decoder_limits()).map_err(invalid)?;
+            decoder
+                .set_limits(decoder_limits(limits))
+                .map_err(invalid)?;
             let (width, height) = decoder.dimensions();
             check_side(width, height, limits)?;
             let c = canvas(width, height);
@@ -341,7 +352,9 @@ pub fn decode_frames(
         }
         Format::Webp => {
             let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(invalid)?;
-            decoder.set_limits(decoder_limits()).map_err(invalid)?;
+            decoder
+                .set_limits(decoder_limits(limits))
+                .map_err(invalid)?;
             let (width, height) = decoder.dimensions();
             check_side(width, height, limits)?;
             let c = canvas(width, height);

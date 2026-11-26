@@ -55,28 +55,33 @@ export type MediaLimitsLike = {
 
 /**
  * The rules from the API's `limits` query (the numbers it enforces, which an operator may have
- * changed), each falling back to the built-in copy above for anything it doesn't say.
+ * changed), each falling back to the built-in copy above for anything it doesn't say. Signed in,
+ * `account` holds what this account's roles allow (`badge_max_side`, ...): those win over the
+ * public numbers, so a supporter's bigger badge isn't refused on the page.
  */
-export function rulesFromLimits(l: { badge: MediaLimitsLike; paint: MediaLimitsLike } | null | undefined): PictureRules {
+export function rulesFromLimits(
+  l: { badge: MediaLimitsLike; paint: MediaLimitsLike; account?: readonly { key: string; effective: number }[] | null } | null | undefined,
+): PictureRules {
   if (!l) return PICTURE_RULES;
   const b = PICTURE_RULES.badge;
   const p = PICTURE_RULES.paint;
+  const own = (key: string, fallback: number) => l.account?.find((a) => a.key === key)?.effective ?? fallback;
   return {
     badge: {
       types: b.types,
-      maxBytes: l.badge.maxBytes,
+      maxBytes: own('badge_max_bytes', l.badge.maxBytes),
       minSide: l.badge.minSide ?? b.minSide,
-      maxSide: l.badge.maxSide,
-      maxFrames: l.badge.maxFrames,
+      maxSide: own('badge_max_side', l.badge.maxSide),
+      maxFrames: own('badge_max_frames', l.badge.maxFrames),
       maxDurationMs: l.badge.maxDurationMs ?? b.maxDurationMs,
       maxTotalPixels: l.badge.maxTotalPixels,
     },
     paint: {
       types: p.types,
-      maxBytes: l.paint.maxBytes,
+      maxBytes: own('paint_max_bytes', l.paint.maxBytes),
       minHeight: l.paint.minSide ?? p.minHeight,
       maxAspect: l.paint.maxAspect ?? p.maxAspect,
-      maxSide: l.paint.maxSide,
+      maxSide: own('paint_max_side', l.paint.maxSide),
       maxFrames: l.paint.maxFrames,
       maxDurationMs: l.paint.maxDurationMs ?? p.maxDurationMs,
       maxTotalPixels: l.paint.maxTotalPixels,
