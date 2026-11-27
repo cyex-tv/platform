@@ -494,17 +494,23 @@ async fn twitch_sign_in_end_to_end() {
         json!([{ "platform": "TWITCH", "platformChannelId": "141981764", "login": "twitch141981764" }])
     );
 
-    // A new account starts with a listed channel set named after it.
+    // A new account starts with a listed channel set named after it, and a personal set (ADR 0038).
     let sets = h
-        .gql("{ mySets { name kind visibility } }", Some(&session))
+        .gql(
+            "{ mySets { name kind visibility capacity } }",
+            Some(&session),
+        )
         .await;
     assert_eq!(
         sets["data"]["mySets"],
-        json!([{ "name": "Twitch141981764", "kind": "CHANNEL", "visibility": "LISTED" }]),
+        json!([
+            { "name": "Twitch141981764", "kind": "CHANNEL", "visibility": "LISTED", "capacity": 1000 },
+            { "name": "Personal", "kind": "PERSONAL", "visibility": "LISTED", "capacity": 3 },
+        ]),
         "{sets}"
     );
 
-    // Signing in again reuses the account, and makes no second default set.
+    // Signing in again reuses the account, and makes no second default or personal set.
     let again = h.sign_in(Platform::Twitch, "141981764", None, false).await;
     assert_eq!(
         h.me(&again).await["data"]["me"]["id"],
@@ -513,7 +519,7 @@ async fn twitch_sign_in_end_to_end() {
     let sets = h.gql("{ mySets { name } }", Some(&again)).await;
     assert_eq!(
         sets["data"]["mySets"].as_array().map(Vec::len),
-        Some(1),
+        Some(2),
         "{sets}"
     );
     h.db.close().await;
@@ -611,11 +617,11 @@ async fn linking_both_platforms_to_one_account() {
     let via_kick = h.sign_in(Platform::Kick, "2002", None, false).await;
     assert_eq!(h.me(&via_kick).await["data"]["me"]["id"], account);
 
-    // Linking adds no second default set.
+    // Linking adds no second default or personal set.
     let sets = h.gql("{ mySets { name } }", Some(&via_kick)).await;
     assert_eq!(
         sets["data"]["mySets"].as_array().map(Vec::len),
-        Some(1),
+        Some(2),
         "{sets}"
     );
 

@@ -28,6 +28,7 @@ export const LIMIT_INFO: Record<string, LimitInfo> = {
   badge_max_frames: { label: 'Badge frames', hint: 'The most frames an animated badge may have.', unit: 'frames' },
   paint_max_bytes: { label: 'Paint file size', hint: 'The biggest paint picture an account may upload (staff with cosmetics rights).', unit: 'MB' },
   paint_max_side: { label: 'Paint width and height', hint: 'The longest side of a paint picture. A role can raise it, up to the most shown.', unit: 'px' },
+  personal_set_slots: { label: 'Personal set slots', hint: 'The emotes an account’s personal set holds: 3 by default. A subscriber role sets 10. Staff can override one set by hand (up to 1.000).', unit: 'slots' },
   set_capacity_max: { label: 'Set capacity', hint: 'The most emotes one channel set can hold, picked by its owner (a subscriber role could raise it). Staff can set any set up to 1.000.000.', unit: 'slots a set' },
 };
 

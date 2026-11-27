@@ -53,7 +53,8 @@ impl SetQuery {
 
     /// What you may set a set's capacity to (`updateSet`): from the emotes it holds (at least 1)
     /// to the owner's `set_capacity_max` role limit (1.000 by default), or 1.000.000 with
-    /// `sets.edit_any`. Null when you can't change its capacity. Signed in.
+    /// `sets.edit_any`. Null when you can't change its capacity: always for the owner of a personal
+    /// set, whose slots come from their roles (3, or 10 for a subscriber; ADR 0038). Signed in.
     async fn set_capacity_range(
         &self,
         ctx: &Context<'_>,
@@ -124,7 +125,8 @@ pub struct SetMutation;
 
 #[Object]
 impl SetMutation {
-    /// Create a channel set, or your personal set (one per account). With `ownerId`, for an
+    /// Create a channel set. Every account has its personal set from sign-up (one per account), so
+    /// `PERSONAL` answers `personal_set_exists` unless it was deleted. With `ownerId`, for an
     /// account you edit with `SETS`.
     async fn create_set(&self, ctx: &Context<'_>, input: CreateSet) -> Result<EmoteSet> {
         let caller = caller(ctx)?;
@@ -163,7 +165,9 @@ impl SetMutation {
     /// is 1 to the owner's `set_capacity_max` role limit (1.000 by default; `capacity_over_limit`
     /// above it), up to 1.000.000 with `sets.edit_any`, and never below the emotes the set holds
     /// (`capacity_too_low`); see `setCapacityRange`. Every set is public: `visibility` other than
-    /// what it is needs `sets.edit_any` (`bad_visibility`).
+    /// what it is needs `sets.edit_any` (`bad_visibility`). A personal set's slots can't be changed by
+    /// its owner (`forbidden`): staff with `sets.edit_any` set an override, or `resetCapacity` it
+    /// away; both are audited as `set.capacity_changed`.
     async fn update_set(
         &self,
         ctx: &Context<'_>,

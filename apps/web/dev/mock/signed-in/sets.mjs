@@ -4,7 +4,7 @@ import { member } from '../emotes.mjs';
 import { CHANNELS } from '../account.mjs';
 import { SETS } from '../set-data.mjs';
 import { EDITOR_CHANNELS, EDITOR_OF, SHARED_SETS, editorChannels, editorOfOut, editorSets, flagsOn } from '../editors.mjs';
-import { PUBLIC_ONLY, capRange, err, findEmote, findSet, forbidden, mayView, setOut, setRights } from '../sets.mjs';
+import { PUBLIC_ONLY, capRange, err, findEmote, findSet, forbidden, mayView, personalSlots, setOut, setRights } from '../sets.mjs';
 import { badCursor, pageOf } from '../cursor.mjs';
 
 // The signed-in operations of this area, by operation name: null when the operation is not here.
@@ -61,7 +61,7 @@ export function signedInSets(op, body, v, ADMIN) {
       if (v.input.kind === 'PERSONAL' && visibility === 'PRIVATE')
         return err('Personal sets can’t be private, and the global set is always listed.', 'bad_visibility');
       const s = { id: `01JD8XSETNEW${String(++newSets).padStart(14, "0")}`, name: v.input.name, kind: v.input.kind,
-        capacity: v.input.kind === 'PERSONAL' ? 5 : 1000, owner, emotes: [], editors: [], visibility, createdAt: new Date().toISOString() };
+        capacity: v.input.kind === 'PERSONAL' ? 3 : 1000, capacityOverride: null, owner, emotes: [], editors: [], visibility, createdAt: new Date().toISOString() };
       list.push(s);
       return { data: { createSet: setOut(s) } };
     }
@@ -74,14 +74,22 @@ export function signedInSets(op, body, v, ADMIN) {
         if (!ADMIN) return PUBLIC_ONLY();
         s.visibility = v.input.visibility;
       }
+      if (v.input.resetCapacity) {
+        if (s.kind !== 'PERSONAL' || v.input.capacity != null) return err('Only a personal set has an override to take away, and not together with a capacity.', 'bad_capacity');
+        if (!ADMIN) return err('A personal set’s slots come from your plan. Only staff can change them.', 'forbidden');
+        s.capacityOverride = null;
+        s.capacity = personalSlots(s);
+      }
       if (v.input.capacity != null) {
         const c = v.input.capacity;
         if (!setRights(s, ADMIN).rename) return forbidden();
+        if (s.kind === 'PERSONAL' && !ADMIN) return err('A personal set’s slots come from your plan. Only staff can change them.', 'forbidden');
         if (!Number.isInteger(c) || c < 1 || c > 1_000_000) return err('Capacity is a whole number from 1 to 1.000.000.', 'bad_capacity');
         const r = capRange(s, ADMIN);
         if (c > r.max) return err(`This set can have up to ${r.max.toLocaleString('de-DE')} slots.`, 'capacity_over_limit');
         if (c < s.emotes.length) return err('The set already holds more emotes than that.', 'capacity_too_low');
         s.capacity = c;
+        if (s.kind === 'PERSONAL') s.capacityOverride = c;
       }
       if (v.input.name) {
         if (!setRights(s, ADMIN).rename) return forbidden();

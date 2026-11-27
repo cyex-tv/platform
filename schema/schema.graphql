@@ -1374,7 +1374,17 @@ type EmoteSet {
 	name: String!
 	kind: SetKind!
 	owner: AccountSummary
+	"""
+	The slots the set has. A personal set's come from its owner's roles (3, or 10 for a
+	subscriber) unless staff set `capacityOverride` (ADR 0038). A personal set may hold more
+	than this after its owner lost a role: it keeps its emotes and takes no new one until it
+	is under the limit.
+	"""
 	capacity: Int!
+	"""
+	Staff set this personal set's capacity by hand (`updateSet`). Null: the owner's roles decide.
+	"""
+	capacityOverride: Int
 	emotes: [SetEmote!]!
 	"""
 	Who can find and open it.
@@ -1874,7 +1884,8 @@ type Mutation {
 	"""
 	updateChannelSettings(platform: Platform!, id: String!, input: UpdateChannelSettingsInput!): Channel!
 	"""
-	Create a channel set, or your personal set (one per account). With `ownerId`, for an
+	Create a channel set. Every account has its personal set from sign-up (one per account), so
+	`PERSONAL` answers `personal_set_exists` unless it was deleted. With `ownerId`, for an
 	account you edit with `SETS`.
 	"""
 	createSet(input: CreateSetInput!): EmoteSet!
@@ -1891,7 +1902,9 @@ type Mutation {
 	is 1 to the owner's `set_capacity_max` role limit (1.000 by default; `capacity_over_limit`
 	above it), up to 1.000.000 with `sets.edit_any`, and never below the emotes the set holds
 	(`capacity_too_low`); see `setCapacityRange`. Every set is public: `visibility` other than
-	what it is needs `sets.edit_any` (`bad_visibility`).
+	what it is needs `sets.edit_any` (`bad_visibility`). A personal set's slots can't be changed by
+	its owner (`forbidden`): staff with `sets.edit_any` set an override, or `resetCapacity` it
+	away; both are audited as `set.capacity_changed`.
 	"""
 	updateSet(id: String!, input: UpdateSetInput!): EmoteSet!
 	"""
@@ -2848,7 +2861,8 @@ type Query {
 	"""
 	What you may set a set's capacity to (`updateSet`): from the emotes it holds (at least 1)
 	to the owner's `set_capacity_max` role limit (1.000 by default), or 1.000.000 with
-	`sets.edit_any`. Null when you can't change its capacity. Signed in.
+	`sets.edit_any`. Null when you can't change its capacity: always for the owner of a personal
+	set, whose slots come from their roles (3, or 10 for a subscriber; ADR 0038). Signed in.
 	"""
 	setCapacityRange(id: String!): SetCapacityRange
 	"""
@@ -3779,7 +3793,8 @@ type SetCapacityRange {
 	max: Int!
 	"""
 	The most without a staff permission: the owner's `set_capacity_max` role limit (1.000 by
-	default) for a channel set, 5 for a personal set, or the set's capacity if it is higher.
+	default) for a channel set, or the set's capacity if it is higher. A personal set's owner
+	can't change it: there `setCapacityRange` is null without `sets.edit_any`.
 	"""
 	ownerMax: Int!
 	"""
@@ -4202,11 +4217,17 @@ input UpdateSetEmoteInput {
 input UpdateSetInput {
 	name: String
 	"""
-	1 to the owner's `set_capacity_max` role limit (1.000 by default; 5 for a personal set),
-	never below the emotes the set holds; up to 1.000.000 with `sets.edit_any`.
-	`setCapacityRange` says what you may pick.
+	1 to the owner's `set_capacity_max` role limit (1.000 by default), never below the emotes
+	the set holds; up to 1.000.000 with `sets.edit_any`. On a personal set this is the staff
+	override and needs `sets.edit_any` (`forbidden` otherwise); audited. `setCapacityRange` says
+	what you may pick.
 	"""
 	capacity: Int
+	"""
+	Personal sets, `sets.edit_any`: drop the override, so the owner's roles decide the slots
+	again.
+	"""
+	resetCapacity: Boolean
 	"""
 	Every set is public: changing it needs `sets.edit_any` (staff hiding a set). Personal sets
 	can't be `PRIVATE`; the global set is always listed.

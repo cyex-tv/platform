@@ -54,6 +54,8 @@ export const LIMIT_DEFAULTS = [
   ['emote_transfers', 'ACCOUNT', 60, 3600], ['prefs', 'ACCOUNT', 120, 3600], ['checkout', 'ACCOUNT', 30, 3600], ['redeem', 'ACCOUNT', 30, 3600], ['data_export', 'ACCOUNT', 5, 3600],
   // The most slots an account may give one of its channel sets (a cap, not a rate; ADR 0017 amendment 2026/11/22).
   ['set_capacity_max', 'ACCOUNT', 1000, null],
+  // The slots of an account's personal set: 3, or what a role gives (a subscriber role: 10; ADR 0038).
+  ['personal_set_slots', 'ACCOUNT', 3, null],
   // The files an account uploads (crates/media config): the configured numbers and the most a role may set
   // (badges and paints may be raised, up to the ceiling; emote rules are fixed and not listed).
   ['badge_max_bytes', 'MEDIA', 8 * MB, null, 16 * MB], ['badge_max_side', 'MEDIA', 2048, null, 4096], ['badge_max_frames', 'MEDIA', 120, null, 240],

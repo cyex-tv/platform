@@ -2366,6 +2366,16 @@
           "capacity": {
             "type": "integer",
             "format": "int32",
+            "description": "The slots the set has. A personal set's come from its owner's roles (3, or 10 for a\nsubscriber) unless staff set `capacityOverride` (ADR 0038). A personal set may hold more\nthan this after its owner lost a role: it keeps its emotes and takes no new one until it\nis under the limit.",
+            "minimum": 0
+          },
+          "capacity_override": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Staff set this personal set's capacity by hand (`updateSet`). Null: the owner's roles decide.",
             "minimum": 0
           },
           "created_at": {

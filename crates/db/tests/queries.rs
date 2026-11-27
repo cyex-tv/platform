@@ -927,14 +927,104 @@ async fn set_capacity_is_enforced() {
         Err(DbError::SetFull)
     ));
     assert!(matches!(
-        sets::set_capacity(&mut c, personal.id, 4).await,
+        sets::set_capacity(&mut c, personal.id, 2).await,
         Err(DbError::CapacityTooLow)
     ));
-    sets::set_capacity(&mut c, personal.id, 6).await.unwrap();
+    // On a personal set this is the staff override: it counts, and `capacity` reads it back.
+    let raised = sets::set_capacity(&mut c, personal.id, 6).await.unwrap();
+    assert_eq!((raised.capacity, raised.capacity_override), (6, Some(6)));
     sets::add_member(&mut c, personal.id, member(extra))
         .await
         .unwrap();
-    assert_eq!(sets::count(&mut c, personal.id).await.unwrap(), 6);
+    assert_eq!(sets::count(&mut c, personal.id).await.unwrap(), 4);
+    let reset = sets::set_capacity_or_reset(&mut c, personal.id, None)
+        .await
+        .unwrap();
+    assert_eq!((reset.capacity, reset.capacity_override), (3, None));
+
+    drop(c);
+    db.close().await;
+}
+
+async fn give_role(conn: &mut PgConnection, owner: Uuid, name: &str, limits: serde_json::Value) {
+    let role = roles::create(
+        conn,
+        &roles::NewRole {
+            name,
+            description: None,
+            position: 5,
+            permissions: &[],
+            created_by: None,
+        },
+    )
+    .await
+    .unwrap();
+    roles::set_limits(conn, role.id, &limits).await.unwrap();
+    roles::assign(conn, owner, role.id, None).await.unwrap();
+}
+
+/// A personal set's capacity is read from the override, the owner's roles, then the default of 3
+/// (ADR 0038), and `ensure_personal` makes the set once.
+#[tokio::test]
+async fn personal_set_capacity_comes_from_override_roles_then_default() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+
+    let set = sets::ensure_personal(&mut c, owner).await.unwrap();
+    assert_eq!(set.kind, SetKind::Personal);
+    assert_eq!((set.capacity, set.capacity_override), (3, None));
+    assert_eq!(
+        sets::ensure_personal(&mut c, owner).await.unwrap().id,
+        set.id
+    );
+
+    // The most generous `personal_set_slots` among the roles; junk values count for nothing.
+    give_role(
+        &mut c,
+        owner,
+        "junk",
+        json!({ "personal_set_slots": "ten", "prefs": 5 }),
+    )
+    .await;
+    assert_eq!(
+        sets::personal_for(&mut c, owner)
+            .await
+            .unwrap()
+            .unwrap()
+            .capacity,
+        3
+    );
+    give_role(
+        &mut c,
+        owner,
+        "subscriber",
+        json!({ "personal_set_slots": 10 }),
+    )
+    .await;
+    give_role(&mut c, owner, "smaller", json!({ "personal_set_slots": 4 })).await;
+    let found = sets::personal_for(&mut c, owner).await.unwrap().unwrap();
+    assert_eq!(found.capacity, 10);
+    assert_eq!(
+        sets::list_for_owner(&mut c, owner).await.unwrap()[0].capacity,
+        10
+    );
+
+    // An override beats the roles; taking it away gives the roles back.
+    let set = sets::set_capacity(&mut c, set.id, 6).await.unwrap();
+    assert_eq!((set.capacity, set.capacity_override), (6, Some(6)));
+    let set = sets::set_capacity_or_reset(&mut c, set.id, None)
+        .await
+        .unwrap();
+    assert_eq!((set.capacity, set.capacity_override), (10, None));
+    // Channel sets have no override to reset.
+    let channel = sets::create(&mut c, owner, "main", SetKind::Channel)
+        .await
+        .unwrap();
+    assert!(matches!(
+        sets::set_capacity_or_reset(&mut c, channel.id, None).await,
+        Err(DbError::InvalidSetKind)
+    ));
 
     drop(c);
     db.close().await;
