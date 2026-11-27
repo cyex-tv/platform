@@ -384,6 +384,66 @@ short one above.
 ## 2026/11/26: Panchang is fetched at build time
 The landing page's headline font, Panchang (Indian Type Foundry, ITF Free Font License), is not in this repository: section 02 of its licence forbids distribution through public repositories. The website image build runs `npm run fonts` (`apps/web/scripts/fetch-fonts.mjs`), which downloads Fontshare's official zip and checks the woff2's sha256, so every deploy serves its own copy from cyex.tv (section 01). The build needs network access to api.fontshare.com. Dev, tests and the CI `web` job run without it and show the Arial fallback; run `npm run fonts` locally to see the real font. If Fontshare changes the file the build fails with a message: check it, then update the pin in the script.
 
+# Owner steps 2026/11/27: on-the-fly resizing at the CDN (ADR 0037)
+Optional. Until this is done, `?w=` and `?format=` on a picture URL are ignored (the file comes
+back at its own size). The Worker's code is in the infra repo, `cloudflare/cdn-resize/`; it only
+touches `cdn.cyex.tv` in the `cyex.tv` zone. Nothing here touches cyex.app.
+
+## 1. Turn on transformations for the zone
+Cloudflare dashboard (account level) → **Images** → **Transformations** → the row of the
+**cyex.tv** zone → **Enable for zone**. Then open the zone's transformation settings and, under
+**Sources**, choose **Specified origins** and add `cdn.cyex.tv` only (so no other host can be
+resized through the zone). Don't turn on "Resize from any
+origin". The URL format (`/cdn-cgi/image/...`) stays available to the zone, but only for
+`cdn.cyex.tv` sources; the Worker is what clients use.
+
+Billing: Images transformations are billed per unique transformation a month (check the
+current free allowance on the Images page). The Worker allows 28 widths × 2 formats per file, and only those
+actually asked for are made.
+
+## 2. Deploy the Worker
+From a checkout of cyex-tv/infra (Node 20 or later):
+```bash
+cd cloudflare/cdn-resize
+npm test                                  # 14 tests, no packages
+npx wrangler@4 login                      # opens the browser; your Cloudflare account
+npx wrangler@4 deploy                     # name cyex-tv-cdn-resize, route cdn.cyex.tv/*
+```
+Or by hand: **Workers & Pages** → **Create** → **Create Worker** → name `cyex-tv-cdn-resize` →
+Deploy → **Edit code**: paste `src/plan.js` and `src/index.js` as two files of the same names
+(module syntax) → Deploy. Then **Settings** → **Variables and Secrets** → add the plain text
+variable `CDN_HOST` = `cdn.cyex.tv` (no secrets are needed).
+
+## 3. The route
+If you deployed with wrangler, the route is already there; check it. Otherwise: the
+**cyex.tv** zone → **Workers Routes** → **Add route**: route `cdn.cyex.tv/*`, Worker
+`cyex-tv-cdn-resize`. Set **Request limit failure mode** to **Fail open (proceed)**, so if the
+Worker's free request quota runs out, files are still served (without resizing). Don't add a
+route for any other host.
+
+Requests without `w` or `format` pass straight through, so the existing cache rule for
+`cdn.cyex.tv` and the worker's takedown purge keep working as before.
+
+## 4. Check
+```bash
+H=<an emote hash>
+curl -sI "https://cdn.cyex.tv/emotes/$H/4x.webp"                         # 200, as before
+curl -sI "https://cdn.cyex.tv/emotes/$H/4x.webp?w=48"                    # 200, image/webp,
+                                                                       # cache-control: public, max-age=31536000, immutable
+curl -s -o /tmp/a.bin -w '%{content_type}\n' -H 'Accept: image/avif' \
+     "https://cdn.cyex.tv/emotes/$H/4x.webp?w=48&format=auto"           # image/avif
+curl -s -o /dev/null -w '%{http_code}\n' "https://cdn.cyex.tv/emotes/$H/4x.webp?w=49"        # 400
+curl -s -o /dev/null -w '%{http_code}\n' "https://cdn.cyex.tv/originals/$H?w=48"            # 400
+curl -s -o /dev/null -w '%{http_code}\n' "https://cdn.cyex.tv/emotes/$H/4x.webp?w=48&x=1"   # 400
+```
+A second `?w=48` request comes from the Worker's edge cache (no new transformation is counted
+on the Images page). Take down a test emote: its `?w=` URLs
+answer 404 as soon as the original does (the Worker checks the original before serving a cached
+variant).
+
+To turn it off: remove the route (or the Worker). URLs with `?w=` then get the file at its own
+size again.
+
 # Owner steps 2026/11/27: direct uploads of badge and paint pictures (ADR 0036)
 Optional. Until this is done the website sends badge and paint pictures as a form, as now. Once
 it is, large originals (up to the 16 MB a role may allow) go from the browser straight to
