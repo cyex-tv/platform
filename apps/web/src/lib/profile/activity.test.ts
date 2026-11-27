@@ -148,7 +148,7 @@ describe('the owner-only Notifications, Account and Editors tabs', () => {
   });
   it('adds the tabs after the public ones for the owner, and nothing for anyone else', () => {
     const own = profileTabs('a1', mine, 'uploads', '/users/a1', true);
-    expect(own.map((t) => t.label)).toEqual(['Uploaded emotes', 'Emote sets', 'Cosmetics', 'Activity', 'Notifications', 'Account', 'Editors']);
+    expect(own.map((t) => t.label)).toEqual(['Overview', 'Uploaded emotes', 'Emote sets', 'Cosmetics', 'Activity', 'Notifications', 'Account', 'Editors']);
     expect(own.find((t) => t.label === 'Notifications')?.href).toBe('/users/a1?s=notifications');
     expect(own.find((t) => t.label === 'Account')?.href).toBe('/users/a1?s=account');
     expect(own.find((t) => t.label === 'Editors')?.href).toBe('/users/a1?s=editors');
@@ -165,7 +165,11 @@ describe('the owner-only Notifications, Account and Editors tabs', () => {
     expect(cur('notifications')).toEqual(['Notifications']);
     expect(cur('overview')).toEqual(['Overview']);
     expect(cur('sets')).toEqual(['Emote sets']);
-    // Overview sits between the public tabs and the owner's.
-    expect(profileTabs('a1', mine, 'overview', '/users/a1', true).map((t) => t.label)).toEqual(['Uploaded emotes', 'Emote sets', 'Cosmetics', 'Activity', 'Overview', 'Notifications', 'Account', 'Editors']);
+    // Overview leads the owner's row on every section, not only when opened from the account menu.
+    for (const k of ['uploads', 'sets', 'cosmetics', 'activity', 'overview', 'notifications'] as const)
+      expect(profileTabs('a1', mine, k, '/users/a1', true)[0]).toMatchObject({ label: 'Overview', href: '/users/a1?s=overview', icon: 'gauge' });
+    expect(profileTabs('a1', mine, 'overview', '/users/a1', true).map((t) => t.label)).toEqual(['Overview', 'Uploaded emotes', 'Emote sets', 'Cosmetics', 'Activity', 'Notifications', 'Account', 'Editors']);
+    // The off-row sections still show while you are on them, after the public tabs.
+    expect(profileTabs('a1', mine, 'favourites', '/users/a1', true).map((t) => t.label)).toEqual(['Overview', 'Uploaded emotes', 'Emote sets', 'Cosmetics', 'Activity', 'Favourites', 'Notifications', 'Account', 'Editors']);
   });
 });

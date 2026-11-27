@@ -407,8 +407,8 @@
   /* The label shares the toolbar's text size and one vertical centre with the field and the
      controls beside it (owner, 2026/11/22: "By" sat higher than the field): same size as the
      field's text, a line box no taller than the text, centred in the field's height. */
-  .lbl { flex: none; display: inline-flex; align-items: center; height: 34px; font-size: var(--t-small); line-height: 1; color: var(--muted); }
-  .field { display: flex; align-items: center; gap: 6px; width: var(--uf-w); max-width: 100%; height: 34px; padding: 0 8px 0 10px;
+  .lbl { flex: none; display: inline-flex; align-items: center; height: var(--ctl-h, 34px); font-size: var(--t-small); line-height: 1; color: var(--muted); }
+  .field { display: flex; align-items: center; gap: 6px; width: var(--uf-w); max-width: 100%; height: var(--ctl-h, 34px); padding: 0 8px 0 10px;
     border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--surface); color: var(--muted); cursor: text;
     transition: border-color var(--dur-color), color var(--dur-color); }
   .field.on, .field:focus-within { border-color: var(--border-strong); color: var(--text); outline: 2px solid var(--focus-ring); outline-offset: -1px; }
@@ -421,7 +421,7 @@
   @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2s; } }
 
   /* The picked person: a 3px chip with the painted name; the name reopens the search, × removes it. */
-  .chip { display: inline-flex; align-items: center; max-width: var(--uf-w); height: 34px; border: 1px solid var(--border-strong);
+  .chip { display: inline-flex; align-items: center; max-width: var(--uf-w); height: var(--ctl-h, 34px); border: 1px solid var(--border-strong);
     border-radius: var(--radius-btn); background: var(--surface); }
   .pick { flex: 1 1 auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 100%; padding: 0 4px 0 6px; border: 0; background: none;
     color: var(--text); font: inherit; font-size: var(--t-small); font-weight: 600; cursor: pointer; }

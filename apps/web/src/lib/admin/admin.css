@@ -46,9 +46,10 @@
 
 /* ---- Lists ---- */
 .adm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 48px; margin-bottom: 0; padding: 6px 0; }
-.adm-shell .adm-toolbar .ui-input, .adm-shell .adm-toolbar select.ui-input { height: 34px; min-height: 34px; font-size: var(--t-small); }
+.adm-shell .adm-toolbar .ui-input, .adm-shell .adm-toolbar select.ui-input { height: var(--ctl-h); min-height: var(--ctl-h); font-size: var(--t-small); }
+.adm-shell .adm-toolbar > .ui-btn, .adm-shell .adm-toolbar > form > .ui-btn { height: var(--ctl-h); min-height: var(--ctl-h); }
 .adm-shell .adm-toolbar .adm-find { flex: 1 1 200px; max-width: 420px; }
-@media (pointer: coarse) { .adm-shell .adm-toolbar .ui-input, .adm-shell .adm-toolbar select.ui-input { height: 44px; font-size: 16px; } }
+@media (pointer: coarse) { .adm-shell .adm-toolbar .ui-input, .adm-shell .adm-toolbar select.ui-input { font-size: 16px; } }
 .adm-toolbar .grow { flex: 1 1 220px; min-width: 0; }
 .adm-find { position: relative; display: flex; align-items: center; min-width: 0; }
 .adm-find > svg { position: absolute; left: 11px; color: var(--dim); pointer-events: none; }
