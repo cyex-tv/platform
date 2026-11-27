@@ -27,6 +27,7 @@
   import { groupsFor } from '$lib/admin/permissions';
   import { summarize } from '$lib/admin/role-effects';
   import RoleLimits from '$lib/admin/RoleLimits.svelte';
+  import { dot, hint as colorHint, normalize, PRESETS } from '$lib/admin/role-color';
   import { amount, changed, info, overrides, toInput, toValues, valueProblem } from '$lib/admin/role-limits';
 
   const L = loader(async ({ fetch }) => {
@@ -48,6 +49,8 @@
   let allows = $state<string[]>([]);
   let denies = $state<string[]>([]);
   let invisible = $state(false);
+  // The colour as typed ('' = none); `colorValue` is it as #rrggbb, or null when empty or not a colour.
+  let colorText = $state('');
   let shown = $state(false);
   let saving = $state(false);
   let tried = $state(false);
@@ -63,6 +66,8 @@
   const nameError = $derived(tried && !name.trim() ? 'Give it a name.' : null);
   const posOk = $derived(userRole || (Number.isInteger(position) && position >= 1 && position <= MAX_POS));
   const posError = $derived(tried && !posOk ? `Position 1 to ${count(MAX_POS)}.` : null);
+  const colorValue = $derived(normalize(colorText));
+  const colorError = $derived(colorText.trim() && !colorValue ? 'Use a hex colour like #3b82f6.' : null);
   const limitsOk = $derived((limits ?? []).every((l) => !valueProblem(limitValues[l.key], l)));
 
   const mine = $derived(new Set(session.me?.permissions ?? []));
@@ -91,6 +96,7 @@
     denies = [...(role?.denies ?? [])];
     invisible = role?.invisible ?? false;
     shown = role?.public ?? false;
+    colorText = role?.color ?? '';
     limits = null;
     limitsFailed = false;
     limitValues = {};
@@ -116,18 +122,18 @@
     e.preventDefault();
     if (saving) return;
     tried = true;
-    if (!name.trim() || !posOk || !limitsOk) return;
+    if (!name.trim() || !posOk || !limitsOk || colorError) return;
     saving = true;
     try {
       let id: string;
       if (editing) {
         id = (await gql(UPDATE_ROLE, {
           id: editing.id,
-          input: { name: name.trim(), description: description.trim(), position: userRole ? null : position, permissions: allows, denies, public: invisible ? false : shown, invisible },
+          input: { name: name.trim(), description: description.trim(), position: userRole ? null : position, permissions: allows, denies, public: invisible ? false : shown, invisible, color: colorValue ?? '' },
         })).updateRole.id;
       } else {
         id = (await gql(CREATE_ROLE, {
-          input: { name: name.trim(), description: description.trim() || null, position, permissions: allows, denies, public: invisible ? false : shown, invisible },
+          input: { name: name.trim(), description: description.trim() || null, position, permissions: allows, denies, public: invisible ? false : shown, invisible, color: colorValue },
         })).createRole.id;
       }
       if (limits && changed(limitsBefore, limitValues, limits)) await gql(SET_ROLE_LIMITS, { id, limits: toInput(limitValues, limits) });
@@ -250,7 +256,7 @@
               <button class="rrow" type="button" data-item={r.id} aria-current={r.id === pickedId ? 'true' : undefined}
                 tabindex={(cur && visible.some((x) => x.id === pickedId) ? r.id === pickedId : i === 0) ? 0 : -1} onclick={() => pick(r.id)}>
                 <span class="pos adm-num" title="Position">{count(r.position)}</span>
-                <span class="nm"><Icon name="check" size={14} /><bdi><Name value={r.name} /></bdi></span>
+                <span class="nm"><Icon name="check" size={14} /><bdi><Name value={r.name} /></bdi>{#if dot(r.color)}<i class="cdot" style:background={dot(r.color)} title="Role colour {r.color}"></i>{/if}</span>
                 <span class="adm-flags">
                   {#if r.builtIn}<span>{BUILT_IN[r.builtIn]}</span>{/if}
                   {#if held.has(r.id) || r.builtIn === 'ROOT'}<span class="on">Yours</span>{/if}
@@ -280,7 +286,7 @@
       </div>
       <div class="adm-ip-body">
         <section class="adm-sec">
-          <h2 class="adm-name"><bdi><Name value={r.name} /></bdi></h2>
+          <h2 class="adm-name"><bdi><Name value={r.name} /></bdi>{#if dot(r.color)}<i class="cdot" style:background={dot(r.color)} title="Role colour {r.color}"></i>{/if}</h2>
           <ul class="adm-flags">
             {#if r.builtIn}<li>{BUILT_IN[r.builtIn]}</li>{/if}
             {#if held.has(r.id) || r.builtIn === 'ROOT'}<li class="on">Yours</li>{/if}
@@ -290,6 +296,7 @@
           {#if r.description}<p class="desc"><Name value={r.description} /></p>{/if}
           <dl class="adm-kv">
             <dt>Position</dt><dd>{count(r.position)}</dd>
+            {#if r.color}<dt>Colour</dt><dd class="ui-mono">{r.color}</dd>{/if}
           </dl>
         </section>
         <section class="adm-sec">
@@ -392,6 +399,21 @@
       <span class="ui-label">Description</span>
       <input class="ui-input" bind:value={description} maxlength="200" />
     </label>
+    <div class="ui-field" role="group" aria-labelledby="role-color-label">
+      <span class="ui-label" id="role-color-label">Colour</span>
+      <div class="cpick">
+        <ul class="swatches" aria-label="Preset colours">
+          {#each PRESETS as c (c.hex)}
+            <li><button class="swatch" type="button" style:background={c.hex} aria-label={c.name} aria-pressed={colorValue === c.hex} title={c.name} onclick={() => (colorText = c.hex)}></button></li>
+          {/each}
+        </ul>
+        <input class="ui-input ui-mono hex" bind:value={colorText} placeholder="#3b82f6" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Hex colour"
+          aria-invalid={colorError ? 'true' : undefined} aria-describedby="role-color-hint" />
+        {#if colorText}<button class="ui-btn secondary small" type="button" onclick={() => (colorText = '')}>Clear</button>{/if}
+        <span class="chip" aria-label="Preview"><i class="cdot" style:background={colorValue ?? 'transparent'} class:none={!colorValue}></i><bdi>{name.trim() || 'Role'}</bdi></span>
+      </div>
+      <span class={colorError ? 'ui-error' : 'ui-hint'} id="role-color-hint">{colorError ?? (colorValue ? colorHint(colorValue) : 'Optional. The ring round the profile picture uses the colour of the person’s highest role that has one.')}</span>
+    </div>
     {#if !userRole}
       <label class="ui-check" class:dim={invisible}>
         <input type="checkbox" bind:checked={shown} disabled={invisible} />
@@ -469,6 +491,17 @@
   .grp + .grp { padding-top: 14px; border-top: 1px solid var(--border); }
   .two { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; }
   .num { text-align: right; }
+  .cdot { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; margin-left: 6px; }
+  .cdot.none { border: 1px dashed var(--border-strong); margin-left: 0; }
+  .cpick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .swatches { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+  .swatch { width: 24px; height: 24px; padding: 0; border: 2px solid var(--bg); border-radius: 50%; cursor: pointer; box-shadow: 0 0 0 1px var(--border-strong); }
+  .swatch[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--text); }
+  .swatch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .hex { width: 110px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 7px; border-radius: var(--radius); background: var(--neutral-chip); color: var(--muted); font-size: 12px; font-weight: 600; }
+  .chip .cdot { margin-left: 0; }
+  @media (pointer: coarse) { .swatch { width: 32px; height: 32px; } }
   .inv { display: inline-flex; align-items: center; gap: 4px; }
   .inv :global(svg) { color: var(--dim); }
   .deny, .perms.deny dt { color: var(--red); }
