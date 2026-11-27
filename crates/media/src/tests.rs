@@ -319,7 +319,7 @@ mod encoding {
     use image::codecs::webp::WebPDecoder;
 
     use super::*;
-    use crate::encode::{Kind, size_for, transcode};
+    use crate::encode::{Kind, Variant, size_for, transcode};
 
     /// An animated WebP, made with the same encoder the worker uses.
     pub(crate) fn animated_webp(w: u32, h: u32, frames: u32) -> Vec<u8> {
@@ -344,7 +344,8 @@ mod encoding {
     }
 
     fn is_avif(bytes: &[u8]) -> bool {
-        bytes.len() > 12 && &bytes[4..8] == b"ftyp" && &bytes[8..12] == b"avif"
+        // Still AVIF has the `avif` major brand, animated `avis`.
+        bytes.len() > 12 && &bytes[4..8] == b"ftyp" && matches!(&bytes[8..12], b"avif" | b"avis")
     }
 
     #[test]
@@ -492,9 +493,14 @@ mod encoding {
             let (animated, _, dims) = webp_frames(&out.webp[4].bytes);
             assert!(!animated, "{label}");
             assert_eq!(dims, (43, 32), "{label}");
-            let avif: Vec<&str> = out.avif.iter().map(|v| v.name.as_str()).collect();
+            let stills: Vec<&str> = out
+                .avif
+                .iter()
+                .filter(|v| v.is_static)
+                .map(|v| v.name.as_str())
+                .collect();
             assert_eq!(
-                avif,
+                stills,
                 [
                     "1x_static.avif",
                     "2x_static.avif",
@@ -503,10 +509,30 @@ mod encoding {
                 ],
                 "{label}"
             );
-            assert!(
-                out.avif.iter().all(|v| v.is_static && is_avif(&v.bytes)),
-                "{label}"
-            );
+            assert!(out.avif.iter().all(|v| is_avif(&v.bytes)), "{label}");
+            // Animated AVIF (ADR 0012, amended) sits beside the animated WebP of its size, and
+            // only where it is no larger and at least as close to the source.
+            let moving: Vec<&Variant> = out.avif.iter().filter(|v| !v.is_static).collect();
+            // The smooth APNG and WebP gradients beat their WebP at 2x to 4x; the dithered GIF
+            // doesn't, so it keeps WebP only.
+            if label != "gif" {
+                let names: Vec<&str> = moving.iter().map(|v| v.name.as_str()).collect();
+                assert_eq!(names, ["2x.avif", "3x.avif", "4x.avif"], "{label}");
+            }
+            for v in moving {
+                assert_eq!(&v.bytes[8..12], b"avis", "{label} {}", v.name);
+                let stem = v.name.trim_end_matches(".avif");
+                let webp = out
+                    .webp
+                    .iter()
+                    .find(|w| w.name == format!("{stem}.webp"))
+                    .unwrap();
+                assert!(v.bytes.len() <= webp.bytes.len(), "{label} {}", v.name);
+                assert_eq!(
+                    (v.width, v.height, v.scale),
+                    (webp.width, webp.height, webp.scale)
+                );
+            }
         }
     }
 
@@ -612,8 +638,18 @@ mod encoding {
                 "original_static.webp"
             ]
         );
-        assert!(moving.avif.iter().all(|v| v.is_static));
-        assert_eq!(moving.avif.len(), 7);
+        // Still AVIF at every size; animated AVIF only where it beats the animated WebP
+        // (ADR 0012, amended), never for the original (kept lossless).
+        assert_eq!(moving.avif.iter().filter(|v| v.is_static).count(), 7);
+        for v in moving.avif.iter().filter(|v| !v.is_static) {
+            assert_ne!(v.name, "original.avif");
+            let webp = moving
+                .webp
+                .iter()
+                .find(|w| w.name == v.name.replace(".avif", ".webp"))
+                .unwrap();
+            assert!(v.bytes.len() <= webp.bytes.len(), "{}", v.name);
+        }
         let (animated, frames, dims) = webp_frames(&moving.webp[0].bytes);
         assert!(animated);
         assert_eq!((frames, dims), (3, (18, 18)));
@@ -1099,6 +1135,51 @@ fn paint_limits_follow_the_badge_animation_rules() {
         probe(&padded_png(96, 96, PAINT_MAX_BYTES + 1), &l),
         Err(MediaError::TooLarge(_))
     ));
+}
+
+#[test]
+fn animated_avif_keeps_to_its_work_budget_dropping_the_largest_size_first() {
+    // 256×64 (4:1): 1x is 128×32, 2x to 4x stay 256×64 (never scaled up): 53,248 px of AVIF
+    // work per frame. A budget one short of 10 frames' worth stops 4x at the tenth frame (its
+    // WebP stands); the rest fit.
+    let per_frame = 128 * 32 + 3 * 256 * 64;
+    let out = crate::encode::transcode_with_avif_budget(
+        &apng(256, 64, 10),
+        &Limits::emote(),
+        &crate::encode::Profile::EMOTE,
+        per_frame * 10 - 1,
+    )
+    .unwrap();
+    assert!(out.animated);
+    let names: Vec<&str> = out.avif.iter().map(|v| v.name.as_str()).collect();
+    assert!(!names.contains(&"4x.avif"), "{names:?}");
+    assert!(names.contains(&"4x_static.avif"));
+    assert!(out.webp.iter().any(|v| v.name == "4x.webp"));
+    // The built-in budget: a 4:1 emote gets animated AVIF at every size up to 65 frames.
+    assert_eq!(crate::encode::ANIMATED_AVIF_MAX_PIXELS / 122_880, 65);
+}
+
+#[test]
+fn animated_avif_is_listed_only_when_smaller_and_as_close_to_the_source() {
+    use crate::avis::Finished;
+    let f = |bytes: usize, psnr: f64, webp_bytes: usize, webp_psnr: f64| Finished {
+        bytes: vec![0; bytes],
+        psnr,
+        webp_psnr: Some(webp_psnr),
+        webp_bytes: Some(webp_bytes),
+    };
+    assert!(f(100, 45.0, 100, 45.0).beats_webp());
+    assert!(f(90, 46.0, 100, 45.0).beats_webp());
+    assert!(!f(101, 46.0, 100, 45.0).beats_webp(), "larger");
+    assert!(!f(50, 44.9, 100, 45.0).beats_webp(), "smaller but worse");
+    let unmeasured = Finished {
+        webp_psnr: None,
+        ..f(50, 45.0, 100, 45.0)
+    };
+    assert!(
+        !unmeasured.beats_webp(),
+        "a WebP that didn't decode can't be compared"
+    );
 }
 
 #[test]

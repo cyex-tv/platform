@@ -854,6 +854,8 @@ fn class<'a>(limits: &'a Limits, method: &Method, path: &str) -> Option<&'a Limi
         (&Method::POST | &Method::GET | &Method::HEAD, "/v1/gql") => Some(&limits.gql),
         (_, "/v1/gql/ws") => Some(&limits.socket),
         (&Method::POST, "/v1/emotes" | "/v1/cosmetics/images") => Some(&limits.upload),
+        // Direct uploads (ADR 0036): the presign and the finalize (which decodes the picture).
+        (&Method::POST, p) if p.starts_with("/v1/cosmetics/images/uploads") => Some(&limits.upload),
         (&Method::POST, "/v1/personal-sets/lookup" | "/v1/sets/lookup" | "/v1/channels/lookup") => {
             Some(&limits.reads)
         }
@@ -934,6 +936,12 @@ mod tests {
             class(&l, &Method::POST, "/v1/cosmetics/images"),
             &l.upload
         ));
+        for path in [
+            "/v1/cosmetics/images/uploads",
+            "/v1/cosmetics/images/uploads/01JD8XIMG00000000000000101/finalize",
+        ] {
+            assert!(same(class(&l, &Method::POST, path), &l.upload), "{path}");
+        }
         assert!(same(
             class(&l, &Method::GET, "/v1/cosmetics/users"),
             &l.reads

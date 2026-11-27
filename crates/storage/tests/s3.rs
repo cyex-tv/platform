@@ -12,13 +12,15 @@ fn config(bucket: &str, secret: Option<&str>) -> Option<S3Config> {
     let id = std::env::var("CYEX_TV_TEST_S3_ACCESS_KEY_ID").ok()?;
     let real = std::env::var("CYEX_TV_TEST_S3_SECRET_ACCESS_KEY").ok()?;
     Some(S3Config {
-        endpoint: Url::parse(&endpoint).unwrap(),
         bucket: bucket.to_owned(),
+        endpoint: Url::parse(&endpoint).unwrap(),
         credentials: Credentials {
             access_key_id: id,
             secret_access_key: secret.map_or(real, str::to_owned),
             region: "us-east-1".to_owned(),
         },
+        // The same server: CI's S3 is on this machine.
+        upload_endpoint: Some(Url::parse(&endpoint).unwrap()),
     })
 }
 
@@ -67,4 +69,48 @@ async fn a_wrong_secret_is_refused() {
     let store = Store::s3(cfg).unwrap();
     let err = store.get("emotes/x/1x.webp").await.unwrap_err();
     assert!(err.to_string().contains("403"), "{err}");
+}
+
+/// A direct upload (ADR 0036): the presigned PUT stores exactly the declared bytes and type, and
+/// the server refuses a body of another length or another type under the same signature.
+#[tokio::test]
+async fn a_presigned_put_takes_only_what_was_signed() {
+    let Some(cfg) = config("cyex-tv-test", None) else {
+        eprintln!("CYEX_TV_TEST_S3_* not set; skipping");
+        return;
+    };
+    S3::new(cfg.clone()).unwrap().ensure_bucket().await.unwrap();
+    let store = Store::s3(cfg).unwrap();
+    let key = cyex_tv_storage::upload_key("01presigntest");
+    let body = b"\x89PNG\r\n\x1a\nnot really a png".to_vec();
+    let put = store
+        .presign_put(
+            &key,
+            "image/png",
+            body.len() as u64,
+            std::time::Duration::from_secs(300),
+        )
+        .expect("an upload endpoint is set");
+    let http = reqwest::Client::new();
+    let send = |body: Vec<u8>, content_type: &str| {
+        http.put(&put.url)
+            .header("content-type", content_type)
+            .body(body)
+            .send()
+    };
+    // Another length, then another type: refused, nothing stored.
+    let longer = send([body.clone(), b"x".to_vec()].concat(), "image/png")
+        .await
+        .unwrap();
+    assert!(!longer.status().is_success(), "{}", longer.status());
+    let other_type = send(body.clone(), "text/html").await.unwrap();
+    assert!(!other_type.status().is_success(), "{}", other_type.status());
+    assert!(!store.exists(&key).await.unwrap());
+
+    let ok = send(body.clone(), "image/png").await.unwrap();
+    assert!(ok.status().is_success(), "{}", ok.status());
+    let got = store.get(&key).await.unwrap().unwrap();
+    assert_eq!(got.bytes, Bytes::from(body));
+    assert_eq!(got.content_type.as_deref(), Some("image/png"));
+    store.delete(&key).await.unwrap();
 }

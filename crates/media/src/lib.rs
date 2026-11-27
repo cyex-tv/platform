@@ -472,6 +472,7 @@ pub fn distance(a: u64, b: u64) -> u32 {
     (a ^ b).count_ones()
 }
 
+pub mod avis;
 pub mod config;
 pub mod encode;
 

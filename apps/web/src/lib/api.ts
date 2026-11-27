@@ -318,8 +318,69 @@ export async function signOut(): Promise<void> {
  */
 export type CosmeticUpload = { id: string; kind: 'badge' | 'paint'; ready: boolean; created_at?: string };
 
-/** Uploads a badge or paint picture (`POST /v1/cosmetics/images`, staff). Poll `cosmeticImage(id)` until ready. */
+/** The types a direct upload may declare (ADR 0036); anything else goes through the form. */
+const DIRECT_TYPES = ['image/png', 'image/gif', 'image/webp', 'image/jpeg'];
+
+/**
+ * Uploads a badge or paint picture (staff). Poll `cosmeticImage(id)` until ready. Sends the bytes
+ * straight to storage when the API offers it (ADR 0036: a presigned `PUT`, then finalize), so a
+ * large original doesn't pass through the API; otherwise, or if that path can't be used, as a form
+ * to `POST /v1/cosmetics/images`. Both answer the same.
+ */
 export async function uploadCosmeticImage(file: File, kind: 'badge' | 'paint', signal?: AbortSignal): Promise<CosmeticUpload> {
+  const direct = await uploadDirect(file, kind, signal);
+  return direct ?? uploadPictureForm(file, kind, signal);
+}
+
+/**
+ * The direct upload, or `null` where it isn't available (an API without it, `501
+ * direct_upload_off`, a type it doesn't take, storage that can't be reached from the browser): the
+ * caller then sends the form. A refusal the form would get too (too large, a bad type, a picture
+ * that doesn't fit) is thrown as it is.
+ */
+async function uploadDirect(file: File, kind: 'badge' | 'paint', signal?: AbortSignal): Promise<CosmeticUpload | null> {
+  if (!DIRECT_TYPES.includes(file.type) || file.size < 1) return null;
+  const stopped = () => new ApiError('Stopped.', 'aborted');
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl()}/v1/cosmetics/images/uploads`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind, size: file.size, content_type: file.type }),
+      signal,
+    });
+  } catch {
+    if (signal?.aborted) throw stopped();
+    return null;
+  }
+  if ([404, 405, 501].includes(response.status)) return null;
+  if (response.status === 429) throw new ApiError('Too many uploads. Try again in a moment.', 'rate_limited');
+  if (!response.ok) throw await restError(response);
+  const up = (await response.json()) as { id: string; url: string; headers: Record<string, string> };
+  // The browser sets the length itself (and won't let a page set it); the type must be the signed one.
+  const headers = Object.fromEntries(Object.entries(up.headers ?? {}).filter(([k]) => k.toLowerCase() !== 'content-length'));
+  try {
+    const put = await fetch(up.url, { method: 'PUT', headers, body: file, signal });
+    if (!put.ok) return null;
+  } catch {
+    if (signal?.aborted) throw stopped();
+    // Storage unreachable from here (no CORS, a blocked host): the form still works.
+    return null;
+  }
+  try {
+    response = await fetch(`${apiUrl()}/v1/cosmetics/images/uploads/${encodeURIComponent(up.id)}/finalize`, { method: 'POST', credentials: 'include', signal });
+  } catch {
+    if (signal?.aborted) throw stopped();
+    throw new ApiError(unreachableMessage(), 'offline');
+  }
+  if (response.status === 429) throw new ApiError('Too many uploads. Try again in a moment.', 'rate_limited');
+  if (!response.ok) throw await restError(response);
+  return (await response.json()) as CosmeticUpload;
+}
+
+/** `POST /v1/cosmetics/images` with the picture as a form. */
+async function uploadPictureForm(file: File, kind: 'badge' | 'paint', signal?: AbortSignal): Promise<CosmeticUpload> {
   const form = new FormData();
   form.set('kind', kind);
   form.set('file', file);

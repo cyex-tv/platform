@@ -157,3 +157,74 @@ describe('gqlPublic (GET with a persisted-query hash, ADR 0035)', () => {
     await expect(gqlPublic(doc('query D { z }'), {}, spy)).rejects.toMatchObject({ code: 'forbidden' });
   });
 });
+
+describe('uploadCosmeticImage (direct upload first, ADR 0036)', () => {
+  type Call = { url: string; init?: RequestInit };
+  const answer = (status: number, body: unknown = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  const picture = () => new File([new Uint8Array([137, 80, 78, 71, 1, 2, 3])], 'badge.png', { type: 'image/png' });
+
+  async function run(responses: (Response | Error)[], file: File = picture()) {
+    const calls: Call[] = [];
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      const next = responses.shift();
+      if (!next) throw new Error('unexpected request');
+      if (next instanceof Error) throw next;
+      return next;
+    });
+    const { uploadCosmeticImage } = await import('./api');
+    try {
+      return { calls, result: await uploadCosmeticImage(file, 'badge'), error: null as unknown };
+    } catch (error) {
+      return { calls, result: null, error };
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  const presigned = { id: 'UP1', url: 'https://upload.example.test/cdn/uploads/UP1?X-Amz-Signature=abc', headers: { 'content-length': '7', 'content-type': 'image/png' } };
+
+  it('asks for a URL, PUTs the bytes there with the signed type, then finalizes', async () => {
+    const { calls, result } = await run([answer(201, presigned), new Response(null, { status: 200 }), answer(202, { id: 'IMG1', kind: 'badge', ready: false })]);
+    expect(result).toMatchObject({ id: 'IMG1' });
+    expect(calls.map((c) => [c.init?.method, c.url.replace(/^.*?\/\/[^/]+/, '')])).toEqual([
+      ['POST', '/v1/cosmetics/images/uploads'],
+      ['PUT', '/cdn/uploads/UP1?X-Amz-Signature=abc'],
+      ['POST', '/v1/cosmetics/images/uploads/UP1/finalize'],
+    ]);
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ kind: 'badge', size: 7, content_type: 'image/png' });
+    // The browser sets the length; the page sends only the type, and no cookie to storage.
+    expect(calls[1].init?.headers).toEqual({ 'content-type': 'image/png' });
+    expect(calls[1].init?.credentials).toBeUndefined();
+  });
+
+  it('falls back to the form where direct uploads are off or storage is out of reach', async () => {
+    for (const first of [answer(501, { error: 'direct_upload_off', message: 'x' }), answer(404), new TypeError('network')]) {
+      const { calls, result } = await run([first, answer(202, { id: 'IMG2', kind: 'badge', ready: false })]);
+      expect(result).toMatchObject({ id: 'IMG2' });
+      expect(calls[calls.length - 1].url).toMatch(/\/v1\/cosmetics\/images$/);
+      expect(calls[calls.length - 1].init?.body).toBeInstanceOf(FormData);
+    }
+    // The PUT is refused (no CORS on storage, say): the form takes it.
+    const { calls } = await run([answer(201, presigned), new TypeError('cors'), answer(202, { id: 'IMG3', kind: 'badge', ready: false })]);
+    expect(calls.map((c) => c.init?.method)).toEqual(['POST', 'PUT', 'POST']);
+    expect(calls[2].url).toMatch(/\/v1\/cosmetics\/images$/);
+  });
+
+  it('a type direct uploads do not take goes straight to the form', async () => {
+    const svg = new File(['<svg/>'], 'a.svg', { type: 'image/svg+xml' });
+    const { calls } = await run([answer(415, { error: 'unsupported_format', message: 'Use a PNG.' })], svg);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toMatch(/\/v1\/cosmetics\/images$/);
+  });
+
+  it('a refusal the form would get too is shown, not retried', async () => {
+    const { calls, error } = await run([answer(413, { error: 'too_large', message: 'The file is over 8 MB.', details: { limit: 8388608, current: 9000000 } })]);
+    expect(calls).toHaveLength(1);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe('too_large');
+    const finalize = await run([answer(201, presigned), new Response(null, { status: 200 }), answer(422, { error: 'bad_dimensions', message: 'Badge pictures are square.' })]);
+    expect((finalize.error as ApiError).code).toBe('bad_dimensions');
+    expect(finalize.calls).toHaveLength(3);
+  });
+});

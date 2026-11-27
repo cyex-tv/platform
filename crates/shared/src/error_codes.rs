@@ -616,6 +616,42 @@ pub const ERROR_CODES: &[ErrorCode] = &[
     ),
     e(
         "Cosmetics",
+        "direct_upload_off",
+        "Direct uploads aren't set up on this server.",
+        "Asking for a direct upload URL where storage has no public upload address (501). Send the picture to POST /v1/cosmetics/images instead.",
+    ),
+    e(
+        "Cosmetics",
+        "too_many_uploads",
+        "You have as many direct uploads open as allowed.",
+        "Asking for another direct upload URL while that many are neither finalized nor expired (409, with details).",
+    ),
+    e(
+        "Cosmetics",
+        "upload_missing",
+        "Nothing was uploaded to that direct upload yet.",
+        "Finalizing before the PUT to the upload URL finished (409). Upload, then finalize again.",
+    ),
+    e(
+        "Cosmetics",
+        "upload_expired",
+        "The direct upload has expired.",
+        "Finalizing an upload past its expiry (410). Ask for a new upload URL.",
+    ),
+    e(
+        "Cosmetics",
+        "size_mismatch",
+        "The uploaded file isn't the size that was declared.",
+        "Finalizing an upload whose stored object differs from the declared size (422). The upload is discarded.",
+    ),
+    e(
+        "Cosmetics",
+        "already_finalized",
+        "The direct upload was already finalized.",
+        "Finalizing the same upload twice (409). The first answer's picture stands.",
+    ),
+    e(
+        "Cosmetics",
         "bad_dimensions",
         "The picture's size does not fit.",
         "Badge or paint pictures outside the allowed size or aspect, and an emote wider than 4:1 (422).",
