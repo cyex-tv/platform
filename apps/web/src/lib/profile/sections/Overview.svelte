@@ -79,14 +79,14 @@
   <li><a {href}><span class="st-l">{label}</span><span class="st-n ui-mono">{#if value != null}{count(value)}{:else if failed}–{:else}<span class="st-sk ui-skeleton" aria-hidden="true"></span><span class="sr-only">Loading</span>{/if}</span></a></li>
 {/snippet}
 
-<ul class="stats" aria-label="In numbers">
+<div class="stats-box"><ul class="stats" aria-label="In numbers">
   {@render stat('Uploads', uploads.data?.total, sectionHref(accountId, 'uploads'), uploads.failed)}
   {@render stat('Channels', library.data?.channels.length, '/me/channels', library.failed)}
   {@render stat('Emote sets', library.data?.sets.length, sectionHref(accountId, 'sets'), library.failed)}
   {@render stat('Editors', editors.data?.length, sectionHref(accountId, 'editors'), editors.failed)}
   {@render stat('Unread', inbox.items ? inbox.count : null, notificationsHref(accountId), !!inbox.error)}
   {@render stat('Paints owned', owned.data?.paints, sectionHref(accountId, 'cosmetics'), owned.failed)}
-</ul>
+</ul></div>
 
 <div class="tiles">
     <Section title="Channels" count={library.data ? count(library.data.channels.length) : undefined} id="ov-ch">
@@ -183,17 +183,20 @@
 </div>
 
 <style>
-  /* The numbers: one sheet of cells sharing hairlines, as many per row as fit (two on a phone). */
-  .stats { list-style: none; margin: 0 0 24px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  /* The numbers: one sheet of cells sharing hairlines. Six cells, so the rows always come out
+     even: six in a row when they fit at 150px each, else three, else two (never five and one). */
+  .stats-box { container-type: inline-size; margin: 0 0 24px; }
+  .stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
     border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+  @container (min-width: 450px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @container (min-width: 900px) { .stats { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
   .stats li { min-width: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .stats a { display: grid; gap: 6px; padding: 12px 14px; color: var(--text); }
   @media (hover: hover) and (pointer: fine) { .stats a:hover { background: var(--surface-hover); } }
   .stats a:focus-visible { outline-offset: -2px; }
-  .st-l { font-size: var(--t-label, 12px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .st-l { font-size: var(--t-label, 12px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .st-n { font-size: 22px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; min-height: 22px; }
   .st-sk { display: block; width: 48px; height: 18px; border-radius: var(--radius); }
-  @media (max-width: 479.98px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   /* The tiles: balanced columns of flat Sections, each opened by a hairline (the tops line up). */
   /* 24px of air each side of the rule, as the two columns of Account and Editors. */
   .tiles { columns: 4 360px; column-gap: 48px; column-rule: 1px solid var(--border); }
