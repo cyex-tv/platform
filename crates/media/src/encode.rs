@@ -1,5 +1,7 @@
 //! Emote files from an original (ADR 0012): WebP at 1x to 4x (animated when the original is),
 //! AVIF at 1x to 4x for still images, and static first frames (WebP and AVIF) for animated ones.
+//! An animated one also gets animated AVIF at each size where it beats the animated WebP (no
+//! larger, at least as close to the source; ADR 0012, amended), within a work and time cap.
 //!
 //! The original is decoded frame by frame; each frame is resized to every scale at once and fed
 //! to that scale's WebP encoder, so the full animation is never held in memory.
@@ -14,6 +16,7 @@ use image::RgbaImage;
 use image::imageops::FilterType;
 use webp_animation::{Encoder, EncoderOptions, EncodingConfig, EncodingType, LossyEncodingConfig};
 
+use crate::avis::AvisEncoder;
 use crate::{Canvas, Limits, MediaError, decode_frames};
 
 /// 1x is this many pixels tall.
@@ -261,8 +264,21 @@ pub struct Step {
 pub use crate::MIN_DELAY_MS;
 
 const WEBP_QUALITY: f32 = 90.0;
+/// Still AVIF.
 const AVIF_QUALITY: f32 = 80.0;
 const AVIF_SPEED: u8 = 8;
+/// Animated AVIF (ADR 0012, amended): quality 96 at rav1e speed 9 measured at least as close to
+/// the source as the animated WebP (quality 90) on every test picture, mostly smaller. Each one
+/// is checked against its WebP anyway ([`crate::avis::Finished::beats_webp`]).
+pub const AVIF_ANIMATED_QUALITY: f32 = 96.0;
+pub const AVIF_ANIMATED_SPEED: u8 = 9;
+/// The most work animated AVIF may take for one picture: width × height × frames, summed over the
+/// sizes that get one. Past it the largest size stops first (its WebP stands), so a long or large
+/// animation stays well inside the worker's time limit per job (ADR 0012: about 10 s for flat
+/// art and 30 s for noise, on one core).
+pub const ANIMATED_AVIF_MAX_PIXELS: u64 = 8_000_000;
+/// And the most time it may take, whatever the work: past it no animated AVIF is kept.
+pub const ANIMATED_AVIF_MAX_TIME: std::time::Duration = std::time::Duration::from_secs(30);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -387,6 +403,12 @@ fn avif_still(frame: &RgbaImage) -> Result<Vec<u8>, MediaError> {
 struct Scale {
     step: Step,
     encoder: Encoder,
+    /// The animated AVIF at this size, from the second frame on.
+    avis: Option<AvisEncoder>,
+    /// The first frame at this size and how long it shows, until the second shows it's animated.
+    first: Option<(RgbaImage, u32)>,
+    /// Stopped for the work budget: no animated AVIF at this size.
+    avis_dropped: bool,
 }
 
 /// Decodes `bytes` under `limits` and makes every emote file.
@@ -400,7 +422,14 @@ pub fn transcode_with(
     limits: &Limits,
     profile: &Profile,
 ) -> Result<Encoded, MediaError> {
-    run(bytes, limits, profile, false, None)
+    run(
+        bytes,
+        limits,
+        profile,
+        false,
+        None,
+        ANIMATED_AVIF_MAX_PIXELS,
+    )
 }
 
 /// [`transcode_with`] that stops with [`MediaError::Cancelled`] soon after `cancel` is set: it is
@@ -411,7 +440,14 @@ pub fn transcode_cancellable(
     profile: &Profile,
     cancel: &AtomicBool,
 ) -> Result<Encoded, MediaError> {
-    run(bytes, limits, profile, false, Some(cancel))
+    run(
+        bytes,
+        limits,
+        profile,
+        false,
+        Some(cancel),
+        ANIMATED_AVIF_MAX_PIXELS,
+    )
 }
 
 /// Whether an animated picture's chat sizes fit their cap once converted
@@ -423,11 +459,22 @@ pub fn check_animated_scales(
     limits: &Limits,
     profile: &Profile,
 ) -> Result<(), MediaError> {
-    run(bytes, limits, profile, true, None).map(|_| ())
+    run(bytes, limits, profile, true, None, 0).map(|_| ())
 }
 
 fn kb(bytes: usize) -> usize {
     bytes.div_ceil(1024)
+}
+
+/// [`transcode_with`] under another animated AVIF work budget (tests).
+#[cfg(test)]
+pub(crate) fn transcode_with_avif_budget(
+    bytes: &[u8],
+    limits: &Limits,
+    profile: &Profile,
+    avif_max_pixels: u64,
+) -> Result<Encoded, MediaError> {
+    run(bytes, limits, profile, false, None, avif_max_pixels)
 }
 
 fn run(
@@ -436,6 +483,7 @@ fn run(
     profile: &Profile,
     check_only: bool,
     cancel: Option<&AtomicBool>,
+    avif_max_pixels: u64,
 ) -> Result<Encoded, MediaError> {
     let cancelled = || cancel.is_some_and(|flag| flag.load(Ordering::Relaxed));
     let mut scales: Vec<Scale> = Vec::new();
@@ -445,6 +493,10 @@ fn run(
     let mut first_raw: Option<RgbaImage> = None;
     let mut timestamp: i32 = 0;
     let mut failure: Option<MediaError> = None;
+    let mut index: u32 = 0;
+    // Animated AVIF is made only when converting, within its time.
+    let avis_on = !check_only;
+    let mut avis_time = std::time::Duration::ZERO;
 
     let (canvas, frames) = decode_frames(bytes, limits, &mut |canvas, frame, delay| {
         if cancelled() {
@@ -463,7 +515,13 @@ fn run(
             }
             for step in steps {
                 let encoder = webp_encoder(step.size, step.from_original)?;
-                scales.push(Scale { step, encoder });
+                scales.push(Scale {
+                    step,
+                    encoder,
+                    avis: None,
+                    first: None,
+                    avis_dropped: false,
+                });
             }
         }
         // With a master, the frame as uploaded is kept beside it for the `original` size.
@@ -471,6 +529,32 @@ fn run(
             Some(size) => (resized(&frame, size), Some(frame)),
             None => (frame, None),
         };
+        let shown = crate::shown_ms(delay);
+        if avis_on && index > 0 {
+            // Over the budget once this frame is in: the largest size still making an animated
+            // AVIF stops (its WebP stands), until the rest fit. The chat sizes go last.
+            loop {
+                let live = scales
+                    .iter()
+                    .filter(|s| s.avis.is_some() || s.first.is_some());
+                let per_frame: u64 = live
+                    .map(|s| u64::from(s.step.size.0) * u64::from(s.step.size.1))
+                    .sum();
+                if per_frame * u64::from(index + 1) <= avif_max_pixels {
+                    break;
+                }
+                let Some(largest) = scales
+                    .iter_mut()
+                    .filter(|s| s.avis.is_some() || s.first.is_some())
+                    .max_by_key(|s| u64::from(s.step.size.0) * u64::from(s.step.size.1))
+                else {
+                    break;
+                };
+                largest.avis = None;
+                largest.first = None;
+                largest.avis_dropped = true;
+            }
+        }
         for s in &mut scales {
             let source = match (&raw, s.step.from_original) {
                 (Some(raw), true) => raw,
@@ -480,8 +564,20 @@ fn run(
             if let Err(err) = s.encoder.add_frame(small.as_raw(), timestamp) {
                 failure = Some(encode_err(err));
             }
+            // The `original` stays lossless WebP only: its pixels are the upload's.
+            if avis_on && !s.step.from_original && !s.avis_dropped {
+                if avis_time > ANIMATED_AVIF_MAX_TIME {
+                    s.avis = None;
+                    s.first = None;
+                    s.avis_dropped = true;
+                } else {
+                    let started = std::time::Instant::now();
+                    avis_frame(s, small, shown, index);
+                    avis_time += started.elapsed();
+                }
+            }
         }
-        let shown = crate::shown_ms(delay);
+        index += 1;
         timestamp = timestamp.saturating_add(i32::try_from(shown).unwrap_or(i32::MAX));
         if first.is_none() {
             first_raw = raw;
@@ -497,6 +593,7 @@ fn run(
     let steps: Vec<Step> = scales.iter().map(|s| s.step.clone()).collect();
 
     let mut webp = Vec::new();
+    let mut animated_avif = Vec::new();
     for s in scales {
         if cancelled() {
             return Err(MediaError::Cancelled);
@@ -506,6 +603,19 @@ fn run(
             .finalize(timestamp.max(1))
             .map_err(encode_err)?
             .to_vec();
+        // Listed only when no larger than the animated WebP at this size and at least as close
+        // to the source (luma PSNR), and only if the whole AVIF work kept to its time.
+        let avis = s
+            .avis
+            .filter(|_| avis_time <= ANIMATED_AVIF_MAX_TIME)
+            .and_then(|enc| {
+                let started = std::time::Instant::now();
+                let done = enc.finish(Some(&bytes)).ok();
+                avis_time += started.elapsed();
+                done
+            })
+            .filter(|done| avis_time <= ANIMATED_AVIF_MAX_TIME && done.beats_webp())
+            .map(|done| done.bytes);
         if animated
             && let Some(cap) = s.step.max_animated_bytes
             && bytes.len() > cap
@@ -530,6 +640,17 @@ fn run(
             is_static: false,
             bytes,
         });
+        if animated && let Some(bytes) = avis {
+            animated_avif.push(Variant {
+                name: name(&s.step.stem, Kind::Avif, false),
+                kind: Kind::Avif,
+                scale: s.step.scale,
+                width: s.step.size.0,
+                height: s.step.size.1,
+                is_static: false,
+                bytes,
+            });
+        }
     }
     if check_only {
         return Ok(Encoded {
@@ -541,7 +662,7 @@ fn run(
         });
     }
 
-    let mut avif = Vec::new();
+    let mut avif = animated_avif;
     for step in &steps {
         if cancelled() {
             return Err(MediaError::Cancelled);
@@ -580,4 +701,27 @@ fn run(
         webp,
         avif,
     })
+}
+
+/// Feeds one frame at a size to its animated AVIF: the first is held until a second shows the
+/// picture is animated. An AVIF that fails is dropped; the WebP files don't depend on it.
+fn avis_frame(s: &mut Scale, small: RgbaImage, shown: u32, index: u32) {
+    if index == 0 {
+        s.first = Some((small, shown));
+        return;
+    }
+    if index == 1 {
+        let Some((first, first_shown)) = s.first.take() else {
+            return;
+        };
+        let (w, h) = s.step.size;
+        s.avis = AvisEncoder::new(w, h, AVIF_ANIMATED_QUALITY, AVIF_ANIMATED_SPEED)
+            .and_then(|mut enc| enc.add_frame(&first, first_shown).map(|()| enc))
+            .ok();
+    }
+    if let Some(enc) = &mut s.avis
+        && enc.add_frame(&small, shown).is_err()
+    {
+        s.avis = None;
+    }
 }
