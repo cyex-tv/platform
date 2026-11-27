@@ -383,3 +383,87 @@ short one above.
 
 ## 2026/11/26: Panchang is fetched at build time
 The landing page's headline font, Panchang (Indian Type Foundry, ITF Free Font License), is not in this repository: section 02 of its licence forbids distribution through public repositories. The website image build runs `npm run fonts` (`apps/web/scripts/fetch-fonts.mjs`), which downloads Fontshare's official zip and checks the woff2's sha256, so every deploy serves its own copy from cyex.tv (section 01). The build needs network access to api.fontshare.com. Dev, tests and the CI `web` job run without it and show the Arial fallback; run `npm run fonts` locally to see the real font. If Fontshare changes the file the build fails with a message: check it, then update the pin in the script.
+
+# Owner steps 2026/11/27: direct uploads of badge and paint pictures (ADR 0036)
+Optional. Until this is done the website sends badge and paint pictures as a form, as now. Once
+it is, large originals (up to the 16 MB a role may allow) go from the browser straight to
+`tv-s3`, and the API only checks them. Nothing here touches cyex.app.
+
+## 1. A narrow upload front for tv-s3
+`tv-s3` stays private. A second site in the `tv-cdn` Caddy passes only presigned `PUT`s under
+`/<bucket>/uploads/` to it. In the infra checkout, append to `cdn/Caddyfile`:
+```
+# upload.cyex.tv: presigned PUTs of direct uploads (ADR 0036) to tv-s3, nothing else.
+http://{$UPLOAD_HOST:upload.cyex.tv} {
+	log {
+		output stdout
+		format json
+	}
+	request_body {
+		max_size {$UPLOAD_MAX_BODY:17MB}
+	}
+	@preflight {
+		method OPTIONS
+		path /{$CDN_BUCKET:cyex-tv-cdn}/uploads/*
+	}
+	handle @preflight {
+		header Access-Control-Allow-Origin "{$UPLOAD_SITE:https://cyex.tv}"
+		header Access-Control-Allow-Methods "PUT"
+		header Access-Control-Allow-Headers "content-type"
+		header Access-Control-Max-Age "600"
+		respond 204
+	}
+	@put {
+		method PUT
+		path /{$CDN_BUCKET:cyex-tv-cdn}/uploads/*
+		query X-Amz-Signature=*
+	}
+	handle @put {
+		header Access-Control-Allow-Origin "{$UPLOAD_SITE:https://cyex.tv}"
+		# The Host header is passed on unchanged, so tv-s3 checks the signature against
+		# upload.cyex.tv, the host the API signed.
+		reverse_proxy tv-s3:7070
+	}
+	respond "404 not found" 404
+}
+```
+The `tv-cdn` service is already on the `cyextv` network, so it reaches `tv-s3:7070`. The global
+`read_body` timeout (`CDN_READ_TIMEOUT`, 10 s) also applies here: a 16 MB picture on a slow line
+needs longer, so set `CDN_READ_TIMEOUT=120s` in `env/cdn.env` (it only matters for request bodies,
+and the CDN takes none). Reload it:
+```bash
+cd /srv/cyex-tv/infra
+docker compose -f compose/docker-compose.yaml --profile cdn up -d tv-cdn
+docker compose -f compose/docker-compose.yaml --profile cdn exec tv-cdn caddy validate --config /etc/caddy/Caddyfile
+```
+
+## 2. The tunnel hostname
+Cloudflare → Zero Trust → Networks → Tunnels → the cyex tunnel → **Public Hostnames** → Add a
+public hostname: subdomain `upload`, domain `cyex.tv`, Service URL `http://cyex-tv-tv-cdn-1:80`
+(the same container as `cdn.cyex.tv`; Caddy tells them apart by host). Save.
+
+Then **Caching** → Cache Rules → Create rule "upload.cyex.tv: never cache": hostname equals
+`upload.cyex.tv` → **Bypass cache**. Deploy. Uploads over 100 MB would hit Cloudflare's body
+limit; ours are at most 16 MB.
+
+## 3. The API's env
+In `api.env` (not `worker.env`):
+```
+CYEX_TV_S3_UPLOAD_ENDPOINT=https://upload.cyex.tv
+```
+Restart the api: `docker compose -f compose/docker-compose.yaml up -d api`. The api signs for
+this host with the same keys and region (`us-east-1`) as before.
+
+## 4. Check
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X GET https://upload.cyex.tv/cyex-tv-cdn/uploads/x   # 404
+curl -s -o /dev/null -w '%{http_code}\n' -X PUT https://upload.cyex.tv/cyex-tv-cdn/emotes/x    # 404
+curl -s -o /dev/null -w '%{http_code}\n' -X PUT https://upload.cyex.tv/cyex-tv-cdn/uploads/x   # 404 (unsigned)
+```
+Then on cyex.tv, upload a badge picture on the admin badge page. In the browser's network panel
+you see `POST /v1/cosmetics/images/uploads` (201), a `PUT` to `upload.cyex.tv` (200) and
+`POST .../finalize` (202). An upload never finalized is deleted by the worker within an hour
+and a clean-up round.
+
+To turn it off again, remove `CYEX_TV_S3_UPLOAD_ENDPOINT` and restart the api: the presign then
+answers `501 direct_upload_off` and the website goes back to the form by itself.

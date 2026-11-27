@@ -6,7 +6,8 @@
 //! - `originals/{sha256}`: never public;
 //! - `cosmetics/badges/{sha256}/{variant}` and `cosmetics/paints/{sha256}/{variant}`: chat
 //!   cosmetics (ADR 0015), public and immutable like emotes;
-//! - `originals/cosmetics/{sha256}`: cosmetic originals, never public.
+//! - `originals/cosmetics/{sha256}`: cosmetic originals, never public;
+//! - `uploads/{id}`: a direct upload (ADR 0036) until it is finalized or expires, never public.
 
 pub mod sigv4;
 
@@ -74,6 +75,18 @@ pub struct Object {
     pub cache_control: Option<String>,
 }
 
+/// The key a direct upload is written to before it is finalized (ADR 0036).
+pub fn upload_key(id: &str) -> String {
+    format!("uploads/{id}")
+}
+
+/// A presigned `PUT` for one object: the client sends the body to `url` with exactly `headers`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PresignedPut {
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Put<'a> {
     pub content_type: &'a str,
@@ -138,6 +151,30 @@ impl Store {
         }
     }
 
+    /// A presigned `PUT` of `key`: exactly `content_length` bytes of `content_type`, valid for
+    /// `expires`. `None` when the store has no address browsers can reach
+    /// (`CYEX_TV_S3_UPLOAD_ENDPOINT` unset). The memory store gives a `memory:` URL; tests write
+    /// the object with [`Store::put`] instead.
+    pub fn presign_put(
+        &self,
+        key: &str,
+        content_type: &str,
+        content_length: u64,
+        expires: Duration,
+    ) -> Option<PresignedPut> {
+        let headers = vec![
+            ("content-length".to_owned(), content_length.to_string()),
+            ("content-type".to_owned(), content_type.to_owned()),
+        ];
+        match self {
+            Self::S3(s3) => s3.presign_put(key, headers, expires),
+            Self::Memory(_) => Some(PresignedPut {
+                url: format!("memory:///{key}"),
+                headers,
+            }),
+        }
+    }
+
     /// The keys held, sorted. Memory store only; for tests.
     pub fn keys(&self) -> Vec<String> {
         match self {
@@ -166,6 +203,9 @@ pub struct S3Config {
     pub endpoint: Url,
     pub bucket: String,
     pub credentials: Credentials,
+    /// The S3 address browsers send direct uploads to (`CYEX_TV_S3_UPLOAD_ENDPOINT`, ADR 0036),
+    /// when it isn't `endpoint` (which is often private). `None`: no direct uploads.
+    pub upload_endpoint: Option<Url>,
 }
 
 impl S3Config {
@@ -184,7 +224,29 @@ impl S3Config {
                 .map(|v| v.trim().to_owned())
                 .ok_or(ConfigError::Missing(name))
         };
+        let upload_endpoint = match get("CYEX_TV_S3_UPLOAD_ENDPOINT")
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+        {
+            None => None,
+            Some(raw) => {
+                let url = Url::parse(&raw).map_err(|err| ConfigError::Invalid {
+                    name: "CYEX_TV_S3_UPLOAD_ENDPOINT",
+                    reason: err.to_string(),
+                })?;
+                // Browsers send the bytes there: never over plain HTTP, except to this machine.
+                let local = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"));
+                if url.scheme() != "https" && !(url.scheme() == "http" && local) {
+                    return Err(ConfigError::Invalid {
+                        name: "CYEX_TV_S3_UPLOAD_ENDPOINT",
+                        reason: "use an https:// address".to_owned(),
+                    });
+                }
+                Some(url)
+            }
+        };
         Ok(Some(Self {
+            upload_endpoint,
             endpoint,
             bucket: need("CYEX_TV_S3_BUCKET")?,
             credentials: Credentials {
@@ -272,6 +334,37 @@ impl S3 {
             .take(300)
             .collect();
         StorageError::Status { status, body }
+    }
+
+    /// See [`Store::presign_put`].
+    fn presign_put(
+        &self,
+        key: &str,
+        mut headers: Vec<(String, String)>,
+        expires: Duration,
+    ) -> Option<PresignedPut> {
+        let base = self.cfg.upload_endpoint.as_ref()?;
+        let path = sigv4::object_path(&self.cfg.bucket, key);
+        let host = match base.port() {
+            Some(port) => format!("{}:{port}", base.host_str().unwrap_or_default()),
+            None => base.host_str().unwrap_or_default().to_owned(),
+        };
+        let mut signed = headers.clone();
+        signed.push(("host".to_owned(), host));
+        let url = sigv4::presigned_url(
+            &self.cfg.credentials,
+            "PUT",
+            base,
+            &path,
+            &signed,
+            u32::try_from(expires.as_secs()).unwrap_or(u32::MAX),
+            Utc::now(),
+        );
+        headers.sort();
+        Some(PresignedPut {
+            url: url.to_string(),
+            headers,
+        })
     }
 
     /// Creates the bucket if it doesn't exist (local setup and tests; R2's bucket is made by the
@@ -460,6 +553,22 @@ mod tests {
         ];
         let cfg = load(&full).unwrap().unwrap();
         assert_eq!(cfg.credentials.region, "auto");
+        assert_eq!(cfg.upload_endpoint, None);
+        let with = |v: &str| {
+            let mut pairs = full.to_vec();
+            pairs.push(("CYEX_TV_S3_UPLOAD_ENDPOINT", v));
+            load(&pairs)
+        };
+        assert_eq!(
+            with("https://upload.example.test")
+                .unwrap()
+                .unwrap()
+                .upload_endpoint,
+            Some(Url::parse("https://upload.example.test").unwrap())
+        );
+        assert!(with("http://127.0.0.1:9000").unwrap().is_some());
+        assert!(with("http://upload.example.test").is_err(), "plain http");
+        assert!(with("not a url").is_err());
         assert_eq!(
             load(&full[..3]).unwrap_err(),
             ConfigError::Missing("CYEX_TV_S3_SECRET_ACCESS_KEY")

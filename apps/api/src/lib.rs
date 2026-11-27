@@ -13,6 +13,7 @@ pub mod cors;
 pub mod cosmetics;
 pub mod cursor;
 pub mod developers;
+pub mod direct_upload;
 pub mod editors;
 pub mod errors;
 pub mod gql;
@@ -115,6 +116,7 @@ pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         .merge(routes::system::router())
         .merge(routes::v1::router())
+        .merge(routes::uploads::router())
         .merge(routes::app_auth::router())
 }
 
