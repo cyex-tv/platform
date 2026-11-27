@@ -429,7 +429,7 @@ async fn the_old_id_answers_the_target_and_leaves_search() {
     assert_eq!(both[0]["mergedInto"], target.as_str());
     assert_eq!(both[1]["id"], target.as_str());
 
-    // Gone from search; can't be added anywhere.
+    // Gone from search; can't be added anywhere (as any deleted emote: emote_unavailable).
     let found = w.ok(&alice, SEARCH, json!({ "q": "mergeOld" })).await;
     assert!(
         !found["searchEmotes"]["items"]
@@ -446,7 +446,7 @@ async fn the_old_id_answers_the_target_and_leaves_search() {
             json!({ "s": set, "e": source, "i": null }),
         )
         .await;
-    assert_eq!(code(&added), "not_found", "{added}");
+    assert_eq!(code(&added), "emote_unavailable", "{added}");
     w.db.close().await;
 }
 
