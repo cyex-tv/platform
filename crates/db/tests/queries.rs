@@ -1294,8 +1294,11 @@ async fn roles_and_their_permissions() {
         .into_iter()
         .map(|r| r.name)
         .collect();
-    // With the built-in roles (migration default_roles) around them.
-    assert_eq!(names, ["Owner", "Admin", "Staff", "Moderator", "User"]);
+    // With the built-in roles (migration default_roles) and the Subscriber role around them.
+    assert_eq!(
+        names,
+        ["Owner", "Admin", "Staff", "Moderator", "Subscriber", "User"]
+    );
     assert_eq!(
         roles::roles_of(&mut c, admin).await.unwrap()[0].id,
         staff.id
