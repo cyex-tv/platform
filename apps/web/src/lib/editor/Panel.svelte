@@ -12,11 +12,10 @@
   import { RATIOS } from './geometry';
   import { cropRatio, deleteShape, flipH, flipV, isStretched, outSize, resetCrop, resize, resizeKeep, rotateCcw, rotateCw, setCrop, shapesOn, updateShape, fitTo, type Shape } from './model';
   import { paintOutput, measureText } from './render';
-  import { fixLabel, visibleRules } from './rules';
+  import { fixLabel, ratioText, shapeOk, visibleRules } from './rules';
   import { PRESETS, readRecent, saveRecent, withRecent } from './colors';
   import { bytes, count } from '$lib/format';
   import { seconds } from './rules';
-  import { total } from './timing';
   import { onMount } from 'svelte';
 
   let { ed, oncontinue }: { ed: EditorState; oncontinue: () => void } = $props();
@@ -26,6 +25,9 @@
   const out = $derived(doc ? outSize(doc) : { w: 1, h: 1 });
   const rules = $derived(ed.rules);
   const failing = $derived(rules.filter((r) => r.state === 'fail').length);
+  const output = $derived(ed.output);
+  const fits = $derived(shapeOk(out.w, out.h, ed.limits));
+  const shapeRange = $derived(`1:${ed.limits.maxTall} to ${ed.limits.maxAspect}:1`);
   const shape = $derived(doc && ed.shape !== null ? (doc.shapes.find((s: Shape) => s.id === ed.shape) ?? null) : null);
   const drawing = $derived(DRAW_TOOLS.includes(ed.tool) || !!shape);
   /** What the drawing settings show: the picked drawing's, else the brush's. */
@@ -146,10 +148,19 @@
       <section class="sec pv" aria-labelledby="pv-{uid}">
         <h3 class="ui-label" id="pv-{uid}">Preview</h3>
         <div class="pvbox"><canvas bind:this={preview} aria-hidden="true"></canvas><span class="sr-only">The emote as it will upload, frame {ed.current + 1}.</span></div>
-        <p class="facts ui-mono">{count(out.w)} × {count(out.h)} px · {doc.frames.length === 1 ? 'still' : `${count(doc.frames.length)} frames · ${seconds(total(doc.frames))}`}</p>
+        <p class="facts ui-mono">{count(out.w)} × {count(out.h)} px · {ratioText(out.w, out.h)} · {!output || output.frames === 1 ? (ed.still >= 0 ? `still of frame ${count(ed.still + 1)}` : 'still') : `${count(output.frames)} frames · ${seconds(output.duration)}`}</p>
       </section>
 
-      {#if ed.tool === 'crop'}
+      {#if ed.tool === 'size'}
+        <section class="sec" aria-labelledby="st-{uid}">
+          <h3 class="ui-label" id="st-{uid}">Resize and stretch</h3>
+          <p class="hint">Drag a handle on the stage: the sides stretch it to any shape, the corners resize both ways. Shift keeps the proportions while you drag; arrow keys change it by 1 px (Shift by 10).</p>
+          <p class="shape" class:bad={!fits}>
+            <EditorIcon name={fits ? 'pass' : 'fail'} size={16} />
+            <span>{#if fits}{ratioText(out.w, out.h)} is within {shapeRange}, so it can upload.{:else}{ratioText(out.w, out.h)} is outside {shapeRange}. Stretch it back, or crop it, to upload.{/if}</span>
+          </p>
+        </section>
+      {:else if ed.tool === 'crop'}
         <section class="sec" aria-labelledby="crop-{uid}">
           <h3 class="ui-label" id="crop-{uid}">Crop</h3>
           <Segmented label="Crop shape" size="s" height={30} options={RATIOS.map((r) => ({ value: r.id, label: r.label }))} value={ed.ratio} onchange={pickRatio} />
@@ -242,12 +253,13 @@
         </div>
         <div class="wh">
           <NumField label="Width" value={out.w} max={8192} onset={setW} />
-          <button type="button" class="tb link" aria-label={ed.keepAspect ? 'Keeping proportions; click to stretch' : 'Stretching; click to keep proportions'}
-            title={ed.keepAspect ? 'Keep proportions (on)' : 'Stretch (proportions off)'} aria-pressed={ed.keepAspect} onclick={toggleAspect}>
+          <button type="button" class="tb link" aria-label="Lock proportions"
+            title={ed.keepAspect ? 'Proportions locked: click to stretch freely' : 'Proportions free: click to lock them'} aria-pressed={ed.keepAspect} onclick={toggleAspect}>
             <EditorIcon name={ed.keepAspect ? 'link' : 'unlink'} size={16} />
           </button>
           <NumField label="Height" value={out.h} max={8192} onset={setH} />
         </div>
+        <p class="hint" class:bad={!fits} data-testid="shape-line">Shape <span class="ui-mono">{ratioText(out.w, out.h)}</span>{fits ? ` · uploads between ${shapeRange}` : ` · outside ${shapeRange}, can’t upload`}. Proportions are {ed.keepAspect ? 'locked' : 'free'}{ed.keepAspect ? '' : ': width and height change on their own'}.</p>
         <div class="quick">
           <button type="button" class="ui-btn ghost small" onclick={() => ed.commit(resize(doc, out.w / 2, out.h / 2), 'Half size')}>50%</button>
           <button type="button" class="ui-btn ghost small" onclick={() => ed.commit(resize(doc, doc.crop.w, doc.crop.h), 'Original size')}>100%</button>
@@ -262,8 +274,10 @@
         {#if !ed.webp}<p class="hint">This browser can’t make WebP files, so the emote is saved as a GIF (256 colours a frame).</p>{/if}
         {#if ed.format === 'webp'}
           <label class="range"><span class="ui-label sub">Quality</span>
-            <input type="range" min="50" max="100" step="5" value={Math.round(ed.quality * 100)} onchange={(e) => (ed.quality = +e.currentTarget.value / 100)} />
-            <span class="ui-mono v">{Math.round(ed.quality * 100)}</span></label>
+            <input type="range" min="50" max="100" step="5" value={Math.round(ed.quality * 100)} aria-valuetext="{Math.round(ed.quality * 100)}%" onchange={(e) => (ed.quality = +e.currentTarget.value / 100)} />
+            <span class="ui-mono v">{Math.round(ed.quality * 100)}%</span></label>
+          {#if ed.quality < 1}<button type="button" class="ui-btn ghost small" onclick={() => (ed.quality = 1)}>Back to 100%</button>{/if}
+          <p class="hint">100% keeps the most detail. Lower it only if the file is over {count(Math.round(ed.limits.maxBytes / (1024 * 1024)))} MB.</p>
         {/if}
       </section>
 
@@ -296,21 +310,21 @@
       </section>
     </div>
     <div class="end">
-      <p class="state" role="status">
+      <p class="state" role="status" id="gate-{uid}">
         {#if ed.ready}Every rule passes{#if ed.result}{' · '}<span class="ui-mono">{bytes(ed.result.size)}</span>{/if}.
-        {:else if failing}{failing === 1 ? '1 rule doesn’t pass yet.' : `${failing} rules don’t pass yet.`}
+        {:else if failing}{failing === 1 ? 'Can’t continue: 1 rule doesn’t pass.' : `Can’t continue: ${failing} rules don’t pass.`}
         {:else if ed.encoding}Checking the file size…
         {:else}Waiting for the file size.{/if}
       </p>
       {#if failing}
         <div class="fixes">
           {#each rules.filter((r) => r.state === 'fail') as r (r.id)}
-            <span class="fl"><span class="ui-mono">{r.label}: {r.value}</span>
+            <span class="fl"><span><b>{r.label}</b> <span class="ui-mono">{r.value}</span> · {r.limit}</span>
               {#if r.fix}<button type="button" class="ui-btn secondary small" onclick={() => ed.fix(r.fix!)}>{fixLabel(r.fix, ed.limits)}</button>{/if}</span>
           {/each}
         </div>
       {/if}
-      <button type="button" class="ui-btn primary cont" disabled={!ed.ready || !!ed.encoding} onclick={oncontinue} data-testid="editor-continue">
+      <button type="button" class="ui-btn primary cont" disabled={!ed.ready || !!ed.encoding} onclick={oncontinue} aria-describedby="gate-{uid}" data-testid="editor-continue">
         Continue to upload <Icon name="arrow-right" size={16} />
       </button>
     </div>
@@ -327,6 +341,11 @@
   .pvbox canvas { display: block; max-width: 100%; }
   .facts { margin: 0; font-size: var(--t-fine); color: var(--muted); }
   .hint { margin: 0; font-size: var(--text-hint); color: var(--dim); line-height: 1.45; }
+  .hint.bad { color: var(--red); }
+  .shape { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: var(--t-small); color: var(--text); }
+  .shape :global(svg) { flex: none; margin-top: 1px; color: var(--green); }
+  .shape.bad { color: var(--red); }
+  .shape.bad :global(svg) { color: var(--red); }
   .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
   .wh { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 6px; }
   .quick, .turns, .checks { display: flex; flex-wrap: wrap; gap: 4px; }

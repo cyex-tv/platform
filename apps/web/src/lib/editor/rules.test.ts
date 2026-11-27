@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EDITOR_LIMITS, allPass, checkRules, editorLimits, fixLabel, onlySizePending, visibleRules } from './rules';
+import { EDITOR_LIMITS, allPass, checkRules, editorLimits, fixLabel, onlySizePending, ratioText, shapeOk, visibleRules } from './rules';
 import { chunks, isWebp, muxAnimation, readAnimation, stillWebp } from './riff';
 
 const ok = { width: 112, height: 112, frames: 20, shortest: 40, duration: 800, size: 200_000 };
@@ -25,14 +25,17 @@ describe('upload rules', () => {
     const fixes = (o: Partial<typeof ok>) => checkRules({ ...ok, ...o }, EDITOR_LIMITS).filter((r) => r.state === 'fail').map((r) => r.fix);
     expect(fixes({ width: 1001, height: 1001 })).toEqual(['fit']);
     expect(fixes({ width: 450, height: 100 })).toEqual(['aspect']);
+    expect(fixes({ width: 100, height: 301 })).toEqual(['tall']);
     expect(fixes({ frames: 1001, width: 10, height: 10 })).toEqual(['drop']);
     expect(fixes({ shortest: 19 })).toEqual(['fps']);
     expect(fixes({ width: 1000, height: 1000, frames: 101 })).toEqual(['drop']);
     expect(fixes({ size: 9 * 1024 * 1024 })).toEqual(['shrink']);
   });
 
-  it('accepts the edges: 1000 px, 4:1, 1000 frames, 20 ms, 8 MB', () => {
+  it('accepts the edges: 1000 px, 4:1, 1:3, 1000 frames, 20 ms, 8 MB', () => {
     expect(state({ width: 1000, height: 250 })).toMatchObject({ side: 'pass', aspect: 'pass' });
+    expect(state({ width: 100, height: 300 }).aspect).toBe('pass');
+    expect(state({ width: 334, height: 1000 }).aspect).toBe('pass');
     expect(state({ frames: 1000, width: 10, height: 10 }).frames).toBe('pass');
     expect(state({ shortest: 20 }).fps).toBe('pass');
     expect(state({ size: 8 * 1024 * 1024 }).bytes).toBe('pass');
@@ -53,6 +56,34 @@ describe('upload rules', () => {
     expect(editorLimits(null, { maxBytes: 1, maxSide: 1, maxFrames: 1, maxFps: 25, maxAspect: 2 })).toMatchObject({ minDelayMs: 40, maxAspect: 2 });
     expect(fixLabel('fps', l)).toBe('Limit to 50 fps');
     expect(fixLabel('aspect', l)).toBe('Crop to 3:1');
+    expect(fixLabel('tall', l)).toBe('Crop to 1:3');
+    expect(editorLimits(null, null).maxTall).toBe(3);
+    expect(editorLimits({ maxBytes: 4, maxSide: 500, maxFrames: 10, maxTall: 2 }, null).maxTall).toBe(2);
+  });
+});
+
+describe('the shape rule: between 1:3 tall and 4:1 wide', () => {
+  const shape = (width: number, height: number) => checkRules({ ...ok, width, height }, EDITOR_LIMITS).find((r) => r.id === 'aspect')!;
+  it('passes any stretch inside the range', () => {
+    for (const [w, h] of [[112, 112], [400, 100], [100, 300], [137, 59], [61, 170]]) expect(shape(w, h).state).toBe('pass');
+    expect(shape(100, 300).value).toBe('1:3');
+    expect(shape(250, 100).value).toBe('2,5:1');
+    expect(shape(100, 300).limit).toBe('between 1:3 and 4:1');
+  });
+  it('fails taller than 1:3 and says why', () => {
+    const r = shape(100, 301);
+    expect(r).toMatchObject({ state: 'fail', fix: 'tall', limit: 'too tall: at most 1:3' });
+    expect(shape(10, 1000).state).toBe('fail');
+  });
+  it('fails wider than 4:1 and says why', () => {
+    expect(shape(401, 100)).toMatchObject({ state: 'fail', fix: 'aspect', limit: 'too wide: at most 4:1' });
+  });
+  it('shapeOk and ratioText agree with the rule', () => {
+    expect(shapeOk(100, 300, EDITOR_LIMITS)).toBe(true);
+    expect(shapeOk(100, 301, EDITOR_LIMITS)).toBe(false);
+    expect(shapeOk(400, 100, EDITOR_LIMITS)).toBe(true);
+    expect(shapeOk(401, 100, EDITOR_LIMITS)).toBe(false);
+    expect(ratioText(1, 1)).toBe('1:1');
   });
 });
 

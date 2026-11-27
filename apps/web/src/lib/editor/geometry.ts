@@ -191,3 +191,36 @@ export function segmentDistance(px: number, py: number, x1: number, y1: number, 
   const t = len ? clamp(((px - x1) * dx + (py - y1) * dy) / len, 0, 1) : 0;
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 }
+
+/** The stage's zoom range, from a quarter of the fitted zoom (never above 25%) to 3200%. */
+export const MAX_ZOOM = 32;
+export const minZoom = (fitted: number) => Math.max(0.01, Math.min(1, fitted) / 4);
+
+/**
+ * The zoom after one wheel event: a mouse notch (about 100 px) is about 16%, a trackpad pinch
+ * (the browser sends it as Ctrl + wheel with small deltas) follows the fingers. Lines and pages
+ * count as 16 px and `page` px. One event never more than doubles or halves the zoom.
+ */
+export function wheelZoom(zoom: number, deltaY: number, deltaMode: number, pinch: boolean, min: number, max: number = MAX_ZOOM, page = 800): number {
+  const px = deltaY * (deltaMode === 1 ? 16 : deltaMode === 2 ? page : 1);
+  const k = clamp(Math.exp(-px * (pinch ? 0.01 : 0.0015)), 0.5, 2);
+  return clamp(zoom * k, min, max);
+}
+
+/**
+ * The output size while a handle of a `w0` × `h0` box is dragged by (dx, dy) output pixels.
+ * Free by default: an edge changes one side, a corner both, to any shape. With `lock` the shape
+ * stays (an edge scales the other side along). Whole pixels, 1 to `max`.
+ */
+export function stretchBy(handle: Exclude<Handle, 'move'>, w0: number, h0: number, dx: number, dy: number, lock: boolean, max = 8192): Size {
+  let w = w0 + (handle.includes('e') ? dx : handle.includes('w') ? -dx : 0);
+  let h = h0 + (handle.includes('s') ? dy : handle.includes('n') ? -dy : 0);
+  if (lock) {
+    const horizontal = handle === 'e' || handle === 'w';
+    const vertical = handle === 'n' || handle === 's';
+    const k = horizontal ? w / w0 : vertical ? h / h0 : Math.max(w / w0, h / h0);
+    w = w0 * k;
+    h = h0 * k;
+  }
+  return { w: clamp(Math.round(w), 1, max), h: clamp(Math.round(h), 1, max) };
+}

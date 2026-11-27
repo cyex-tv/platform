@@ -708,7 +708,7 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Cosmetics",
         "bad_dimensions",
         "The picture's size does not fit.",
-        "Badge or paint pictures outside the allowed size or aspect, and an emote wider than 4:1 (422).",
+        "Badge or paint pictures outside the allowed size or aspect, and an emote wider than 4:1 or taller than 1:3 (422).",
     ),
     e(
         "Cosmetics",

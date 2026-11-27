@@ -73,9 +73,9 @@ export const limitOf = (accountId, key) => {
 };
 // `limits` (public_limits.rs): the numbers the API enforces. `account` lists the signed-in
 // account's own per-account limits with its roles' overrides; empty signed out and on REST.
-const kind = (o) => ({ maxDurationMs: null, minSide: null, maxAspect: null, maxFps: null, ...o });
+const kind = (o) => ({ maxDurationMs: null, minSide: null, maxAspect: null, maxTall: null, maxFps: null, ...o });
 export const MEDIA_LIMITS = {
-  emote: kind({ maxBytes: 8 * MB, maxSide: 1000, maxFrames: 1000, maxFps: 50, maxTotalPixels: 1_000_000_000, maxAspect: 4, maxServedSide: 128 }),
+  emote: kind({ maxBytes: 8 * MB, maxSide: 1000, maxFrames: 1000, maxFps: 50, maxTotalPixels: 1_000_000_000, maxAspect: 4, maxTall: 3, maxServedSide: 128 }),
   badge: kind({ maxBytes: 8 * MB, maxSide: 2048, maxFrames: 120, maxTotalPixels: 64_000_000, maxDurationMs: 10_000, minSide: 72, maxAspect: 1, maxServedSide: 512 }),
   paint: kind({ maxBytes: 8 * MB, maxSide: 4096, maxFrames: 120, maxTotalPixels: 64_000_000, maxDurationMs: 10_000, minSide: 64, maxAspect: 8, maxServedSide: 512 }),
 };

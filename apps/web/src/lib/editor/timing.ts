@@ -139,3 +139,26 @@ export function moveFrames<T>(frames: readonly T[], picked: ReadonlySet<number>,
   const rest = frames.filter((_, i) => !picked.has(i));
   return [...rest.slice(0, before), ...moving, ...rest.slice(before)];
 }
+
+/** The speed slider's positions: 0 to 1000, 100% in the middle. */
+export const SPEED_STEPS = 1000;
+const HALF = SPEED_STEPS / 2;
+/** The fastest speed in percent (20 times as fast). */
+export const MAX_SPEED_PCT = 2000;
+
+/**
+ * Percent at slider position `pos`: the left half is 0 to 100% in even steps, the right half
+ * 100 to 2000% on a log scale, so steps are fine near 100% and coarse near 2000%. Within 2% of
+ * 100 it rests on 100 (a detent), so the default is easy to find again.
+ */
+export function speedFromSlider(pos: number): number {
+  const p = Math.max(0, Math.min(SPEED_STEPS, pos));
+  const pct = p <= HALF ? (p / HALF) * 100 : 100 * (MAX_SPEED_PCT / 100) ** ((p - HALF) / HALF);
+  return Math.abs(pct - 100) <= 2 ? 100 : Math.round(pct);
+}
+
+/** The slider position for `pct` (the inverse of `speedFromSlider`). */
+export function speedToSlider(pct: number): number {
+  const v = Math.max(0, Math.min(MAX_SPEED_PCT, pct));
+  return Math.round(v <= 100 ? (v / 100) * HALF : HALF + (HALF * Math.log(v / 100)) / Math.log(MAX_SPEED_PCT / 100));
+}

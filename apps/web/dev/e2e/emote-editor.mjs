@@ -90,6 +90,15 @@ async function press(k, mods = 0) {
   await b.send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk, modifiers: mods });
 }
 
+/** Types `text` into a field (replacing it) and presses Enter, as a person would. */
+async function typeInto(sel, text) {
+  await ev(`(() => { const i = ${sel}; i.focus(); i.select?.(); return 0; })()`);
+  await b.send('Input.insertText', { text });
+  await b.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  await b.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  await wait(100);
+}
+
 /** Drops a file (bytes from here) on the open upload dialog. */
 async function dropFile(bytes, name, type) {
   const b64 = Buffer.from(bytes).toString('base64');
@@ -162,7 +171,12 @@ async function run(width, height, theme, tag, full) {
   await setup(width, height, theme, mobile);
   check(`${tag} the dialog opens in Quick upload`, await ev(`document.querySelector('.modes [aria-checked=true]')?.textContent.includes('Quick')`));
   await shot(`${tag}-1-quick-upload`);
+  const rect = () => ev(`(() => { const b = document.querySelector('dialog.upload-dialog').getBoundingClientRect(); return [b.x, b.y, b.width, b.height].map(Math.round).join(','); })()`);
+  const quickRect = await rect();
   check(`${tag} the editor loads when switched to`, await toEditor());
+  await wait(300);
+  check(`${tag} both modes are the same size and place`, (await rect()) === quickRect, `${quickRect} / ${await rect()}`);
+  await shot(`${tag}-1b-editor-empty`);
   await dropFile(GIF, 'orbit.gif', 'image/gif');
   check(`${tag} a GIF opens: 24 frames`, await until(`document.querySelector('.tl .pos')?.textContent.trim() === '1 / 24'`, 60000), (await state()).pos);
   await until(`document.querySelector('.rule[data-rule=bytes]')?.classList.contains('pass')`);
@@ -189,8 +203,21 @@ async function run(width, height, theme, tag, full) {
     check(`${tag} 2400 px fails the size rule and disables Continue`, await until(`document.querySelector('.rule[data-rule=side]')?.classList.contains('fail') && document.querySelector('[data-testid=editor-continue]').disabled`));
     await click(`document.querySelector('.rule[data-rule=side] .fix')`);
     check(`${tag} "Fit to 1.000 px" passes again`, await until(`document.querySelector('.rule[data-rule=side]')?.classList.contains('pass')`), (await state()).rules.find((r) => r[0] === 'side')?.[2]);
-    await ev(`(() => { const s = document.querySelector('.tl .speed'); s.value = '4'; s.dispatchEvent(new Event('change', { bubbles: true })); return 0; })()`);
-    check(`${tag} 4× speed (10 ms frames) fails the frame rate rule`, await until(`document.querySelector('.rule[data-rule=fps]')?.classList.contains('fail')`));
+    // Speed: 400% would be 10 ms frames; frames merge so the upload stays within 50 fps.
+    await typeInto(`document.querySelector('.pctbox input')`, '400');
+    check(`${tag} 400% speed merges frames and keeps the frame rate rule`, await until(`document.querySelector('.rule[data-rule=fps]')?.classList.contains('pass') && /of 24 frames upload/.test(document.querySelector('.spdnote')?.textContent ?? '')`), await ev(`document.querySelector('.spdnote')?.textContent.trim()`));
+    check(`${tag} the loop is a quarter as long`, (await ev(`document.querySelector('.tl .len')?.textContent.trim()`)) === '0,2 s', await ev(`document.querySelector('.tl .len')?.textContent`));
+    await shot(`${tag}-7-speed-400`);
+    await typeInto(`document.querySelector('.pctbox input')`, '0');
+    check(`${tag} 0% freezes it: a still of the frame on show`, await until(`/still image of frame/.test(document.querySelector('.spdnote')?.textContent ?? '') && document.querySelector('.rule[data-rule=frames] .val')?.textContent.trim() === '1'`));
+    check(`${tag} play is off while frozen`, await ev(`[...document.querySelectorAll('.tl .tb')].find((x) => /^(Play|Pause)$/.test(x.getAttribute('aria-label')))?.disabled === true`));
+    await shot(`${tag}-8-speed-0`);
+    await click(`document.querySelector('[aria-label="Speed back to 100%"]')`);
+    check(`${tag} back to 100%`, await until(`document.querySelector('.pctbox input')?.value === '100'`));
+    // Frames set to 10 ms at 100%: the frame rate rule fails until its fix.
+    await typeInto(`document.querySelector('.tl .delay input')`, '10');
+    await click(`[...document.querySelectorAll('.tl .ui-btn')].find((x) => x.textContent.trim() === 'All frames')`);
+    check(`${tag} 10 ms frames fail the frame rate rule`, await until(`document.querySelector('.rule[data-rule=fps]')?.classList.contains('fail')`));
     await ev(`document.querySelector('.rules')?.scrollIntoView({ block: 'start' }), 0`);
     await shot(`${tag}-4-rules-failing`);
     await click(`document.querySelector('.rule[data-rule=fps] .fix')`);
@@ -198,6 +225,66 @@ async function run(width, height, theme, tag, full) {
     await until(`!document.querySelector('[data-testid=editor-continue]').disabled`, 30000);
     await ev(`document.querySelector('.rules')?.scrollIntoView({ block: 'start' }), 0`);
     await shot(`${tag}-5-rules-passing`);
+
+    // Stretching: the resize tool's east handle pulls it wider, to any shape; past 4:1 it can't upload.
+    // Back to the GIF's own 320 × 240 first (proportions are free, so each side is typed).
+    await typeInto(`[...document.querySelectorAll('.wh input')][0]`, '320');
+    await typeInto(`[...document.querySelectorAll('.wh input')][1]`, '240');
+    // Keys are the editor's once the field lets go of focus.
+    await ev(`document.activeElement?.blur(), 0`);
+    await press('s');
+    check(`${tag} the resize tool shows the output with its size`, await until(`/px ·/.test(document.querySelector('.stage .readout')?.textContent ?? '')`));
+    await ev(`document.querySelector('.stage')?.scrollIntoView({ block: 'nearest' }), 0`);
+    const before = await ev(`[...document.querySelectorAll('.wh input')].map((i) => +i.value)`);
+    const handle = async () => {
+      // The east handle: the right edge of the output, half way down (the readout says the size).
+      const [w, h] = await ev(`[...document.querySelectorAll('.wh input')].map((i) => +i.value)`);
+      const z = (await ev(`parseFloat(document.querySelector('.stage .zl').textContent)`)) / 100;
+      const r = await ev(`(() => { const b = document.querySelector('.stage').getBoundingClientRect(); return [b.x, b.y, b.width, b.height]; })()`);
+      return { w, h, z, r };
+    };
+    {
+      const { w, h, z, r } = await handle();
+      // The fitted output sits in the middle of the stage.
+      const cx = r[0] + r[2] / 2;
+      const cy = r[1] + r[3] / 2;
+      const east = [cx + (w * z) / 2, cy];
+      await drag(east, [Math.min(r[0] + r[2] - 4, east[0] + Math.max(60, r[2] * 0.2)), cy], 10);
+      const after = await ev(`[...document.querySelectorAll('.wh input')].map((i) => +i.value)`);
+      check(`${tag} the side handle stretches the width only`, after[0] > before[0] && after[1] === h, `${before.join('×')} → ${after.join('×')}`);
+    }
+    // Typed: far past 4:1, and the rules say why Continue is off.
+    await typeInto(`[...document.querySelectorAll('.wh input')][0]`, String(before[1] * 5));
+    check(`${tag} past 4:1 fails the shape rule, said plainly`, await until(`document.querySelector('.rule[data-rule=aspect]')?.classList.contains('fail') && /too wide/.test(document.querySelector('.rule[data-rule=aspect]')?.textContent ?? '') && document.querySelector('[data-testid=editor-continue]').disabled`));
+    check(`${tag} the stage says it can't upload`, await until(`/can’t upload/.test(document.querySelector('.stage .readout')?.textContent ?? '')`));
+    await shot(`${tag}-6-stretch-too-wide`);
+    await typeInto(`[...document.querySelectorAll('.wh input')][0]`, String(before[0]));
+    await typeInto(`[...document.querySelectorAll('.wh input')][1]`, String(before[0] * 3 + 5));
+    check(`${tag} taller than 1:3 fails too`, await until(`/too tall/.test(document.querySelector('.rule[data-rule=aspect]')?.textContent ?? '')`));
+    await typeInto(`[...document.querySelectorAll('.wh input')][1]`, String(before[0] * 3));
+    check(`${tag} exactly 1:3 passes`, await until(`document.querySelector('.rule[data-rule=aspect]')?.classList.contains('pass')`));
+    await typeInto(`[...document.querySelectorAll('.wh input')][1]`, String(before[1]));
+    await ev(`document.querySelector('.stage')?.scrollIntoView({ block: 'nearest' }), 0`);
+    await wait(150);
+
+    // The wheel over the stage zooms at the pointer, and nothing scrolls.
+    const zl = () => ev(`parseFloat(document.querySelector('.stage .zl').textContent)`);
+    const scrolls = () => ev(`[document.scrollingElement.scrollTop, ...[...document.querySelectorAll('.work, .scroll, .pane')].map((e) => e.scrollTop)].join(',')`);
+    const z0 = await zl();
+    const s0 = await scrolls();
+    const sr = await ev(`(() => { const b = document.querySelector('.stage').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
+    for (let i = 0; i < 3; i++) await b.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: sr[0], y: sr[1], deltaX: 0, deltaY: -100 });
+    await wait(200);
+    const z1 = await zl();
+    for (let i = 0; i < 6; i++) await b.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: sr[0], y: sr[1], deltaX: 0, deltaY: 100 });
+    await wait(200);
+    const z2 = await zl();
+    check(`${tag} the wheel zooms in and out`, z1 > z0 && z2 < z1, `${z0}% → ${z1}% → ${z2}%`);
+    check(`${tag} the page and dialog don't scroll while zooming`, (await scrolls()) === s0, `${s0} / ${await scrolls()}`);
+    await b.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: sr[0], y: sr[1], deltaX: 0, deltaY: -40, modifiers: 2 });
+    await wait(150);
+    check(`${tag} a pinch (Ctrl + wheel) zooms too`, (await zl()) > z2, `${z2}% → ${await zl()}%`);
+    await press('v');
   }
   if (full) {
     // Continue: the file goes to the quick form.

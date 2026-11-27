@@ -99,3 +99,34 @@ describe('size and view', () => {
     expect(segmentDistance(-3, 4, 0, 0, 10, 0)).toBe(5);
   });
 });
+
+describe('wheel zoom and stretching', () => {
+  it('zooms in on wheel up and out on wheel down, inside the range', async () => {
+    const { MAX_ZOOM, minZoom, wheelZoom } = await import('./geometry');
+    expect(wheelZoom(1, -100, 0, false, 0.1)).toBeGreaterThan(1.1);
+    expect(wheelZoom(1, 100, 0, false, 0.1)).toBeLessThan(0.9);
+    // Lines (Firefox) count like pixels, a pinch (Ctrl + wheel) follows small deltas.
+    expect(wheelZoom(1, -3, 1, false, 0.1)).toBeCloseTo(wheelZoom(1, -48, 0, false, 0.1));
+    expect(wheelZoom(1, -10, 0, true, 0.1)).toBeCloseTo(Math.exp(0.1));
+    // One event at most doubles or halves, and the ends hold.
+    expect(wheelZoom(1, -100_000, 0, false, 0.1)).toBe(2);
+    expect(wheelZoom(30, -1000, 0, false, 0.1)).toBe(MAX_ZOOM);
+    expect(wheelZoom(0.2, 10_000, 0, false, 0.1)).toBe(0.1);
+    expect(minZoom(8)).toBe(0.25);
+    expect(minZoom(0.4)).toBeCloseTo(0.1);
+  });
+
+  it('stretches freely by default: an edge changes one side, a corner both', async () => {
+    const { stretchBy } = await import('./geometry');
+    expect(stretchBy('e', 100, 100, 150, 0, false)).toEqual({ w: 250, h: 100 });
+    expect(stretchBy('s', 100, 100, 0, 200, false)).toEqual({ w: 100, h: 300 });
+    expect(stretchBy('nw', 100, 100, 30, -40, false)).toEqual({ w: 70, h: 140 });
+    expect(stretchBy('w', 100, 100, 500, 0, false)).toEqual({ w: 1, h: 100 });
+  });
+
+  it('keeps the shape when locked', async () => {
+    const { stretchBy } = await import('./geometry');
+    expect(stretchBy('e', 100, 50, 100, 0, true)).toEqual({ w: 200, h: 100 });
+    expect(stretchBy('se', 100, 50, 10, 50, true)).toEqual({ w: 200, h: 100 });
+  });
+});
