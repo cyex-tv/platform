@@ -563,6 +563,14 @@ async fn bad_files_are_refused() {
             StatusCode::PAYLOAD_TOO_LARGE,
             "too_large",
         ),
+        // The 4:1 shape rule stays the upload's: a 6:1 picture is refused here, even though the
+        // worker makes the files of a stored 6:1 original again.
+        (
+            "wider than 4:1",
+            png(240, 40, 2),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "bad_dimensions",
+        ),
     ] {
         let r = w.upload(&alice, "nope", &file).await;
         assert_eq!(r.status, status, "{case}: {:?}", r.body);

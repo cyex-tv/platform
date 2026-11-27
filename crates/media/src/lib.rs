@@ -93,6 +93,16 @@ impl Limits {
         EmoteRules::limits()
     }
 
+    /// The limits an *existing* emote original is decoded under again (the worker's transcodes):
+    /// [`Self::emote`] without the 4:1 rule. That rule is checked only when a file is uploaded
+    /// (the API), so an original that is already stored, whatever its shape, can always be made
+    /// again; the other rules stay.
+    pub const fn emote_original() -> Self {
+        let mut l = EmoteRules::limits();
+        l.max_aspect = None;
+        l
+    }
+
     /// A badge picture's limits (the size ladder of cyex badges): up to 8 MB; an animation at most 120 frames, 10
     /// seconds, and width × height × frames at most 64 MP (512×512 × 120 frames fits). A side is
     /// decoded up to 2048 px so a badge made before the 512 px cap can be made again; the API

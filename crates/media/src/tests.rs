@@ -918,6 +918,35 @@ fn emote_rules_are_fixed_and_one_place_holds_them() {
 }
 
 #[test]
+fn the_4_to_1_rule_is_the_uploads_and_an_original_is_made_again_at_any_shape() {
+    // A 6:1 picture: a new upload is refused under the emote rules ...
+    let wide = png(600, 100);
+    assert!(matches!(
+        probe(&wide, &Limits::emote()),
+        Err(MediaError::BadShape(_))
+    ));
+    assert!(encode::transcode(&wide, &Limits::emote()).is_err());
+    // ... and an original already stored is transcoded, fitted in the 4:1 box as before.
+    let l = Limits::emote_original();
+    assert_eq!(l.max_aspect, None);
+    let made = encode::transcode(&wide, &l).expect("a 6:1 original makes its files again");
+    assert!(!made.webp.is_empty());
+    assert_eq!(encode::size_for(600, 100, 4), (512, 85));
+    // Every other rule is the emote rules.
+    assert_eq!(
+        Limits {
+            max_aspect: Some(4),
+            ..l
+        },
+        Limits::emote()
+    );
+    assert!(matches!(
+        probe(&png(1001, 10), &l),
+        Err(MediaError::TooLarge(_))
+    ));
+}
+
+#[test]
 fn an_emote_file_is_at_most_8_mb() {
     let six = padded_png(64, 64, 6 * 1024 * 1024);
     // Over the default (cosmetics), inside an emote's limit, and it decodes.
