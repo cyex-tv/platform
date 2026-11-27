@@ -854,10 +854,11 @@ async fn the_rail_count_for_personal_use_follows_its_permission() {
         )
         .await;
     assert_eq!(code(&r), "forbidden", "{r}");
-    // A reviewer without it can't read the personal queue.
+    // Someone with neither permission gets nothing.
+    let nobody = w.user("5", "nobody", &[]).await;
     let r = w
         .gql(
-            &lister,
+            &nobody,
             ADMIN_COUNTS,
             json!({ "review": false, "personal": true }),
         )
