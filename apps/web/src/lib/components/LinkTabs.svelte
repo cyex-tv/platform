@@ -31,7 +31,9 @@
   function showTip(ev: Event) {
     clearTimeout(timer);
     const a = (ev.target as Element | null)?.closest?.('a.icon');
-    if (!(a instanceof HTMLElement) || !window.matchMedia('(max-width: 719.98px)').matches) return (tip = null);
+    // Only a tab whose words are hidden (a phone, or a narrow row) needs the tooltip.
+    const words = a instanceof HTMLElement ? a.querySelector('.tl') : null;
+    if (!(a instanceof HTMLElement) || !words || getComputedStyle(words).display !== 'none') return (tip = null);
     const r = a.getBoundingClientRect();
     const text = a.querySelector('.tl')?.textContent ?? '';
     const put = () => (tip = { text, x: Math.min(Math.max(r.left + r.width / 2, 40), document.documentElement.clientWidth - 40), y: r.bottom + 6 });
@@ -44,6 +46,7 @@
   }
 </script>
 
+<div class="row">
 <nav class="tabs" aria-label={label} use:arrowNav={'horizontal'} bind:this={row} onpointerover={showTip} onfocusin={showTip} onpointerout={hideTip} onfocusout={hideTip}>
   {#each items as t (t.href)}
     <a href={t.href} class:icon={!!t.icon} aria-current={t.current ? 'page' : undefined} aria-label={t.icon ? (t.count !== undefined ? `${t.label}, ${t.count}` : t.label) : undefined}>
@@ -52,9 +55,12 @@
     </a>
   {/each}
 </nav>
+</div>
 {#if tip}<span class="tip" aria-hidden="true" style:left="{tip.x}px" style:top="{tip.y}px">{tip.text}</span>{/if}
 
 <style>
+  /* The row is a size container: when it is narrow, only the current tab keeps its words. */
+  .row { container-type: inline-size; }
   .tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--border); margin-inline: -10px; }
   .tabs a { position: relative; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 10px; color: var(--muted);
     font-size: var(--t-ui); font-weight: 500; white-space: nowrap; text-decoration: none; transition: color var(--fast); }
@@ -66,6 +72,10 @@
   .n { font-size: var(--t-small); color: var(--dim); font-weight: 500; font-variant-numeric: tabular-nums; }
   @media (hover: hover) and (pointer: fine) { .tabs a:hover { color: var(--text); } }
 
+  @container (max-width: 1000px) {
+    .tabs a.icon:not([aria-current='page']) { justify-content: center; min-width: 40px; padding: 0 6px; }
+    .tabs a.icon:not([aria-current='page']) .tl, .tabs a.icon:not([aria-current='page']) .n { display: none; }
+  }
   /* Icon tabs: icon first, then the words. Under 720px the words go and the icon is the tab (44px wide to hit). */
   @media (max-width: 719.98px) {
     .tabs a.icon { justify-content: center; min-width: 40px; padding: 0 6px; }

@@ -457,7 +457,6 @@
     .uf { width: 100%; }
     .uf.labelled .field, .uf.labelled .chip { flex: 1; width: auto; max-width: none; }
     .uf:not(.labelled) .field, .uf:not(.labelled) .chip { width: 100%; max-width: none; }
-    .field, .chip, .lbl { height: 44px; }
     input { font-size: 16px; } /* no zoom on focus (iOS) */
     .opt { min-height: 48px; }
     .x { width: 32px; height: 32px; }
