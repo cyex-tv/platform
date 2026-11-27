@@ -1866,6 +1866,11 @@ async fn every_reference_to_an_account_is_handled_by_erase() {
         ("identities", "account_id", "deleted"),
         ("sessions", "account_id", "deleted"),
         ("api_keys", "account_id", "deleted"),
+        (
+            "direct_uploads",
+            "account_id",
+            "open ones expired; the worker deletes them, finalized rows within a day",
+        ),
         ("webhooks", "created_by", "set to NULL"),
         ("emotes", "owner_account_id", "deleted or disowned (NULL)"),
         ("emotes", "uploaded_by", "set to NULL"),
