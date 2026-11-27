@@ -758,7 +758,8 @@ const OLD_NEWEST: &str = "SELECT * FROM (
              SELECT m.set_id, m.emote_id, m.name, m.zero_width, m.added_by, m.added_at,
                 e.owner_account_id AS emote_owner, e.name AS emote_name,
                 e.zero_width AS emote_zero_width, e.private, e.unlisted, e.nsfw,
-                e.animated, e.state, e.created_at AS emote_created_at,
+                e.animated, e.state, e.listing_review, e.personal_review,
+                e.created_at AS emote_created_at,
                 f.sha256, f.variants, (f.processing_failed_at IS NOT NULL) AS processing_failed,
                     row_number() OVER (PARTITION BY m.set_id
                                        ORDER BY m.added_at DESC, m.emote_id DESC) AS rn

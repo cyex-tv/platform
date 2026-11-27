@@ -412,6 +412,18 @@ pub const ERROR_CODES: &[ErrorCode] = &[
     ),
     e(
         "Emotes",
+        "personal_use_not_approved",
+        "The emote is not approved for personal use.",
+        "Adding an emote to a personal set before its personal use is approved, or after it was denied (409, ADR 0038).",
+    ),
+    e(
+        "Emotes",
+        "bad_approvals",
+        "The review asks for nothing, or a denial has no reason.",
+        "reviewApprovals without publicListing or personalUse, or with a DENY and no reason (ADR 0038).",
+    ),
+    e(
+        "Emotes",
         "already_taken_down",
         "The emote is taken down already.",
         "Taking down an emote that is gone.",
@@ -559,6 +571,18 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "bad_editor",
         "The editor is not identified properly.",
         "Give the editor's account ID, or a platform and a login.",
+    ),
+    e(
+        "Transfers",
+        "transfer_staff_only",
+        "Only staff with emotes.transfer can change who owns an emote.",
+        "transferEmote without the emotes.transfer permission, the emote's owner included (403, ADR 0038).",
+    ),
+    e(
+        "Transfers",
+        "transfer_requests_retired",
+        "Transfer requests are gone: ownership can't be requested.",
+        "acceptEmoteTransfer, declineEmoteTransfer or cancelEmoteTransfer (410, ADR 0038).",
     ),
     e(
         "Transfers",

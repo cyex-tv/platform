@@ -98,7 +98,8 @@ async fn emote_views(
     }
     let rows: Vec<reads::EmoteRow> = sqlx::query_as(
         "SELECT e.id, e.owner_account_id AS owner, e.name, e.zero_width, e.private,
-                e.unlisted, e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants,
+                e.unlisted, e.nsfw, e.animated, e.state, e.listing_review, e.personal_review,
+                e.created_at, f.sha256, f.variants,
                 (f.processing_failed_at IS NOT NULL) AS processing_failed
          FROM emotes e LEFT JOIN files f ON f.id = e.file_id WHERE e.id = ANY($1)",
     )

@@ -88,6 +88,14 @@ pub fn db_error(err: DbError) -> ApiError {
             "not_approved",
             "That emote isn't approved yet. Until it is, it can only go in its owner's channel sets.",
         ),
+        DbError::PersonalUseNotApproved(state) => conflict(
+            "personal_use_not_approved",
+            if state == cyex_tv_shared::model::ApprovalState::Denied {
+                "That emote was not approved for personal use, so it can't go in a personal set."
+            } else {
+                "That emote isn't approved for personal use yet. A personal set takes only emotes approved for personal use."
+            },
+        ),
         DbError::EmoteUnavailable => conflict("emote_unavailable", "That emote can't be used."),
         DbError::RoleNameTaken => conflict("role_name_taken", "A role with that name exists."),
         DbError::UnknownPermission(_) => bad("unknown_permission", "Unknown permission name."),

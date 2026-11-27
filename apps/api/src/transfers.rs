@@ -1,41 +1,35 @@
-//! Giving an emote to another account (ADR 0014; owner decisions of 2026/11/19 and 2026/11/22).
+//! Moving an emote to another account (ADR 0014; ADR 0038).
 //!
-//! - **Who may give it:** its owner, nobody else. Account editors could once ask for a transfer
-//!   the owner then accepted; the owner retired that (2026/11/22): nobody can ask to have someone
-//!   else's emote given away. `transferEmote` by anyone but the owner is `forbidden`, and
-//!   `acceptEmoteTransfer` is too. The `emote_transfer` editor flag grants nothing.
-//! - **Who may receive it:** the owner, or an account where the owner holds `emote_upload` on
-//!   every set (it already trusts them with uploads). Blocked, deleted and restricted accounts
-//!   (either side) are refused.
-//! - **Requests made before:** `withdraw_open` (run at start-up) cancels every open one, audited as
-//!   `emote.transfer_cancelled` with `"reason": "retired"`, and tells both sides. Declining and
-//!   cancelling still answer, for a client that shows an old request.
-//! - Every move is audited (`emote.transferred`), with the owner as subject, and the receiver is
-//!   notified.
+//! - **Who may move it:** staff with `emotes.transfer`, directly, to any live account. Nobody can
+//!   ask for an emote, and its owner can't give it away either (`transfer_staff_only`).
+//! - **Requests made before:** `withdraw_open` (run at start-up) cancels every open one, audited
+//!   as `emote.transfer_cancelled` with `"reason": "retired"`, and tells both sides. Accepting,
+//!   declining and cancelling answer `transfer_requests_retired`.
+//! - Every move is audited (`emote.transferred`), with the old owner as subject, and both owners
+//!   are notified.
 
-use chrono::Utc;
+use axum::http::StatusCode;
 use cyex_tv_auth::Caller;
-use cyex_tv_db::transfers::{self, Request, TransferState};
+use cyex_tv_db::transfers::{self, Request};
 use cyex_tv_db::{accounts, audit, emotes, ids, reads};
-use cyex_tv_shared::error::ApiResult;
-use cyex_tv_shared::model::{
-    AccountSummary, EditorPermission, Emote, EmoteState, EmoteTransferRequest, EventType,
-};
+use cyex_tv_shared::error::{ApiError, ApiResult};
+use cyex_tv_shared::model::{EditorPermission, Emote, EmoteState, EmoteTransferRequest, EventType};
+use cyex_tv_shared::permissions;
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
-use crate::catalog::{db_error, forbidden, not_found, parse_id};
-use crate::errors::{bad, conflict, limited_as, sqlx_error};
+use crate::catalog::{db_error, holds, not_found, parse_id};
+use crate::errors::{bad, limited_as, sqlx_error};
 use crate::limits::AccountLimit;
-use crate::moderation::{
-    OWNER_RESTRICTED, YOU_RESTRICTED, announce, build, not_restricted, restricted, row,
-};
+use crate::moderation::{announce, build, restricted, row};
 use crate::state::AppState;
 use crate::views;
 
-/// What anyone but an emote's owner hears from `transferEmote` and `acceptEmoteTransfer`.
-pub const OWNER_ONLY: &str = "Only an emote's owner can give it away. Nobody can ask for someone else's emote to be transferred.";
+/// What anyone without `emotes.transfer` hears from `transferEmote` (ADR 0038).
+pub const STAFF_ONLY: &str = "Only cyex.tv staff can change who owns an emote. Ownership can't be requested or given away; contact support if an emote should move.";
+/// What the retired request mutations answer (ADR 0038).
+pub const REQUESTS_RETIRED: &str = "Transfer requests are gone: ownership can't be requested. Only staff can move an emote to another account.";
 
 fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
     limited_as(
@@ -84,30 +78,6 @@ fn request_json(r: &Request) -> Value {
     })
 }
 
-/// Marks due requests as expired, each audited (no actor: nobody did it).
-async fn expire_due(conn: &mut PgConnection, emote: Option<Uuid>) -> ApiResult<()> {
-    for r in transfers::expire_due(conn, emote).await.map_err(db_error)? {
-        write(
-            conn,
-            None,
-            "emote.transfer_expired",
-            r.emote_id,
-            r.from_account_id,
-            None,
-            Some(request_json(&r)),
-        )
-        .await?;
-    }
-    Ok(())
-}
-
-/// Expires every due request and keeps that, whatever the caller's own change does next.
-async fn expire_now(conn: &mut PgConnection) -> ApiResult<()> {
-    let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    expire_due(&mut tx, None).await?;
-    tx.commit().await.map_err(sqlx_error)
-}
-
 /// The notification payload: the emote, both accounts and the one who acted, names as they read now.
 async fn payload(
     conn: &mut PgConnection,
@@ -136,38 +106,24 @@ async fn payload(
     }))
 }
 
-/// The receiver rule, and that nobody involved is held: the caller, the owner, the receiver (who
-/// must also be live).
-async fn receiver_checks(
-    conn: &mut PgConnection,
-    giver: Uuid,
-    from: Uuid,
-    to: Uuid,
-) -> ApiResult<()> {
+/// The receiver must be a live account that may hold emotes: not deleted, blocked or restricted.
+async fn receiver_checks(conn: &mut PgConnection, from: Uuid, to: Uuid) -> ApiResult<()> {
     if to == from {
         return Err(bad("same_owner", "That account owns it already."));
-    }
-    let trusted = to == giver
-        || crate::editors::has_emote_flag(conn, to, giver, EditorPermission::EmoteUpload).await?;
-    if !trusted {
-        return Err(forbidden(
-            "It can go to the one giving it, or to an account they edit with the upload permission on every set.",
-        ));
     }
     let receiver = accounts::get(conn, to)
         .await
         .map_err(db_error)?
         .filter(|a| a.deleted_at.is_none() && a.blocked_at.is_none())
         .ok_or_else(not_found)?;
-    not_restricted(conn, giver, YOU_RESTRICTED).await?;
-    not_restricted(conn, from, OWNER_RESTRICTED).await?;
     if receiver.restricted_at.is_some() {
         return Err(restricted("That account can't take emotes right now."));
     }
     Ok(())
 }
 
-/// Moves the emote, audits `emote.transferred` and tells the receiver (unless it's the owner).
+/// Moves the emote, audits `emote.transferred` (`"via": "emotes.transfer"`) and tells the old and
+/// the new owner (unless one of them did it).
 async fn move_emote(
     conn: &mut PgConnection,
     caller: &Caller,
@@ -204,7 +160,7 @@ async fn move_emote(
         emote.id,
         from,
         Some(json!({ "owner_id": ids::to_text(from), "name": emote.name })),
-        Some(json!({ "owner_id": ids::to_text(to) })),
+        Some(json!({ "owner_id": ids::to_text(to), "via": permissions::EMOTES_TRANSFER })),
     )
     .await?;
     for (who, role) in [(from, "from"), (to, "to")] {
@@ -228,7 +184,24 @@ async fn move_emote(
     Ok(())
 }
 
-/// `transferEmote`: the owner gives the emote away, at once. Nobody else may, editors included.
+/// `403 transfer_staff_only`: nobody but staff with `emotes.transfer` moves an emote (ADR 0038).
+pub fn staff_only() -> ApiError {
+    ApiError::new(StatusCode::FORBIDDEN, "transfer_staff_only", STAFF_ONLY)
+}
+
+/// `410 transfer_requests_retired`: the request flow is gone (ADR 0038).
+pub fn requests_retired() -> ApiError {
+    crate::meta::note(crate::meta::EMOTE_TRANSFER_REQUESTS);
+    ApiError::new(
+        StatusCode::GONE,
+        "transfer_requests_retired",
+        REQUESTS_RETIRED,
+    )
+}
+
+/// `transferEmote`: staff with `emotes.transfer` give any emote to another account, at once
+/// (ADR 0038). Anyone else, the owner included, is refused (`transfer_staff_only`); an emote they
+/// can't see answers `not_found`.
 pub async fn transfer(
     state: &AppState,
     caller: &Caller,
@@ -245,22 +218,20 @@ pub async fn transfer(
     let (Some(_), Some(from)) = (lock, before.owner) else {
         return Err(not_found());
     };
-    if from != caller.account_id {
+    if !holds(&mut tx, caller, permissions::EMOTES_TRANSFER).await? {
         // An emote others can't see yet answers as if it weren't there.
-        if before.state != EmoteState::Approved
-            && !crate::editors::has_emote_flag(
+        let sees = before.state == EmoteState::Approved
+            || from == caller.account_id
+            || crate::editors::has_emote_flag(
                 &mut tx,
                 from,
                 caller.account_id,
                 EditorPermission::EmoteManage,
             )
-            .await?
-        {
-            return Err(not_found());
-        }
-        return Err(forbidden(OWNER_ONLY));
+            .await?;
+        return Err(if sees { staff_only() } else { not_found() });
     }
-    receiver_checks(&mut tx, caller.account_id, from, to).await?;
+    receiver_checks(&mut tx, from, to).await?;
     move_emote(&mut tx, caller, &before, from, to).await?;
     tx.commit().await.map_err(sqlx_error)?;
     let after = row(&mut conn, id).await?.ok_or_else(not_found)?;
@@ -311,191 +282,25 @@ pub async fn withdraw_open(state: &AppState) -> ApiResult<usize> {
     Ok(closed.len())
 }
 
-fn summary(names: &std::collections::HashMap<Uuid, reads::Summary>, id: Uuid) -> AccountSummary {
-    names
-        .get(&id)
-        .map(AccountSummary::from)
-        .unwrap_or_else(|| AccountSummary {
-            id: ids::to_text(id),
-            display_name: String::new(),
-            avatar: None,
-        })
-}
-
-async fn views_of(
-    conn: &mut PgConnection,
-    list: &[Request],
-) -> ApiResult<Vec<EmoteTransferRequest>> {
-    let mut people: Vec<Uuid> = Vec::new();
-    for r in list {
-        people.extend([r.from_account_id, r.to_account_id, r.requested_by]);
-    }
-    let names = reads::summaries(conn, &people).await.map_err(db_error)?;
-    let emote_ids: Vec<Uuid> = list.iter().map(|r| r.emote_id).collect();
-    let rows = reads::emotes(conn, &emote_ids).await.map_err(db_error)?;
-    Ok(list
-        .iter()
-        .map(|r| EmoteTransferRequest {
-            id: ids::to_text(r.id),
-            emote_id: ids::to_text(r.emote_id),
-            emote_name: rows
-                .iter()
-                .find(|e| e.id == r.emote_id)
-                .map(|e| e.name.clone())
-                .unwrap_or_default(),
-            from: summary(&names, r.from_account_id),
-            to: summary(&names, r.to_account_id),
-            requested_by: summary(&names, r.requested_by),
-            state: r.state.into(),
-            created_at: views::time(r.created_at),
-            expires_at: views::time(r.expires_at),
-            resolved_at: r.resolved_at.map(views::time),
-        })
-        .collect())
-}
-
-/// `emoteTransferRequests`: the open requests on your emotes (to answer) and the ones you made,
-/// newest first; of one emote when given.
-pub async fn open_requests(
-    state: &AppState,
-    caller: &Caller,
+/// `emoteTransferRequests`: always empty. Transfer requests are retired (ADR 0038); the history
+/// stays in the audit log.
+pub fn open_requests(
+    _caller: &Caller,
     emote_id: Option<&str>,
 ) -> ApiResult<Vec<EmoteTransferRequest>> {
-    let emote = emote_id
+    emote_id
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(parse_id)
         .transpose()?;
-    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    expire_due(&mut tx, emote).await?;
-    let list = transfers::open_for(&mut tx, caller.account_id, emote)
-        .await
-        .map_err(db_error)?;
-    let out = views_of(&mut tx, &list).await?;
-    tx.commit().await.map_err(sqlx_error)?;
-    Ok(out)
+    crate::meta::note(crate::meta::EMOTE_TRANSFER_REQUESTS);
+    Ok(Vec::new())
 }
 
-/// The request, still open (callers expire due requests first, in their own transaction). Anyone
-/// but its owner and the editor who asked is told it doesn't exist, so request IDs can't be
-/// probed.
-async fn open_request(conn: &mut PgConnection, caller: &Caller, id: Uuid) -> ApiResult<Request> {
-    let r = transfers::lock(conn, id)
-        .await
-        .map_err(db_error)?
-        .filter(|r| caller.account_id == r.from_account_id || caller.account_id == r.requested_by)
-        .ok_or_else(not_found)?;
-    if r.state == TransferState::Pending && r.expires_at <= Utc::now() {
-        return Err(conflict(
-            "expired",
-            "That transfer request expired. The editor can ask again.",
-        ));
-    }
-    if r.state != TransferState::Pending {
-        return Err(conflict(
-            "not_pending",
-            "That transfer request isn't open any more.",
-        ));
-    }
-    Ok(r)
-}
-
-/// `acceptEmoteTransfer`: retired with editor transfer requests (ADR 0014, amendment 2026/11/22).
-/// Every request was withdrawn and no new one can be made, so there is nothing to accept: the same
-/// `forbidden` for every ID, which tells nobody whether a request exists.
-pub async fn accept(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Emote> {
+/// `acceptEmoteTransfer`, `declineEmoteTransfer` and `cancelEmoteTransfer`: retired (ADR 0038).
+/// The same `410 transfer_requests_retired` for every ID, so nothing can be probed.
+pub fn retired_request<T>(state: &AppState, caller: &Caller, id: &str) -> ApiResult<T> {
     parse_id(id)?;
     rate_limited(state, caller)?;
-    Err(forbidden(OWNER_ONLY))
-}
-
-/// `declineEmoteTransfer` (the owner) and `cancelEmoteTransfer` (the editor who asked).
-async fn close(
-    state: &AppState,
-    caller: &Caller,
-    id: &str,
-    as_owner: bool,
-) -> ApiResult<EmoteTransferRequest> {
-    let id = parse_id(id)?;
-    rate_limited(state, caller)?;
-    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    expire_now(&mut conn).await?;
-    let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    let r = open_request(&mut tx, caller, id).await?;
-    let (allowed, to_state, action, tell, kind) = if as_owner {
-        (
-            r.from_account_id == caller.account_id,
-            TransferState::Declined,
-            "emote.transfer_declined",
-            r.requested_by,
-            "emote.transfer_declined",
-        )
-    } else {
-        (
-            r.requested_by == caller.account_id,
-            TransferState::Cancelled,
-            "emote.transfer_cancelled",
-            r.from_account_id,
-            "emote.transfer_cancelled",
-        )
-    };
-    if !allowed {
-        return Err(forbidden(if as_owner {
-            "Only the emote's owner can decline its transfer."
-        } else {
-            "Only the editor who asked can cancel the request."
-        }));
-    }
-    let done = transfers::resolve(&mut tx, r.id, to_state, Some(caller.account_id))
-        .await
-        .map_err(db_error)?
-        .ok_or_else(|| conflict("not_pending", "That transfer request isn't open any more."))?;
-    write(
-        &mut tx,
-        Some(caller.account_id),
-        action,
-        r.emote_id,
-        r.from_account_id,
-        Some(request_json(&r)),
-        Some(json!({ "state": to_state.as_str() })),
-    )
-    .await?;
-    let name = row(&mut tx, r.emote_id)
-        .await?
-        .map(|e| e.name)
-        .unwrap_or_default();
-    if tell != caller.account_id {
-        let p = payload(
-            &mut tx,
-            if as_owner { "editor" } else { "owner" },
-            r.emote_id,
-            &name,
-            (r.from_account_id, r.to_account_id, caller.account_id),
-            Some(r.id),
-        )
-        .await?;
-        crate::account::notify(&mut tx, tell, kind, &p).await?;
-    }
-    let out = views_of(&mut tx, std::slice::from_ref(&done))
-        .await?
-        .remove(0);
-    tx.commit().await.map_err(sqlx_error)?;
-    Ok(out)
-}
-
-pub async fn decline(
-    state: &AppState,
-    caller: &Caller,
-    id: &str,
-) -> ApiResult<EmoteTransferRequest> {
-    close(state, caller, id, true).await
-}
-
-pub async fn cancel(
-    state: &AppState,
-    caller: &Caller,
-    id: &str,
-) -> ApiResult<EmoteTransferRequest> {
-    close(state, caller, id, false).await
+    Err(requests_retired())
 }

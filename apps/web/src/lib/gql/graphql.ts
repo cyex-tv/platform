@@ -452,6 +452,34 @@ export type ApiMeta = {
   limits: ApiLimitsLink;
 };
 
+/** A reviewer's answer to one of the two approvals. */
+export type ApprovalDecision =
+  | 'APPROVE'
+  | 'DENY';
+
+/** Where one of an emote's two approvals stands (ADR 0038): its public listing or its personal use. */
+export type ApprovalState =
+  | 'APPROVED'
+  | 'DENIED'
+  /** Waiting for a reviewer. Every upload starts here. */
+  | 'PENDING';
+
+/** What `reviewApprovals` decides (ADR 0038). Leave a part out to keep it as it is. */
+export type ApprovalsInput = {
+  /**
+   * Default `true` (what the queues send): a part that is no longer pending is skipped, and an
+   * emote with nothing pending left is listed in `failed` as `not_pending`. `false` changes a
+   * decision already made (the edit dialog).
+   */
+  onlyPending?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Approve or deny personal use. Needs `emotes.review_personal`. */
+  personalUse?: InputMaybe<ApprovalDecision>;
+  /** Approve or deny the public listing. Needs `emotes.review`. */
+  publicListing?: InputMaybe<ApprovalDecision>;
+  /** Why, 1 to 500 characters; the owner sees it. Needed with any `DENY`. */
+  reason?: InputMaybe<Scalars['String']['input']>;
+};
+
 /** One audited change (ADR 0010). `before` and `after` are JSON, as text. */
 export type AuditEntry = {
   __typename?: 'AuditEntry';
@@ -845,6 +873,8 @@ export type EffectiveLimit = {
 export type Emote = {
   __typename?: 'Emote';
   animated: Scalars['Boolean']['output'];
+  /** Its public listing and personal use approvals (ADR 0038). */
+  approvals: EmoteApprovals;
   /** How many channels have this emote in their active set right now. */
   channelCount: Scalars['Int']['output'];
   createdAt: Scalars['String']['output'];
@@ -865,6 +895,21 @@ export type Emote = {
    * `PRIVATE`, for clients from before `UNLISTED`.
    */
   visibility: EmoteVisibility;
+};
+
+/** An emote's two approvals (ADR 0038). Each is decided on its own, in review. */
+export type EmoteApprovals = {
+  __typename?: 'EmoteApprovals';
+  /**
+   * Whether it may go in a personal set (shown in chat everywhere its owner chats). A personal
+   * set takes only emotes whose personal use is `APPROVED`.
+   */
+  personalUse: ApprovalState;
+  /**
+   * Whether it may be listed: found by search and browse and shown on its creator's page.
+   * Until it is `APPROVED` the emote is unlisted (unless private).
+   */
+  publicListing: ApprovalState;
 };
 
 /** One file of an emote, served at `{host}/{name}`. */
@@ -899,6 +944,8 @@ export type EmoteFile = {
 export type EmoteFlag =
   /** Retired: NSFW emotes aren't allowed, so this finds nothing. */
   | 'NSFW'
+  /** Approved for personal use (ADR 0038): it can go in a personal set. */
+  | 'PERSONAL_USE'
   /** About twice as wide as tall or more. */
   | 'WIDE'
   /** Overlays the emote before it. */
@@ -1312,8 +1359,8 @@ export type MediaLimits = {
 export type Mutation = {
   __typename?: 'Mutation';
   /**
-   * Retired with editor transfer requests (amendment 2026/11/22): always `forbidden`.
-   * @deprecated Retired: editors can't ask for a transfer any more; only an emote's owner gives it away.
+   * Retired with transfer requests (ADR 0038): always `410 transfer_requests_retired`.
+   * @deprecated Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
    */
   acceptEmoteTransfer: Emote;
   /**
@@ -1335,9 +1382,10 @@ export type Mutation = {
   /** Add a staff note to an account (1 to 2000 characters). Needs `users.notes`. Audited. */
   addStaffNote: StaffNote;
   /**
-   * Approve a pending emote. Needs `emotes.review`. Audited. With `visibility`, it is also
-   * made public, unlisted or private in the same step (for example, approved for personal use
-   * only). `idempotencyKey` (optional UUID): a retry with it within 24 hours answers what the
+   * Approve a pending emote's public listing (ADR 0038; personal use waits in its own queue, or
+   * use `reviewApprovals`). Needs `emotes.review`. Audited. With `visibility`: `UNLISTED`
+   * denies the listing instead (the emote can still be used), `PRIVATE` / `PUBLIC` also set
+   * the private flag. `idempotencyKey` (optional UUID): a retry with it within 24 hours answers what the
    * first approval did instead of `not_pending`.
    */
   approveEmote: Emote;
@@ -1347,8 +1395,8 @@ export type Mutation = {
    */
   assignRole: Scalars['Boolean']['output'];
   /**
-   * Withdraw a transfer request you made. None are open any more (`not_pending`).
-   * @deprecated Retired: editors can't ask for a transfer any more; only an emote's owner gives it away.
+   * Retired with transfer requests (ADR 0038): always `410 transfer_requests_retired`.
+   * @deprecated Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
    */
   cancelEmoteTransfer: EmoteTransferRequest;
   /**
@@ -1407,9 +1455,8 @@ export type Mutation = {
    */
   createWebhook: CreatedWebhook;
   /**
-   * Decline an editor's transfer request of your emote. None are open any more
-   * (`not_pending`).
-   * @deprecated Retired: editors can't ask for a transfer any more; only an emote's owner gives it away.
+   * Retired with transfer requests (ADR 0038): always `410 transfer_requests_retired`.
+   * @deprecated Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
    */
   declineEmoteTransfer: EmoteTransferRequest;
   /**
@@ -1578,6 +1625,17 @@ export type Mutation = {
    */
   restrictAccount: AccountStatus;
   /**
+   * Decide the public listing, personal use or both of up to 100 emotes (ADR 0038): the main
+   * queue's Approve both, each part on its own, the personal queue and the edit dialog. The
+   * listing needs `emotes.review`, personal use `emotes.review_personal`; a `DENY` needs a
+   * `reason` (`bad_approvals`). With `onlyPending` (default true) a part that was already
+   * decided is skipped and an emote with nothing pending left is listed in `failed`
+   * (`not_pending`). All of it commits together, with one audit row (`emote.approved` for the
+   * first listing verdict, else `emote.approvals_changed`) and one notice per emote.
+   * `idempotencyKey` (optional UUID): a retry with it within 24 hours answers the first outcome.
+   */
+  reviewApprovals: BatchOutcome;
+  /**
    * Approve (optionally as `visibility`) or reject (with `reason`) up to 100 pending emotes in
    * one step. All of it commits together, with one audit row and one notice per emote; emotes
    * that aren't pending are left alone and listed in `failed`. Needs `emotes.review`.
@@ -1670,10 +1728,10 @@ export type Mutation = {
   /** Send a `webhook.test` delivery now (once, no retries), even while the webhook is off. */
   testWebhook: WebhookDelivery;
   /**
-   * Give your emote to another account (ADR 0014), at once (`emote.transferred`). Only the
-   * emote's owner may: anyone else, account editors included, gets `forbidden` (amendment
-   * 2026/11/22; nobody can ask for someone else's emote). The receiver is you, or an account
-   * you edit with `EMOTE_UPLOAD` on every set. 60 an hour.
+   * Move an emote to another account at once (ADR 0038, `emote.transferred`). Needs
+   * `emotes.transfer`: anyone else, the owner included, gets `403 transfer_staff_only`.
+   * The receiver must be a live account (not deleted, blocked or restricted). Both the old and
+   * the new owner are notified. 60 an hour.
    */
   transferEmote: Emote;
   /**
@@ -2020,6 +2078,13 @@ export type MutationRestrictAccountArgs = {
   accountId: Scalars['String']['input'];
   blocked?: InputMaybe<Scalars['Boolean']['input']>;
   uploadsBlocked?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type MutationReviewApprovalsArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  ids: Array<Scalars['String']['input']>;
+  input: ApprovalsInput;
 };
 
 
@@ -2772,9 +2837,9 @@ export type Query = {
   /** Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`. */
   emoteNotes: Array<EmoteNote>;
   /**
-   * Open emote transfer requests you take part in (ADR 0014). Editors can't ask for a transfer
-   * any more (amendment 2026/11/22) and the open ones were withdrawn, so this is empty.
-   * @deprecated Retired: editors can't ask for a transfer any more; only an emote's owner gives it away.
+   * Retired with transfer requests (ADR 0038): always empty. Past requests and transfers are in
+   * the audit log.
+   * @deprecated Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
    */
   emoteTransferRequests: Array<EmoteTransferRequest>;
   /**
@@ -2952,9 +3017,10 @@ export type Query = {
    */
   reportQueue: ReportQueue;
   /**
-   * Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
-   * With `filter`: one tab (public, unlisted and private, or resolved), a search by name or
-   * uploader, and an order. A cursor only works for the same filter (`bad_cursor`).
+   * Pending emotes, oldest first. Needs `emotes.review` (the `PERSONAL` tab also takes
+   * `emotes.review_personal`). `perPage` is 1 to 100, default 50. With `filter`: one tab (not
+   * private, private, resolved, or the personal queue, ADR 0038), a search by name or
+   * uploader, a personal-use state, and an order. A cursor only works for the same filter (`bad_cursor`).
    * Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
    * ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
    */
@@ -3620,9 +3686,11 @@ export type RestrictionKind =
 /** How many emotes wait for review, by tab. */
 export type ReviewCounts = {
   __typename?: 'ReviewCounts';
-  /** Pending and unlisted or private. */
+  /** Pending and private (every upload is unlisted until its listing is approved, ADR 0038). */
   limited: Scalars['Int']['output'];
-  /** Pending and public. */
+  /** Personal use pending, emote usable: the personal queue (ADR 0038). */
+  personal: Scalars['Int']['output'];
+  /** Pending and not private: listed once its listing is approved. */
   public: Scalars['Int']['output'];
 };
 
@@ -3644,6 +3712,8 @@ export type ReviewQueue = {
 export type ReviewQueueFilter = {
   /** Newest (or Z) first. Default: oldest first, except `RESOLVED`, latest review first. */
   descending?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Only emotes whose personal use is in this state (ADR 0038), for example `APPROVED`. */
+  personalUse?: InputMaybe<ApprovalState>;
   /** Part of the emote's name or of its uploader's login or display name, any case. */
   search?: InputMaybe<Scalars['String']['input']>;
   sort?: InputMaybe<ReviewSort>;
@@ -3665,11 +3735,16 @@ export type ReviewSort =
 
 /** A part of the review queue. */
 export type ReviewTab =
-  /** Pending and unlisted or private. */
+  /** Pending and private. */
   | 'LIMITED'
   /** Every pending emote. The default. */
   | 'PENDING'
-  /** Pending and public: search shows it once approved. */
+  /**
+   * The personal queue (ADR 0038): personal use pending, and the emote may be used (pending
+   * or approved). Needs `emotes.review_personal` (or `emotes.review`).
+   */
+  | 'PERSONAL'
+  /** Pending and not private: search shows it once its listing is approved. */
   | 'PUBLIC'
   /** Approved or rejected by a reviewer. */
   | 'RESOLVED';

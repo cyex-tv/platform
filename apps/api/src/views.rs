@@ -11,8 +11,8 @@ use cyex_tv_db::reads::{self, EmoteRow, MemberRow, Summary};
 use cyex_tv_db::sets::Set;
 use cyex_tv_db::{DbResult, channels, editors, ids, sets};
 use cyex_tv_shared::model::{
-    AccountSummary, Channel, Emote, EmoteFile, EmoteFlags, EmoteProcessing, EmoteSet, EmoteState,
-    EmoteVisibility, SetEmote, SetSummary, SetVisibility,
+    AccountSummary, Channel, Emote, EmoteApprovals, EmoteFile, EmoteFlags, EmoteProcessing,
+    EmoteSet, EmoteState, EmoteVisibility, SetEmote, SetSummary, SetVisibility,
 };
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -108,6 +108,10 @@ fn emote(
             wide,
         },
         visibility: EmoteVisibility::of(row.private, row.unlisted),
+        approvals: EmoteApprovals {
+            public_listing: row.listing_review,
+            personal_use: row.personal_review,
+        },
         animated: row.animated,
         tags: tags.get(&row.id).cloned().unwrap_or_default(),
         host,

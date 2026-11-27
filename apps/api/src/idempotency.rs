@@ -27,6 +27,7 @@ pub mod op {
     pub const REDEEM_CODE: &str = "redeemCode";
     pub const APPROVE_EMOTE: &str = "approveEmote";
     pub const REVIEW_EMOTES: &str = "reviewEmotes";
+    pub const REVIEW_APPROVALS: &str = "reviewApprovals";
 }
 
 /// Parses a client's key: a UUID in any of its usual spellings.

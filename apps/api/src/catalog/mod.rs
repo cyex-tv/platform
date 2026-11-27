@@ -1404,6 +1404,7 @@ pub async fn clone_set(
             Err(
                 DbError::SetFull
                 | DbError::NotApproved
+                | DbError::PersonalUseNotApproved(_)
                 | DbError::EmoteUnavailable
                 | DbError::NameTaken
                 | DbError::AlreadyInSet,
@@ -2150,6 +2151,11 @@ mod tests {
         for (err, code, status) in [
             (DbError::SetFull, "set_full", StatusCode::CONFLICT),
             (DbError::NotApproved, "not_approved", StatusCode::CONFLICT),
+            (
+                DbError::PersonalUseNotApproved(cyex_tv_shared::model::ApprovalState::Pending),
+                "personal_use_not_approved",
+                StatusCode::CONFLICT,
+            ),
             (DbError::NotFound, "not_found", StatusCode::NOT_FOUND),
             (DbError::LastIdentity, "last_identity", StatusCode::CONFLICT),
             (

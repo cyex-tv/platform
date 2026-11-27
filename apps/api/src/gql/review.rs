@@ -2,8 +2,8 @@
 
 use async_graphql::{Context, Object, Result};
 use cyex_tv_shared::model::{
-    AuditEntry, BatchOutcome, DuplicateCandidate, Emote, EmoteNote, EmoteVisibility, LoginMatch,
-    ReviewQueue, ReviewQueueFilter, ReviewVerdict,
+    ApprovalsInput, AuditEntry, BatchOutcome, DuplicateCandidate, Emote, EmoteNote,
+    EmoteVisibility, LoginMatch, ReviewQueue, ReviewQueueFilter, ReviewVerdict,
 };
 use cyex_tv_shared::permissions;
 
@@ -20,9 +20,10 @@ impl ReviewQuery {
         permissions::ALL.iter().map(|p| (*p).to_owned()).collect()
     }
 
-    /// Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
-    /// With `filter`: one tab (public, unlisted and private, or resolved), a search by name or
-    /// uploader, and an order. A cursor only works for the same filter (`bad_cursor`).
+    /// Pending emotes, oldest first. Needs `emotes.review` (the `PERSONAL` tab also takes
+    /// `emotes.review_personal`). `perPage` is 1 to 100, default 50. With `filter`: one tab (not
+    /// private, private, resolved, or the personal queue, ADR 0038), a search by name or
+    /// uploader, a personal-use state, and an order. A cursor only works for the same filter (`bad_cursor`).
     /// Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
     /// ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
     async fn review_queue(
@@ -115,9 +116,10 @@ pub struct ReviewMutation;
 
 #[Object]
 impl ReviewMutation {
-    /// Approve a pending emote. Needs `emotes.review`. Audited. With `visibility`, it is also
-    /// made public, unlisted or private in the same step (for example, approved for personal use
-    /// only). `idempotencyKey` (optional UUID): a retry with it within 24 hours answers what the
+    /// Approve a pending emote's public listing (ADR 0038; personal use waits in its own queue, or
+    /// use `reviewApprovals`). Needs `emotes.review`. Audited. With `visibility`: `UNLISTED`
+    /// denies the listing instead (the emote can still be used), `PRIVATE` / `PUBLIC` also set
+    /// the private flag. `idempotencyKey` (optional UUID): a retry with it within 24 hours answers what the
     /// first approval did instead of `not_pending`.
     async fn approve_emote(
         &self,
@@ -211,6 +213,42 @@ impl ReviewMutation {
                     reason.as_deref(),
                 )
             },
+        )
+        .await
+        .map_err(api_error)
+    }
+
+    /// Decide the public listing, personal use or both of up to 100 emotes (ADR 0038): the main
+    /// queue's Approve both, each part on its own, the personal queue and the edit dialog. The
+    /// listing needs `emotes.review`, personal use `emotes.review_personal`; a `DENY` needs a
+    /// `reason` (`bad_approvals`). With `onlyPending` (default true) a part that was already
+    /// decided is skipped and an emote with nothing pending left is listed in `failed`
+    /// (`not_pending`). All of it commits together, with one audit row (`emote.approved` for the
+    /// first listing verdict, else `emote.approvals_changed`) and one notice per emote.
+    /// `idempotencyKey` (optional UUID): a retry with it within 24 hours answers the first outcome.
+    async fn review_approvals(
+        &self,
+        ctx: &Context<'_>,
+        ids: Vec<String>,
+        input: ApprovalsInput,
+        idempotency_key: Option<String>,
+    ) -> Result<BatchOutcome> {
+        let caller = caller(ctx)?;
+        let state = state(ctx);
+        let request = serde_json::json!({
+            "ids": ids,
+            "publicListing": input.public_listing.map(|v| format!("{v:?}")),
+            "personalUse": input.personal_use.map(|v| format!("{v:?}")),
+            "reason": input.reason,
+            "onlyPending": input.only_pending,
+        });
+        idempotency::once(
+            state,
+            caller,
+            idempotency::op::REVIEW_APPROVALS,
+            idempotency_key.as_deref(),
+            request,
+            || moderation::review_approvals(state, caller, &ids, &input),
         )
         .await
         .map_err(api_error)

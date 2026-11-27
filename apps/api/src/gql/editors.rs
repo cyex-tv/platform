@@ -78,10 +78,10 @@ impl EditorQuery {
             .map_err(api_error)
     }
 
-    /// Open emote transfer requests you take part in (ADR 0014). Editors can't ask for a transfer
-    /// any more (amendment 2026/11/22) and the open ones were withdrawn, so this is empty.
+    /// Retired with transfer requests (ADR 0038): always empty. Past requests and transfers are in
+    /// the audit log.
     #[graphql(
-        deprecation = "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away."
+        deprecation = "Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
     )]
     async fn emote_transfer_requests(
         &self,
@@ -89,9 +89,7 @@ impl EditorQuery {
         emote_id: Option<String>,
     ) -> Result<Vec<EmoteTransferRequest>> {
         let caller = caller(ctx)?;
-        transfers::open_requests(state(ctx), caller, emote_id.as_deref())
-            .await
-            .map_err(api_error)
+        transfers::open_requests(caller, emote_id.as_deref()).map_err(api_error)
     }
 
     /// The accounts you edit, with what you may do on each.

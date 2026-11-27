@@ -12,7 +12,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
-use cyex_tv_shared::model::{EmoteState, Platform, SetKind, SetVisibility};
+use cyex_tv_shared::model::{ApprovalState, EmoteState, Platform, SetKind, SetVisibility};
 use sqlx::{Connection, FromRow, PgConnection};
 use uuid::Uuid;
 
@@ -399,9 +399,11 @@ struct EmoteForSet {
     name: String,
     zero_width: bool,
     state: EmoteState,
+    personal_review: ApprovalState,
 }
 
-/// Adds an emote to a set, checking capacity, unique names and the emote's state.
+/// Adds an emote to a set, checking capacity, unique names, the emote's state and, for a personal
+/// set, its personal-use approval.
 pub async fn add_member(
     conn: &mut PgConnection,
     set_id: Uuid,
@@ -411,7 +413,7 @@ pub async fn add_member(
     let set = lock_set(&mut tx, set_id).await?;
 
     let emote: EmoteForSet = sqlx::query_as(
-        "SELECT owner_account_id, name, zero_width, state
+        "SELECT owner_account_id, name, zero_width, state, personal_review
          FROM emotes WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(new.emote_id)
@@ -428,6 +430,11 @@ pub async fn add_member(
             }
         }
         EmoteState::Rejected | EmoteState::TakenDown => return Err(DbError::EmoteUnavailable),
+    }
+    // A personal set shows in chat everywhere its owner chats: it takes only emotes approved for
+    // personal use (ADR 0038). Members added before that rule stay.
+    if set.kind == SetKind::Personal && emote.personal_review != ApprovalState::Approved {
+        return Err(DbError::PersonalUseNotApproved(emote.personal_review));
     }
 
     if count(&mut tx, set_id).await? >= i64::from(set.capacity) {

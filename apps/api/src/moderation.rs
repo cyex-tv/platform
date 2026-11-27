@@ -17,9 +17,10 @@ use cyex_tv_db::emotes::{self, EmotePatch};
 use cyex_tv_db::{accounts, audit, ids, reads, sets, staff};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AuditEntry, BatchFailure, BatchOutcome, EditorPermission, Emote, EmoteFlagsInput, EmoteNote,
-    EmotePage, EmoteState, EmoteVisibility, EventType, ReviewCounts, ReviewQueue,
-    ReviewQueueFilter, ReviewSort, ReviewTab, ReviewVerdict, UpdateEmote,
+    ApprovalDecision, ApprovalState, ApprovalsInput, AuditEntry, BatchFailure, BatchOutcome,
+    EditorPermission, Emote, EmoteFlagsInput, EmoteNote, EmotePage, EmoteState, EmoteVisibility,
+    EventType, ReviewCounts, ReviewQueue, ReviewQueueFilter, ReviewSort, ReviewTab, ReviewVerdict,
+    UpdateEmote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -325,22 +326,24 @@ pub async fn review_queue(
     after: Option<&str>,
 ) -> ApiResult<ReviewQueue> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    require_any(&mut conn, caller, &[permissions::EMOTES_REVIEW]).await?;
     let paged = Paged::ModerationQueue.paging(page, per_page);
     let query = QueueRead::from_filter(filter.cloned().unwrap_or_default())?;
+    require_any(&mut conn, caller, queue_permissions(query.tab)).await?;
     let read = reads::QueueQuery {
         tab: query.tab,
         search: query.search.as_deref(),
         uploader: query.uploader,
+        personal_use: query.personal_use,
         sort: query.sort,
         descending: query.descending,
     };
-    // The cursor is bound to the tab, search, uploader and order.
+    // The cursor is bound to the tab, search, uploader, personal-use state and order.
     let scope = format!(
-        "reviewQueue|{:?}|{}|{:?}|{:?}|{}",
+        "reviewQueue|{:?}|{}|{:?}|{:?}|{:?}|{}",
         read.tab,
         read.search.unwrap_or_default(),
         read.uploader,
+        read.personal_use,
         read.sort,
         read.descending
     );
@@ -361,9 +364,23 @@ pub async fn review_queue(
         counts: ReviewCounts {
             public: u64::try_from(counts.public).unwrap_or(0),
             limited: u64::try_from(counts.limited).unwrap_or(0),
+            personal: u64::try_from(counts.personal).unwrap_or(0),
         },
         next: crate::cursor::next(&scope, page.next.as_ref()),
     })
+}
+
+/// Who may read a part of the queue: `emotes.review`, and for the personal queue
+/// `emotes.review_personal` too (ADR 0038).
+pub(crate) fn queue_permissions(tab: reads::QueueTab) -> &'static [&'static str] {
+    if tab == reads::QueueTab::Personal {
+        &[
+            permissions::EMOTES_REVIEW,
+            permissions::EMOTES_REVIEW_PERSONAL,
+        ]
+    } else {
+        &[permissions::EMOTES_REVIEW]
+    }
 }
 
 /// A review queue read with the defaults filled in.
@@ -372,6 +389,7 @@ pub(crate) struct QueueRead {
     pub(crate) tab: reads::QueueTab,
     pub(crate) search: Option<String>,
     uploader: Option<Uuid>,
+    personal_use: Option<ApprovalState>,
     sort: reads::QueueSort,
     descending: bool,
 }
@@ -408,9 +426,11 @@ impl QueueRead {
                 ReviewTab::Public => reads::QueueTab::Public,
                 ReviewTab::Limited => reads::QueueTab::Limited,
                 ReviewTab::Resolved => reads::QueueTab::Resolved,
+                ReviewTab::Personal => reads::QueueTab::Personal,
             },
             search,
             uploader,
+            personal_use: f.personal_use,
             sort: match sort {
                 ReviewSort::Uploaded => reads::QueueSort::Uploaded,
                 ReviewSort::Reviewed => reads::QueueSort::Reviewed,
@@ -636,23 +656,27 @@ async fn review_in(
             "Only pending emotes can be approved or rejected.",
         ));
     }
-    // Approving as unlisted or private (or public again) sets the visibility in the same step.
+    // Approving decides the public listing (ADR 0038): approved, unless `UNLISTED` was asked for
+    // (the old "approve as unlisted"), which denies it; `PRIVATE` / `PUBLIC` set the private flag
+    // in the same step.
     let was = EmoteVisibility::of(before.private, before.unlisted);
-    let now = visibility.unwrap_or(was);
-    if now != was {
-        let (private, unlisted) = now.flags();
+    if to == EmoteState::Approved
+        && let Some(v) = visibility
+    {
         emotes::update(
             &mut *conn,
             id,
             &EmotePatch {
-                private: Some(private),
-                unlisted: Some(unlisted),
+                private: Some(v == EmoteVisibility::Private),
+                listing_review: (v == EmoteVisibility::Unlisted).then_some(ApprovalState::Denied),
                 ..EmotePatch::default()
             },
         )
         .await
         .map_err(db_error)?;
     }
+    let after = row(&mut *conn, id).await?.ok_or_else(not_found)?;
+    let now = EmoteVisibility::of(after.private, after.unlisted);
     let action = match to {
         EmoteState::Approved => "emote.approved",
         _ => "emote.rejected",
@@ -666,8 +690,19 @@ async fn review_in(
             action,
             target_kind: "emote",
             target_id: &ids::to_text(id),
-            before: Some(json!({ "state": before.state, "visibility": was })),
-            after: Some(json!({ "state": to, "reason": why, "visibility": now })),
+            before: Some(json!({
+                "state": before.state,
+                "visibility": was,
+                "public_listing": before.listing_review,
+                "personal_use": before.personal_review,
+            })),
+            after: Some(json!({
+                "state": to,
+                "reason": why,
+                "visibility": now,
+                "public_listing": after.listing_review,
+                "personal_use": after.personal_review,
+            })),
         },
         before.owner.filter(|_| to == EmoteState::Approved),
     )
@@ -677,7 +712,13 @@ async fn review_in(
         let (kind, payload) = match to {
             EmoteState::Approved => (
                 "emote.approved",
-                json!({ "emote_id": ids::to_text(id), "name": before.name, "visibility": now }),
+                json!({
+                    "emote_id": ids::to_text(id),
+                    "name": before.name,
+                    "visibility": now,
+                    "public_listing": after.listing_review,
+                    "personal_use": after.personal_review,
+                }),
             ),
             _ => (
                 "emote.rejected",
@@ -688,6 +729,194 @@ async fn review_in(
     }
     // Sets that held it pending show it now; a rejected one stays hidden, so nothing to tell.
     if to == EmoteState::Approved {
+        announce(&mut *conn, id, EventType::EmoteUpdated).await?;
+    }
+    Ok(())
+}
+
+fn approval_of(d: ApprovalDecision) -> ApprovalState {
+    match d {
+        ApprovalDecision::Approve => ApprovalState::Approved,
+        ApprovalDecision::Deny => ApprovalState::Denied,
+    }
+}
+
+/// `reviewApprovals` (ADR 0038): decides the public listing, personal use or both of up to
+/// [`BATCH_MAX`] emotes in one transaction. The listing needs `emotes.review`, personal use
+/// `emotes.review_personal`; a denial needs a reason. With `onlyPending` (the default) parts that
+/// are no longer pending are skipped and an emote with nothing pending left is listed in
+/// `failed` (`not_pending`), as are rejected, taken-down and missing ones. One audit row and one
+/// notice per emote changed.
+pub async fn review_approvals(
+    state: &AppState,
+    caller: &Caller,
+    raw_ids: &[String],
+    input: &ApprovalsInput,
+) -> ApiResult<BatchOutcome> {
+    let wanted = batch_ids(raw_ids)?;
+    if input.public_listing.is_none() && input.personal_use.is_none() {
+        return Err(bad(
+            "bad_approvals",
+            "Decide the public listing, personal use, or both.",
+        ));
+    }
+    let denies = input.public_listing == Some(ApprovalDecision::Deny)
+        || input.personal_use == Some(ApprovalDecision::Deny);
+    let given = input
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|r| !r.is_empty());
+    let why = match given {
+        Some(r) => Some(reason(r)?),
+        None if denies => {
+            return Err(bad(
+                "bad_approvals",
+                "A denial needs a reason of 1 to 500 characters; the uploader sees it.",
+            ));
+        }
+        None => None,
+    };
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    if input.public_listing.is_some() {
+        require_any(&mut tx, caller, &[permissions::EMOTES_REVIEW]).await?;
+    }
+    if input.personal_use.is_some() {
+        require_any(&mut tx, caller, &[permissions::EMOTES_REVIEW_PERSONAL]).await?;
+    }
+    let verdict = Verdict {
+        listing: input.public_listing.map(approval_of),
+        personal: input.personal_use.map(approval_of),
+        why: why.as_deref(),
+        only_pending: input.only_pending.unwrap_or(true),
+    };
+    let mut out = BatchOutcome::default();
+    for (raw, id) in wanted {
+        let Some(id) = id else {
+            out.failed.push(batch_failure(&raw, &not_found()));
+            continue;
+        };
+        match approvals_in(&mut tx, caller, id, &verdict).await {
+            Ok(()) => out.done.push(ids::to_text(id)),
+            Err(err) if err.code == "not_pending" || err.code == "not_found" => {
+                out.failed.push(batch_failure(&raw, &err));
+            }
+            Err(err) => return Err(err),
+        }
+    }
+    tx.commit().await.map_err(sqlx_error)?;
+    Ok(out)
+}
+
+/// What one `reviewApprovals` call decides.
+struct Verdict<'a> {
+    listing: Option<ApprovalState>,
+    personal: Option<ApprovalState>,
+    why: Option<&'a str>,
+    only_pending: bool,
+}
+
+/// One emote of [`review_approvals`], inside the caller's transaction. Nothing is written before
+/// every check has passed, so a `not_pending` leaves the batch's other writes alone.
+async fn approvals_in(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    id: Uuid,
+    v: &Verdict<'_>,
+) -> ApiResult<()> {
+    emotes::lock(&mut *conn, id)
+        .await
+        .map_err(db_error)?
+        .ok_or_else(not_found)?;
+    let before = row(&mut *conn, id).await?.ok_or_else(not_found)?;
+    let not_pending = |msg: &str| ApiError::new(StatusCode::CONFLICT, "not_pending", msg);
+    if !matches!(before.state, EmoteState::Pending | EmoteState::Approved) {
+        return Err(not_pending(
+            "This emote was rejected or taken down; its approvals can't change.",
+        ));
+    }
+    let listing_pending = before.state == EmoteState::Pending;
+    let listing = v.listing.filter(|to| {
+        if v.only_pending {
+            listing_pending
+        } else {
+            listing_pending || *to != before.listing_review
+        }
+    });
+    let personal = v.personal.filter(|to| {
+        if v.only_pending {
+            before.personal_review == ApprovalState::Pending
+        } else {
+            *to != before.personal_review
+        }
+    });
+    if listing.is_none() && personal.is_none() {
+        if v.only_pending {
+            return Err(not_pending(
+                "Someone already decided this: nothing on it is pending any more.",
+            ));
+        }
+        // Asked for what it already is: nothing to write.
+        return Ok(());
+    }
+    if let Some(to) = listing {
+        emotes::decide_listing(&mut *conn, id, to, caller.account_id, v.why, false)
+            .await
+            .map_err(db_error)?
+            .ok_or_else(not_found)?;
+    }
+    if let Some(to) = personal {
+        emotes::decide_personal(&mut *conn, id, to, caller.account_id, v.why, false)
+            .await
+            .map_err(db_error)?
+            .ok_or_else(not_found)?;
+    }
+    let after = row(&mut *conn, id).await?.ok_or_else(not_found)?;
+    // The first listing verdict is the emote's approval (on the owner's public activity feed as
+    // "uploaded", as before); everything after is a change of its approvals.
+    let first = listing.is_some() && listing_pending;
+    let action = if first {
+        "emote.approved"
+    } else {
+        "emote.approvals_changed"
+    };
+    let snap = |r: &reads::EmoteRow| {
+        json!({
+            "state": r.state,
+            "visibility": EmoteVisibility::of(r.private, r.unlisted),
+            "public_listing": r.listing_review,
+            "personal_use": r.personal_review,
+        })
+    };
+    let mut after_json = snap(&after);
+    after_json["reason"] = json!(v.why);
+    audit::write_for(
+        &mut *conn,
+        &audit::NewEntry {
+            actor: Some(caller.account_id),
+            action,
+            target_kind: "emote",
+            target_id: &ids::to_text(id),
+            before: Some(snap(&before)),
+            after: Some(after_json),
+        },
+        before.owner.filter(|_| first),
+    )
+    .await
+    .map_err(db_error)?;
+    if let Some(owner) = before.owner {
+        let payload = json!({
+            "emote_id": ids::to_text(id),
+            "name": before.name,
+            "visibility": EmoteVisibility::of(after.private, after.unlisted),
+            "public_listing": after.listing_review,
+            "personal_use": after.personal_review,
+            "reason": v.why,
+        });
+        crate::account::notify(&mut *conn, owner, action, &payload).await?;
+    }
+    if after.state == EmoteState::Approved {
         announce(&mut *conn, id, EventType::EmoteUpdated).await?;
     }
     Ok(())
@@ -875,21 +1104,17 @@ pub async fn update(
                 "`visibility` and `private` say different things.",
             )
         })?;
-    if visibility != current
-        && (visibility == EmoteVisibility::Unlisted || current == EmoteVisibility::Unlisted)
-        && !edit_any
-        && !has(&held, permissions::EMOTES_FLAGS)
-    {
-        return Err(if current == EmoteVisibility::Unlisted {
-            bad(
-                "bad_visibility",
-                "A moderator took this emote off the listings. Only staff can change that.",
-            )
-        } else {
-            crate::upload::unlisted_staff_only()
-        });
+    // Owners and editors choose private or not (ADR 0038): the listing is decided in review, so
+    // `PUBLIC` means "not private" and asking for `UNLISTED` is refused. Staff with
+    // `emotes.flags` or `emotes.edit_any` set the listing with it, as `setEmoteFlags` does.
+    let staff_listing = edit_any || has(&held, permissions::EMOTES_FLAGS);
+    if input.visibility == Some(EmoteVisibility::Unlisted) && !staff_listing {
+        return Err(crate::upload::unlisted_staff_only());
     }
-    let (private, unlisted) = visibility.flags();
+    let private = visibility == EmoteVisibility::Private;
+    let listing_review = (staff_listing && visibility != current)
+        .then(|| listing_for(visibility, &before))
+        .flatten();
     let old_tags = emotes::tags(&mut tx, id).await.map_err(db_error)?;
     let renamed = name.is_some_and(|n| n != before.name);
     let retagged = tags.as_ref().is_some_and(|t| {
@@ -906,8 +1131,9 @@ pub async fn update(
             name,
             zero_width: input.zero_width,
             private: Some(private),
-            unlisted: Some(unlisted),
+            unlisted: None,
             nsfw: None,
+            listing_review,
         },
     )
     .await
@@ -965,6 +1191,19 @@ pub async fn update(
     build(state, &mut conn, &after).await
 }
 
+/// The listing approval a staff visibility change means (ADR 0038): `PUBLIC` approves the listing,
+/// `UNLISTED` denies it, `PRIVATE` leaves it. A pending emote's listing waits for its review.
+fn listing_for(visibility: EmoteVisibility, before: &reads::EmoteRow) -> Option<ApprovalState> {
+    if before.state != EmoteState::Approved {
+        return None;
+    }
+    match visibility {
+        EmoteVisibility::Public => Some(ApprovalState::Approved),
+        EmoteVisibility::Unlisted => Some(ApprovalState::Denied),
+        EmoteVisibility::Private => None,
+    }
+}
+
 /// Staff with `emotes.flags` (or `emotes.edit_any`) change an emote's flags after review, without
 /// being its owner (ADR 0024): its visibility (taking a public emote off the listings makes it
 /// unlisted; private) and zero-width. NSFW emotes aren't allowed: `nsfw: true` is
@@ -1002,13 +1241,12 @@ pub async fn set_flags(
         tx.commit().await.map_err(sqlx_error)?;
         return build(state, &mut conn, &before).await;
     }
-    let (private, unlisted) = visibility.flags();
     emotes::update(
         &mut tx,
         id,
         &EmotePatch {
-            private: Some(private),
-            unlisted: Some(unlisted),
+            private: Some(visibility == EmoteVisibility::Private),
+            listing_review: listing_for(visibility, &before).filter(|_| visibility != was),
             nsfw: Some(nsfw),
             zero_width: Some(zero_width),
             ..EmotePatch::default()
@@ -1017,6 +1255,7 @@ pub async fn set_flags(
     .await
     .map_err(db_error)?;
     let after = row(&mut tx, id).await?.ok_or_else(not_found)?;
+    let visibility = EmoteVisibility::of(after.private, after.unlisted);
     record_audit(
         &mut tx,
         caller.account_id,
