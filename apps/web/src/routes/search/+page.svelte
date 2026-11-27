@@ -16,6 +16,7 @@
   import Segmented from '$lib/components/Segmented.svelte';
   import Popover from '$lib/components/Popover.svelte';
   import BrowseFilters from '$lib/components/browse/BrowseFilters.svelte';
+  import WindowMenu from '$lib/components/browse/WindowMenu.svelte';
   import BrowseGrid from '$lib/components/browse/BrowseGrid.svelte';
   import { personal } from '$lib/personal/lists.svelte';
   import SelectBar from '$lib/components/browse/SelectBar.svelte';
@@ -37,12 +38,10 @@
     change,
     parse,
     toSearch,
-    topTags,
     without,
     type Active,
     type Browse,
     type Sort,
-    type Window,
   } from '$lib/components/browse/params';
   import { clean, count, iso } from '$lib/format';
   import { SEARCH } from '$lib/queries';
@@ -87,7 +86,6 @@
   // What you hid for yourself ("Hide for me") drops out here; the API answers the same for everyone.
   $effect(() => personal.ensure());
   const shown = $derived(personal.visible(loaded));
-  const tags = $derived(topTags(loaded, 12, view.tags));
   const switching = $derived(!!navigating.to);
   const trending = $derived(view.sort === 'trending');
 
@@ -97,7 +95,6 @@
     { value: 'trending', label: 'Trending', icon: 'trending' },
     { value: 'new', label: 'New', icon: 'sparkles' },
   ]);
-  const windows = WINDOWS.map((w) => ({ value: w.value, label: w.short }));
   const windowLabel = $derived(WINDOWS.find((w) => w.value === view.window)?.label.toLowerCase() ?? '');
 
   // ---- Search field: the URL follows the typing (replaced, not pushed, after a short pause).
@@ -311,7 +308,8 @@
       <div class="sorts">
         <Segmented label="Sort" size="s" compact options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
         {#if trending}
-          <Segmented label="Trending window" size="s" options={windows} value={view.window} onchange={(v: Window) => go({ window: v }, true)} />
+          <span class="vr" aria-hidden="true"></span>
+          <WindowMenu value={view.window} onchange={(v) => go({ window: v }, true)} />
         {/if}
       </div>
       <div class="find">{@render field()}</div>
@@ -322,7 +320,7 @@
               <Icon name="sliders" size={15} />Filters{#if filters.length}<span class="n">{filters.length}</span>{/if}
             </button>
           {/snippet}
-          <BrowseFilters {view} {tags} failed={!!data.error} onchange={(o) => go(o)} />
+          <BrowseFilters {view} failed={!!data.error} onchange={(o) => go(o)} />
           {#snippet footer()}
             <button class="btn btn-s" type="button" disabled={!filters.length} onclick={() => go({ ...CLEARED })}>Reset</button>
           {/snippet}
@@ -455,7 +453,7 @@
   .hold span { display: block; height: 40px; border-radius: var(--radius-btn); }
   .invite { margin: 0; font-size: var(--t-small); color: var(--muted); }
   .invite a { color: var(--accent-text); font-weight: 600; }
-  .tgt { height: 34px; max-width: 260px; min-width: 0; }
+  .tgt { height: var(--tb-h); max-width: 260px; min-width: 0; }
   .tgt bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
   .tgt .tw { color: var(--muted); font-weight: 500; }
   .tgt :global(svg) { flex: none; color: var(--dim); }
@@ -469,11 +467,16 @@
   .total { margin: 0; font-size: var(--t-nav); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
   /* Toolbar: sort (and Trending's window), the search field, then Filters, Select and the target set. */
-  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 16px; }
+  /* One control height in the bar: the field, Filters and the target button are --tb-h tall. */
+  .toolbar { --tb-h: 34px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 16px; }
   .sorts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
   .find { flex: 1 1 120px; min-width: 120px; max-width: 420px; }
+  .find :global(.search input) { height: var(--tb-h); }
+  /* Touch: inputs are 44px tall (app.css), so the buttons beside the field are too. */
+  @media (pointer: coarse) { .toolbar { --tb-h: 44px; } }
+  .vr { width: 1px; height: 18px; margin: 0 4px; background: var(--border-strong); }
   .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-left: auto; min-width: 0; }
-  .filt { height: 34px; }
+  .filt { height: var(--tb-h); }
   .filt :global(svg) { color: var(--dim); }
   .n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-pill);
     background: var(--accent-dim); color: var(--accent-text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }

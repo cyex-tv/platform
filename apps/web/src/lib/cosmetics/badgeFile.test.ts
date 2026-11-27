@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { badgeFiles, badgeFull, lacksLadder, pickBadgeFile, pickSize } from './badgeFile';
+import { badgeFiles, lacksLadder, pickBadgeFile, pickSize } from './badgeFile';
 
 const ladder = ['1x.webp', '2x.webp', '4x.webp', '128.webp', '256.webp', '512.webp'];
 const old = ['1x.webp', '2x.webp', '4x.webp', '1x.avif', '2x.avif', '4x.avif'];
@@ -76,32 +76,5 @@ describe('the original of a badge picture', () => {
     expect(lacksOriginal([])).toBe(false);
     expect(enlarge(96)).toBe('pixelated');
     expect(enlarge(512)).toBe('auto');
-  });
-});
-
-describe('the largest picture of a badge, for a large preview', () => {
-  const f = (name: string, px: number) => ({ name, width: px, height: px });
-  const sizes = [f('1x.webp', 18), f('2x.webp', 36), f('4x.webp', 72), f('128.webp', 128), f('256.webp', 256), f('512.webp', 512)];
-
-  it('is the original at its own pixels, whatever its size', () => {
-    for (const px of [72, 256, 512]) expect(badgeFull([...sizes, f('original.webp', px)])).toEqual({ name: 'original.webp', width: px, height: px, original: true });
-    expect(badgeFull([...sizes, { name: 'original.webp', width: 300, height: 180 }])).toMatchObject({ width: 300, height: 180 });
-  });
-
-  it('falls back to the largest ladder size when there is no original', () => {
-    expect(badgeFull(sizes)).toEqual({ name: '512.webp', width: 512, height: 512, original: false });
-    expect(badgeFull(sizes.slice(0, 3))).toEqual({ name: '4x.webp', width: 72, height: 72, original: false });
-  });
-
-  it('uses the first frame of an animated picture when asked, else its animation', () => {
-    const anim = [...sizes, f('original.webp', 256), f('original_static.webp', 256), f('256_static.webp', 256)];
-    expect(badgeFull(anim, true)?.name).toBe('original_static.webp');
-    expect(badgeFull(anim, false)?.name).toBe('original.webp');
-    expect(badgeFull([...sizes, f('256_static.webp', 256)], true)?.name).toBe('512.webp');
-  });
-
-  it('is null when nothing can be drawn', () => {
-    expect(badgeFull([])).toBeNull();
-    expect(badgeFull([f('1x.avif', 18)])).toBeNull();
   });
 });

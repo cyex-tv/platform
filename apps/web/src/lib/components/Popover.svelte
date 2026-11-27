@@ -19,6 +19,11 @@
   // to the first item, ↑ ↓ Home End move between the items (the content marks them
   // role="menuitem"), Escape closes it and returns focus to the trigger, and ↓ on the trigger opens it.
   //
+  // `hover` (the account menu): a mouse pointer over the trigger opens it after a short delay (so
+  // passing over doesn't flicker) and leaving trigger and panel closes it after a small grace;
+  // clicks, keys and touch work as before. Opened by hover, it doesn't take focus, and a click on
+  // the trigger then keeps it open instead of closing it.
+  //
   // Whatever the kind, the panel keeps inside the window: it opens on the side with more room
   // and shrinks (its body scrolls) to the room there is.
   //
@@ -37,13 +42,16 @@
     align?: 'start' | 'end';
     width?: string;
     sheet?: boolean;
+    hover?: boolean;
+    /** Keep room for the scrollbar, so content doesn't shift when a long list starts to scroll. */
+    stable?: boolean;
     kind?: 'dialog' | 'disclosure' | 'menu';
     onclose?: () => void;
     trigger: Snippet<[Record<string | symbol, unknown>]>;
     children: Snippet;
     footer?: Snippet;
   };
-  let { label, open = $bindable(false), align = 'start', width = '320px', sheet = false, kind = 'dialog', onclose, trigger, children, footer }: Props =
+  let { label, open = $bindable(false), align = 'start', width = '320px', sheet = false, hover = false, stable = false, kind = 'dialog', onclose, trigger, children, footer }: Props =
     $props();
 
   const id = $props.id();
@@ -58,8 +66,15 @@
 
   const asSheet = $derived(sheet && phone);
 
+  const HOVER_IN = 120;
+  const HOVER_OUT = 260;
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  let byHover = false;
+
   function close(refocus = false) {
+    clearTimeout(hoverTimer);
     if (!open) return;
+    byHover = false;
     open = false;
     onclose?.();
     if (refocus) triggerEl?.focus();
@@ -69,7 +84,11 @@
     'aria-expanded': open,
     'aria-controls': open ? id : undefined, // only while the panel exists
     'aria-haspopup': kind === 'dialog' ? 'dialog' : kind === 'menu' ? 'menu' : undefined,
-    onclick: () => (open ? close() : (open = true)),
+    onclick: () => {
+      if (open && byHover) byHover = false; // hover opened it: a click keeps it
+      else if (open) close();
+      else open = true;
+    },
     onkeydown: (e: KeyboardEvent) => {
       if (kind === 'menu' && !open && e.key === 'ArrowDown') {
         e.preventDefault();
@@ -111,6 +130,7 @@
     }
     place(true);
     if (kind === 'disclosure') return;
+    if (byHover) return;
     if (kind === 'menu') {
       items()[0]?.focus({ preventScroll: true });
       return;
@@ -144,7 +164,7 @@
     top = Math.round(Math.max(edge, Math.min(above ? t.top - 6 - h : t.bottom + 6, innerHeight - edge - h)));
   }
 
-  const items = () => [...(panel?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].filter((el) => el.offsetParent !== null);
+  const items = () => [...(panel?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])].filter((el) => el.offsetParent !== null);
   function menuKeys(e: KeyboardEvent) {
     const list = items();
     if (!list.length) return;
@@ -168,6 +188,24 @@
   function onpointerdown(e: PointerEvent) {
     if (open && !asSheet && !root.contains(e.target as Node)) close();
   }
+  function onpointerenter(e: PointerEvent) {
+    if (!hover || asSheet || e.pointerType !== 'mouse') return;
+    clearTimeout(hoverTimer);
+    if (open) return;
+    hoverTimer = setTimeout(() => {
+      byHover = true;
+      open = true;
+    }, HOVER_IN);
+  }
+  function onpointerleave(e: PointerEvent) {
+    if (!hover || e.pointerType !== 'mouse') return;
+    clearTimeout(hoverTimer);
+    if (!open || !byHover) return;
+    hoverTimer = setTimeout(() => {
+      if (byHover) close();
+    }, HOVER_OUT);
+  }
+  $effect(() => () => clearTimeout(hoverTimer));
   function onfocusout(e: FocusEvent) {
     const next = e.relatedTarget as Node | null;
     if (open && !asSheet && next && !root.contains(next)) close();
@@ -176,7 +214,7 @@
 
 <svelte:document {onpointerdown} />
 
-<span class="pop-root" bind:this={root} {onkeydown} {onfocusout} role="presentation">
+<span class="pop-root" bind:this={root} {onkeydown} {onfocusout} {onpointerenter} {onpointerleave} role="presentation">
   {@render trigger(triggerProps)}
   {#if asSheet}
     <BottomSheet bind:open {label} onclose={() => onclose?.()} {footer}>{@render children()}</BottomSheet>
@@ -197,7 +235,7 @@
       in:pop
       out:pop={{ duration: 100 }}
     >
-      <div class="pop-body">{@render children()}</div>
+      <div class="pop-body" class:stable>{@render children()}</div>
       {#if footer}<div class="pop-foot">{@render footer()}</div>{/if}
     </div>
   {/if}
@@ -216,6 +254,7 @@
   .start.above { transform-origin: 0 100%; }
   .end.above { transform-origin: 100% 100%; }
   .pop-body { padding: 8px; overflow-y: auto; overscroll-behavior: contain; }
+  .pop-body.stable { scrollbar-gutter: stable; }
   .pop-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); }
   @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .pop { border-color: var(--muted); } }
 </style>
