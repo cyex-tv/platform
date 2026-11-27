@@ -162,7 +162,7 @@
 
 <PageHead title="Activity" line={full ? 'Changes to the sets, emotes, cosmetics and editors, newest first.' : 'The latest 100 changes to the sets, emotes, cosmetics and editors, newest first.'} />
 
-<div class="bar" role="group" aria-label="Filter activity">
+<div class="bar ui-compact" role="group" aria-label="Filter activity">
   <div class="groups" class:fade-start={fadeStart} class:fade-end={fadeEnd} bind:this={strip}><Segmented label="Show" size="s" options={GROUPS} value={group} onchange={(v) => set({ k: v === 'all' ? null : v })} /></div>
   <UserFilter id="activity-by" label="By" value={actor} onchange={(id) => set({ by: id || null })} top={topActors} {topKey}
     pinned={owner} fallback={editorPeople} flag={flagOf} name={actor === accountId ? name : null} />

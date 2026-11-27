@@ -316,7 +316,6 @@
   .act { flex: 1 1 160px; width: auto; max-width: 240px; }
   .date { width: 128px; }
   .f :global(.date), .f :global(.uf) { width: 100%; }
-  .filters :is(a.ui-btn, button.ui-btn) { height: 34px; }
   .filters select.ui-input { padding-block: 0; }
   .log td { vertical-align: middle; }
 

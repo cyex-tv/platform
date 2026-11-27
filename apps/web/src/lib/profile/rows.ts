@@ -142,13 +142,16 @@ export function ownerTabs(accountId: string, r: Relation, current: SectionKey | 
 }
 
 /**
- * The profile's tab row: the public rows, then the off-row section you are on (Overview, Active
- * emotes, Favourites), then the owner's own tabs. Exactly one tab is current.
+ * The profile's tab row: the owner's Overview first (always), the public rows, then the off-row
+ * section you are on (Active emotes, Favourites), then the owner's own tabs. Exactly one tab is current.
  */
 export function profileTabs(accountId: string, r: Relation, section: SectionKey, path: string, activity: boolean): RailItem[] {
-  const extra = stripExtra(path, section);
+  // Overview is the owner's own dashboard: a tab of its own, first, wherever they came from.
+  const overview: RailItem[] = r.mine ? [{ href: sectionHref(accountId, 'overview'), label: LABEL.overview, icon: ICON.overview, current: section === 'overview' }] : [];
+  const extra = stripExtra(path, section === 'overview' ? null : section);
   const own = ownerTabs(accountId, r, section);
-  return [...stripTabs(profileRail(accountId, section, activity), extra), ...own];
+  const rest = stripTabs(profileRail(accountId, section, activity), extra);
+  return [...overview, ...rest, ...own];
 }
 
 /** Your notifications: the owner-only tab on your profile (the old /me/notifications opens it). */

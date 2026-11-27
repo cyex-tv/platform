@@ -88,7 +88,7 @@
 
 <style>
   /* As tall as the toolbar's other controls, its text the same size: one line, one centre. */
-  .ui-btn.trig { gap: 6px; height: 34px; font-size: var(--t-small); font-variant-numeric: tabular-nums; }
+  .ui-btn.trig { gap: 6px; height: var(--ctl-h, 34px); font-size: var(--t-small); font-variant-numeric: tabular-nums; }
   .trig :global(svg) { color: var(--muted); }
   .pop { display: grid; gap: 8px; padding: 12px; }
   .pop-title { margin: 0; font-size: var(--t-label, .7rem); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
@@ -108,7 +108,6 @@
   @media (max-width: 719.98px) {
     .preset { min-height: 44px; }
     .row input { font-size: 16px; min-height: 44px; }
-    .ui-btn.trig { height: 44px; }
     .ui-btn.go { min-height: 44px; }
     /* The sheet's own head already says Date range. */
     .pop-title { display: none; }

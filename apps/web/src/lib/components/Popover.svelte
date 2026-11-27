@@ -244,10 +244,12 @@
 <style>
   .pop-root { position: relative; display: inline-flex; }
   /* Top layer (popover="manual"): reset the UA popover box, place it with fixed coordinates. */
-  .pop { position: fixed; inset: auto; margin: 0; padding: 0; overflow: visible; z-index: var(--z-pop);
+  /* A popover sits inside a compact filter row in the markup but is not part of it: its controls are full size. */
+  .pop { --ctl-h: 40px; position: fixed; inset: auto; margin: 0; padding: 0; overflow: visible; z-index: var(--z-pop);
     max-width: calc(100vw - 32px); max-height: min(70dvh, 560px); display: flex; flex-direction: column;
     border: 1px solid var(--border-strong); border-radius: var(--radius-card); background: var(--elevated);
     box-shadow: var(--shadow-pop); color: var(--text); text-align: left; }
+  @media (pointer: coarse) { .pop { --ctl-h: 44px; } }
   .pop:focus { outline: none; }
   .start { transform-origin: 0 0; }
   .end { transform-origin: 100% 0; }

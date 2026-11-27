@@ -33,7 +33,7 @@
    height is the tool's (40px, the web floor; 32px small with a 40px hit area) where .btn is the
    48px landing button. */
 .ui-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  height: 40px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-btn);
+  height: var(--ctl-h); padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-btn);
   font: inherit; font-size: var(--t-nav); font-weight: 500; letter-spacing: -.005em; line-height: 1.1; white-space: nowrap; cursor: pointer;
   text-decoration: none; color: var(--text);
   transition: background-color var(--fast), border-color var(--fast), color var(--fast), filter var(--fast), transform var(--dur-press) ease-out; }
@@ -100,9 +100,14 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 
 /* Touch: 44px targets (cyex-design floor on the web, mobile-native). */
 /* One height with .ui-btn (40px), whatever the line height: a Find button beside it lines up. */
-input.ui-input, select.ui-input { height: 40px; }
+/* The one control height: fields, selects, buttons and date and person pickers in a row all read --ctl-h, so a row
+   mixing them is level. 40px by default, 44px on touch; a compact row (.adm-toolbar) sets its own below that. */
+:root { --ctl-h: 40px; }
+/* A compact row of filters (the admin toolbars, the activity filter bar): 34px controls, 44px on touch. */
+.adm-toolbar, .ui-compact { --ctl-h: 34px; }
+input.ui-input, select.ui-input { height: var(--ctl-h); }
 @media (pointer: coarse) {
-  input.ui-input, select.ui-input { height: 44px; }
+  :root, .adm-toolbar, .ui-compact { --ctl-h: 44px; }
   .ui-icon { width: 44px; height: 44px; }
   .ui-btn { min-height: 44px; }
   .ui-btn.small::after { inset: -6px 0; }

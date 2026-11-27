@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Page from './[id]/+page.svelte';
 import { forgetProfile } from '$lib/profile/data.svelte';
 import { lazySection, preloadFor } from '$lib/profile/sections/lazy.svelte';
+import { session } from '$lib/tool/session.svelte';
 
 const { gql, url } = vi.hoisted(() => ({ gql: vi.fn(), url: { current: null as unknown as URL } }));
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
@@ -35,7 +36,10 @@ beforeEach(() => {
   });
   url.current = new SvelteURL('http://x/users/U1');
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  session.me = null;
+});
 
 describe('profile tabs', () => {
   it('a tab opened after the page is there shows its section', async () => {
@@ -55,5 +59,24 @@ describe('profile tabs', () => {
     expect(lazySection('account')).toBeUndefined();
     await preloadFor('account', false);
     expect(lazySection('account')).toBeDefined();
+  });
+
+  it('the owner always has an Overview tab, whichever section they are on and wherever they came from', async () => {
+    session.me = { id: 'U1', createdAt: '2026-11-10T12:00:00.000Z', permissions: [], roles: [], identities: [] } as unknown as typeof session.me;
+    for (const s of [null, 'sets', 'cosmetics']) {
+      url.current = new SvelteURL(`http://x/users/U1${s ? `?s=${s}` : ''}`);
+      render(Page, { data: data as never });
+      const nav = screen.getByRole('navigation', { name: /profile$/ });
+      const first = nav.querySelector('a');
+      expect(first?.getAttribute('aria-label')).toBe('Overview');
+      expect(first?.getAttribute('href')).toBe('/users/U1?s=overview');
+      expect(first?.getAttribute('aria-current')).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('everyone else has no Overview tab', () => {
+    render(Page, { data: data as never });
+    expect(screen.queryByRole('link', { name: 'Overview' })).toBeNull();
   });
 });

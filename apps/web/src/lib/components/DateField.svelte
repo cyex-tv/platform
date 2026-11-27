@@ -45,7 +45,7 @@
 
 <style>
   .df { display: grid; gap: 4px; }
-  .date { justify-content: flex-start; gap: 6px; width: 100%; font-variant-numeric: tabular-nums; }
+  .date { height: var(--ctl-h, 40px); min-height: var(--ctl-h, 40px); justify-content: flex-start; gap: 6px; width: 100%; font-variant-numeric: tabular-nums; }
   .date :global(svg) { color: var(--muted); }
   .none { color: var(--muted); font-weight: 400; }
   .pop { display: grid; gap: 10px; padding: 12px; }
