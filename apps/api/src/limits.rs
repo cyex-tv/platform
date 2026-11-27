@@ -778,6 +778,29 @@ pub fn quick_search(state: &AppState, caller: Option<&Caller>, ip: &str) -> ApiR
         .map_err(|wait| rate_limited_in("That's a lot of searches. Try again in a minute.", wait))
 }
 
+/// Charges a bulk read of `n` IDs `n` public reads in all, as that many single reads would cost
+/// (ADR 0035): `already` of them were taken for the request itself (by the middleware), the rest
+/// here, from the same bucket: the IP's `reads`, or with a developer API key its account's
+/// bucket (`api_key_account`, which every key of the account shares). Returns the quota left,
+/// for the `RateLimit-*` headers; `Err` holds the wait and the empty quota.
+pub fn take_reads(
+    state: &AppState,
+    ip: &str,
+    key: Option<&crate::developers::KeyUse>,
+    n: usize,
+    already: usize,
+) -> Result<Option<Quota>, (Duration, Quota)> {
+    let (limiter, bucket) = match key {
+        Some(key) => (&state.limits.api_key_account, ids::to_text(key.account_id)),
+        None => (&state.limits.reads, ip.to_owned()),
+    };
+    let mut left = None;
+    for _ in already..n {
+        left = Some(limiter.check_quota(&bucket)?);
+    }
+    Ok(left)
+}
+
 /// The 429 answer.
 pub fn too_many(wait: std::time::Duration) -> Response {
     let secs = wait.as_secs() + u64::from(wait.subsec_nanos() > 0);
@@ -817,10 +840,32 @@ pub fn set_quota(headers: &mut axum::http::HeaderMap, quota: Quota) {
     headers.insert("ratelimit-reset", HeaderValue::from(quota.reset));
 }
 
-/// `set_quota` unless a handler already set its own (the per-account GraphQL limit).
+/// `set_quota` unless a handler already set its own (the per-account GraphQL limit). Never on an
+/// answer a shared cache may keep (`is_shared`): one requester's quota would be served to
+/// everyone the cache answers; any `RateLimit-*` there is taken off instead.
 fn set_quota_if_absent(headers: &mut axum::http::HeaderMap, quota: Quota) {
-    if !headers.contains_key("ratelimit-limit") {
+    if is_shared(headers) {
+        clear_quota(headers);
+    } else if !headers.contains_key("ratelimit-limit") {
         set_quota(headers, quota);
+    }
+}
+
+/// Whether the answer is `Cache-Control: public`, the same for everyone and kept by shared
+/// caches (the CDN). Private, `no-store` and unmarked answers are not.
+pub fn is_shared(headers: &axum::http::HeaderMap) -> bool {
+    headers
+        .get_all(axum::http::header::CACHE_CONTROL)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .any(|t| t.trim().eq_ignore_ascii_case("public"))
+}
+
+/// Takes the `RateLimit-*` headers off.
+pub fn clear_quota(headers: &mut axum::http::HeaderMap) {
+    for name in ["ratelimit-limit", "ratelimit-remaining", "ratelimit-reset"] {
+        headers.remove(name);
     }
 }
 

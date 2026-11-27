@@ -71,3 +71,59 @@ pub(crate) fn unique_violation(err: &sqlx::Error) -> Option<&str> {
         None
     }
 }
+
+/// Whether `err` is a deadlock (`40P01`) or a serialization failure (`40001`): Postgres gave up
+/// on this statement so another could go on, and running it again normally succeeds.
+pub fn is_conflict(err: &DbError) -> bool {
+    let DbError::Sqlx(err) = err else {
+        return false;
+    };
+    err.as_database_error()
+        .and_then(|db| db.code())
+        .is_some_and(|code| code == "40P01" || code == "40001")
+}
+
+/// How often [`retrying!`] runs its work in all.
+pub(crate) const ATTEMPTS: u32 = 3;
+
+/// Pins an async block's output to `DbResult`, so `?` inside it knows what to convert to.
+pub(crate) fn work<T, F: Future<Output = DbResult<T>>>(f: F) -> F {
+    f
+}
+
+/// `retrying!(conn, |tx| { ... })`: runs the block in a transaction of its own (a savepoint when
+/// `conn` is in one already) and runs it again, up to [`ATTEMPTS`] times in all, when Postgres
+/// aborts it as a deadlock or a serialization failure ([`is_conflict`]). Rolling back to the
+/// savepoint releases the locks the block took, so the other side of the deadlock can finish. A
+/// conflict on locks the caller took before (outside the savepoint) can come back; after the
+/// last try it is returned. `?` inside the block ends that try, not the function.
+///
+/// A macro rather than a function taking a closure: an async closure over a borrowed connection
+/// makes a future the compiler can't prove `Send` for every lifetime.
+macro_rules! retrying {
+    ($conn:expr, |$tx:ident| $body:block) => {{
+        let mut attempt = 1;
+        loop {
+            let mut savepoint = sqlx::Connection::begin(&mut *$conn).await?;
+            let result = $crate::error::work(async {
+                let $tx: &mut sqlx::PgConnection = &mut savepoint;
+                $body
+            })
+            .await;
+            match result {
+                Ok(value) => {
+                    savepoint.commit().await?;
+                    break Ok(value);
+                }
+                Err(err) if attempt < $crate::error::ATTEMPTS && $crate::error::is_conflict(&err) => {
+                    savepoint.rollback().await?;
+                    tracing::info!(attempt, error = %err, "set write conflicted; trying again");
+                    attempt += 1;
+                }
+                // Dropping the savepoint rolls it back, as a plain `?` would.
+                Err(err) => break Err(err),
+            }
+        }
+    }};
+}
+pub(crate) use retrying;

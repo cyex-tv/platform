@@ -54,6 +54,32 @@ pub const NAME_MAX: usize = 64;
 /// Days of usage a key's list shows.
 pub const USAGE_DAYS: i64 = 30;
 
+/// Turns `Cache-Control: public, ...` into `private, ...` (the other directives kept).
+fn privatize(headers: &mut HeaderMap) {
+    use axum::http::header::CACHE_CONTROL;
+    if !limits::is_shared(headers) {
+        return;
+    }
+    let value: Vec<String> = headers
+        .get_all(CACHE_CONTROL)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .map(str::trim)
+        .filter(|t| !t.is_empty() && !t.to_ascii_lowercase().starts_with("s-maxage"))
+        .map(|t| {
+            if t.eq_ignore_ascii_case("public") {
+                "private".to_owned()
+            } else {
+                t.to_owned()
+            }
+        })
+        .collect();
+    if let Ok(v) = axum::http::HeaderValue::from_str(&value.join(", ")) {
+        headers.insert(CACHE_CONTROL, v);
+    }
+}
+
 /// The key a request sent, if its Bearer token has the key prefix.
 pub fn presented(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get(AUTHORIZATION)?.to_str().ok()?;
@@ -297,6 +323,9 @@ pub async fn handle(
     } else {
         key_quota
     };
+    // The answer carries this key's quota, so no shared cache may keep it for others: a public
+    // read becomes private (the same body and lifetime, for this client only).
+    privatize(response.headers_mut());
     limits::set_quota(response.headers_mut(), quota);
     response
 }

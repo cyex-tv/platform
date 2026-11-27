@@ -1177,7 +1177,7 @@
         "tags": [
           "reads"
         ],
-        "summary": "Several sets at once, in the order asked (ADR 0035): what `GET /v1/sets/{id}` answers for\neach, approved emotes only. Unknown and hidden sets are left out. Counts as one read.",
+        "summary": "Several sets at once, in the order asked (ADR 0035): what `GET /v1/sets/{id}` answers for\neach, approved emotes only. Unknown and hidden sets are left out. Counts as one read per ID\nsent (the same as asking for each set on its own), and each set comes from the same\nper-instance cache as `GET /v1/sets/{id}`.",
         "operationId": "lookup_sets",
         "requestBody": {
           "content": {
@@ -2210,6 +2210,7 @@
           "own_account",
           "owner_protected",
           "owner_only",
+          "bad_request",
           "rate_limited",
           "locked_out",
           "too_many",
@@ -2426,6 +2427,12 @@
             "group": "General",
             "meaning": "Only an owner may do this.",
             "when": "Giving the User role a staff permission, or other owner-only changes."
+          },
+          {
+            "code": "bad_request",
+            "group": "General",
+            "meaning": "The request couldn't be read.",
+            "when": "A `GET /v1/gql` whose `variables` or `extensions` parameter isn't valid JSON (400)."
           },
           {
             "code": "rate_limited",

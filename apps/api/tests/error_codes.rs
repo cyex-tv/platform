@@ -2,8 +2,9 @@
 //!
 //! The scan reads the non-test source of the api, the auth and shared crates and the events
 //! service, and collects each string literal in a code position: the first argument of `bad(`,
-//! `conflict(` and `coded(`, the code of `ApiError::new(status, "code", ..)`, the value of
-//! `set("code", "..")` and the `=> "code"` arms of `AuthError::code`. A code that is built at run
+//! `conflict(`, `coded(`, `ApiError::limit(` and `limit_error(`, the code of
+//! `ApiError::new(status, "code", ..)`, the value of `set("code", "..")` and of a `"code": ".."`
+//! JSON literal, and the `=> "code"` arms of `AuthError::code`. A code that is built at run
 //! time cannot be seen here; there are none today, and a new way of making one should be added to
 //! the scan with it.
 
@@ -81,10 +82,25 @@ fn codes_in(src: &str, found: &mut Vec<String>) {
             }
         }
     }
-    // GraphQL: `e.set("code", "invalid_topic")`.
-    for (at, _) in src.match_indices("set(\"code\",") {
-        if let Some(code) = literal(&src[at + "set(\"code\",".len()..]) {
-            found.push(code.to_owned());
+    // GraphQL: `e.set("code", "invalid_topic")`; JSON bodies built by hand:
+    // `json!({ "code": "bad_request" })`.
+    for marker in ["set(\"code\",", "\"code\":"] {
+        for (at, _) in src.match_indices(marker) {
+            if let Some(code) = literal(&src[at + marker.len()..]) {
+                found.push(code.to_owned());
+            }
+        }
+    }
+    // Limit errors: `ApiError::limit("code", ..)` and GraphQL's `limit_error("code", ..)`.
+    for call in ["ApiError::limit(", "limit_error("] {
+        for (at, _) in src.match_indices(call) {
+            let before = src[..at].chars().next_back();
+            if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
+            if let Some(code) = literal(&src[at + call.len()..]) {
+                found.push(code.to_owned());
+            }
         }
     }
 }

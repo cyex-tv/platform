@@ -752,3 +752,69 @@ fn both_upload_responses_carry_the_one_upload_result_shape() {
         assert!(reference.ends_with(schema), "{path}: {reference}");
     }
 }
+
+/// Automatic persisted queries store only a query that parsed, validated and ran cleanly: text
+/// that merely hashes right (garbage, or a query that fails validation) is never kept.
+#[tokio::test]
+async fn persisted_queries_store_only_queries_that_ran() {
+    let app = cyex_tv_api::app(offline_state());
+    let post = |body: Value| {
+        let app = app.clone();
+        async move {
+            let request = Request::post("/v1/gql")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            let response = app.oneshot(request).await.unwrap();
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            serde_json::from_slice::<Value>(&body).unwrap()
+        }
+    };
+    let ext = |hash: &str| json!({ "persistedQuery": { "version": 1, "sha256Hash": hash } });
+    for text in ["this is not graphql {", "{ noSuchField }"] {
+        let hash = cyex_tv_api::gql::hash_of(text);
+        let sent = post(json!({ "query": text, "extensions": ext(&hash) })).await;
+        assert!(!sent["errors"].as_array().unwrap().is_empty(), "{sent}");
+        let again = post(json!({ "extensions": ext(&hash) })).await;
+        assert_eq!(
+            error_code(&again),
+            "persisted_query_not_found",
+            "{text}: {again}"
+        );
+    }
+    // A query that runs is stored, and the hash alone runs it.
+    let text = "{ __typename }";
+    let hash = cyex_tv_api::gql::hash_of(text);
+    let sent = post(json!({ "query": text, "extensions": ext(&hash) })).await;
+    assert_eq!(sent["data"]["__typename"], "Query", "{sent}");
+    let again = post(json!({ "extensions": ext(&hash) })).await;
+    assert_eq!(again["data"]["__typename"], "Query", "{again}");
+}
+
+/// A public answer (`Cache-Control: public`, kept by the CDN for everyone) carries nobody's
+/// `RateLimit-*`; an answer no shared cache keeps (GraphQL over POST) still does.
+#[tokio::test]
+async fn public_answers_carry_no_rate_limit_headers() {
+    let app = cyex_tv_api::app(offline_state());
+    let r = app
+        .clone()
+        .oneshot(Request::get("/v1/limits").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+    let control = r.headers()["cache-control"].to_str().unwrap();
+    assert!(control.starts_with("public"), "{control}");
+    assert!(!r.headers().contains_key("ratelimit-remaining"));
+    assert!(quota_of(r.headers()).is_none());
+
+    let r = app
+        .oneshot(
+            Request::post("/v1/gql")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"query":"{ __typename }"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(r.headers().contains_key("ratelimit-remaining"));
+}

@@ -81,10 +81,15 @@ fn header(a: &Answer, name: &str) -> String {
 
 impl World {
     async fn new() -> Option<Self> {
+        Self::with(|state| state).await
+    }
+
+    /// A world whose app state `tune` adjusts (limits, the read cache).
+    async fn with(tune: impl FnOnce(AppState) -> AppState) -> Option<Self> {
         let db = TestDb::new().await?;
         let auth = Arc::new(Auth::new(AuthConfig::from_source(|_| None).unwrap()).unwrap());
         Some(Self {
-            app: cyex_tv_api::app(AppState::new(db.pool.clone(), auth)),
+            app: cyex_tv_api::app(tune(AppState::new(db.pool.clone(), auth))),
             db,
         })
     }
@@ -1004,4 +1009,89 @@ async fn persisted_queries_over_get_miss_hit_refuse_mutations_and_cache_publicly
     assert_eq!(r.status, StatusCode::OK);
     assert!(header(&r, "content-type").starts_with("text/html"));
     w.db.close().await;
+}
+
+/// `POST /v1/sets/lookup` costs one public read per ID sent, as asking for each set would, and
+/// serves each set through the same per-instance cache as `GET /v1/sets/{id}`: what a lookup
+/// loaded, a single read is served from, and the other way round. GraphQL `sets(ids)` takes one
+/// read per ID too.
+#[tokio::test]
+async fn bulk_set_reads_cost_a_read_per_id_and_share_the_set_cache() {
+    use cyex_tv_api::limits::{Limits, Rates};
+    let Some(w) = World::with(|state| {
+        state
+            .with_limits(Limits::new(
+                Rates {
+                    reads: cyex_tv_shared::ratelimit::Rate::per_hour(6),
+                    ..Rates::default()
+                },
+                false,
+            ))
+            .with_read_cache(std::time::Duration::from_secs(600))
+    })
+    .await
+    else {
+        return;
+    };
+    let owner = w.user("9601", "owner", SessionKind::Site).await;
+    let (a, _) = w.emote(&owner, "wave", false).await;
+    let (s1_row, s1) = w.set(&owner, "First", &[a]).await;
+    let (_, s2) = w.set(&owner, "Second", &[a]).await;
+    let (_, s3) = w.set(&owner, "Third", &[]).await;
+
+    let r = w
+        .post("/v1/sets/lookup", json!({ "ids": [s1, s2, s3] }))
+        .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    assert_eq!(
+        ids(&r.body["sets"]),
+        vec![s1.clone(), s2.clone(), s3.clone()]
+    );
+    assert_eq!(
+        header(&r, "ratelimit-remaining"),
+        "3",
+        "three IDs, three reads"
+    );
+
+    // Renamed behind the API's back (no event): the single read is served from what the lookup
+    // cached, so it still shows the old name.
+    {
+        let mut conn = w.db.conn().await;
+        sqlx::query("UPDATE emote_sets SET name = 'Renamed' WHERE id = $1")
+            .bind(s1_row)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
+    let single = w
+        .send(
+            Request::get(format!("/v1/sets/{s1}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(single.status, StatusCode::OK);
+    assert_eq!(
+        single.body["name"], "First",
+        "served from the lookup's entry"
+    );
+    assert_eq!(single.body, r.body["sets"][0], "the same body either way");
+
+    let r = w.post("/v1/sets/lookup", json!({ "ids": [s1, s2] })).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    assert_eq!(r.body["sets"][0]["name"], "First");
+    assert_eq!(header(&r, "ratelimit-remaining"), "0");
+    let r = w.post("/v1/sets/lookup", json!({ "ids": [s1] })).await;
+    assert_eq!(r.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(header(&r, "ratelimit-remaining"), "0");
+
+    // GraphQL `sets(ids)` takes from the same reads, so it is refused now too.
+    let g = w
+        .gql(
+            None,
+            "query($ids: [ID!]!) { sets(ids: $ids) { id } }",
+            json!({ "ids": [s1] }),
+        )
+        .await;
+    assert_eq!(code(&g), "rate_limited", "{g}");
 }

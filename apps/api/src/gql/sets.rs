@@ -6,7 +6,7 @@ use cyex_tv_shared::model::{
     SetVisibility, UpdateSet, UpdateSetEmote,
 };
 
-use super::{api_error, caller, caller_opt, heavy_read, state};
+use super::{api_error, caller, caller_opt, client_ip, heavy_read, state};
 use crate::catalog;
 
 #[derive(Default)]
@@ -25,9 +25,29 @@ impl SetQuery {
 
     /// Several sets at once, in the order asked, each once (ADR 0035): who may see what is the
     /// rule of `set`, and unknown or hidden sets are left out. At most 25 IDs (`too_many`); one
-    /// call costs what that many `set` lookups would.
+    /// call costs what that many `set` lookups would, in complexity and in the public reads
+    /// limit (one read per ID, as `POST /v1/sets/lookup`; `rate_limited` past it).
     #[graphql(complexity = "ids.len() * (10 + child_complexity)")]
     async fn sets(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<Vec<EmoteSet>> {
+        if ids.len() > catalog::SETS_LOOKUP_LIMIT {
+            return Err(api_error(catalog::too_many_ids(
+                "sets",
+                catalog::SETS_LOOKUP_LIMIT,
+                ids.len(),
+            )));
+        }
+        let key = ctx
+            .data_opt::<Option<crate::developers::KeyUse>>()
+            .copied()
+            .flatten();
+        crate::limits::take_reads(state(ctx), client_ip(ctx), key.as_ref(), ids.len(), 0).map_err(
+            |(wait, _)| {
+                api_error(crate::errors::rate_limited_in(
+                    "That's a lot of reads. Try again in a minute.",
+                    wait,
+                ))
+            },
+        )?;
         let ids: Vec<String> = ids.into_iter().map(|id| id.0).collect();
         catalog::sets_by_ids(state(ctx), caller_opt(ctx), &ids)
             .await

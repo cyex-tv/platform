@@ -129,6 +129,12 @@ pub const ERROR_CODES: &[ErrorCode] = &[
     ),
     e(
         "General",
+        "bad_request",
+        "The request couldn't be read.",
+        "A `GET /v1/gql` whose `variables` or `extensions` parameter isn't valid JSON (400).",
+    ),
+    e(
+        "General",
         "rate_limited",
         "Too many requests or tries.",
         "Over a rate or per-account limit. Wait the seconds in the Retry-After header, then go on.",

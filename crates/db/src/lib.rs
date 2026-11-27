@@ -44,7 +44,7 @@ pub mod testing;
 pub mod transfers;
 pub mod webhooks;
 
-pub use error::{DbError, DbResult};
+pub use error::{DbError, DbResult, is_conflict};
 
 use std::collections::BTreeSet;
 
