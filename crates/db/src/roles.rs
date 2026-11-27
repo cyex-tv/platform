@@ -29,6 +29,8 @@ pub struct Role {
     /// Never shown publicly, even when `public`, and left out wherever roles rank people
     /// (migration `role_deny_invisible`).
     pub invisible: bool,
+    /// Optional `#rrggbb` (lower case; migration `role_color`).
+    pub color: Option<String>,
 }
 
 impl Role {
@@ -62,10 +64,12 @@ pub struct RolePatch<'a> {
     pub name: Option<&'a str>,
     pub description: Option<Option<&'a str>>,
     pub position: Option<i32>,
+    /// `Some(None)` clears the colour.
+    pub color: Option<Option<&'a str>>,
 }
 
 const ROLE: &str =
-    "id, name, description, position, created_by, created_at, public, system, invisible";
+    "id, name, description, position, created_by, created_at, public, system, invisible, color";
 
 fn check_known(perms: &[&str]) -> DbResult<()> {
     match perms.iter().find(|p| !permissions::is_known(p)) {
@@ -127,7 +131,8 @@ pub async fn update(conn: &mut PgConnection, id: Uuid, patch: &RolePatch<'_>) ->
         "UPDATE roles
          SET name = coalesce($2, name),
              description = CASE WHEN $3 THEN $4 ELSE description END,
-             position = coalesce($5, position)
+             position = coalesce($5, position),
+             color = CASE WHEN $6 THEN $7 ELSE color END
          WHERE id = $1
          RETURNING {ROLE}"
     ))
@@ -136,6 +141,8 @@ pub async fn update(conn: &mut PgConnection, id: Uuid, patch: &RolePatch<'_>) ->
     .bind(patch.description.is_some())
     .bind(patch.description.flatten())
     .bind(patch.position)
+    .bind(patch.color.is_some())
+    .bind(patch.color.flatten())
     .fetch_optional(conn)
     .await
     .map_err(role_conflict)?
@@ -259,7 +266,7 @@ pub async fn unassign(conn: &mut PgConnection, account_id: Uuid, role_id: Uuid) 
 pub async fn roles_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Role>> {
     Ok(sqlx::query_as(
         "SELECT r.id, r.name, r.description, r.position, r.created_by, r.created_at, r.public,
-                r.system, r.invisible
+                r.system, r.invisible, r.color
          FROM roles r
          JOIN account_roles ar ON ar.role_id = r.id
          WHERE ar.account_id = $1
@@ -317,6 +324,17 @@ pub fn display_rank(roles: &[Role]) -> Option<i32> {
         .filter(|r| shown_publicly(r))
         .map(|r| r.position)
         .max()
+}
+
+/// The ring colour of an account's profile picture: the `#rrggbb` of its most senior role that has
+/// a colour and is shown publicly (so the profile looks the same to everyone, and an invisible
+/// or hidden role never colours it). At equal positions the name first alphabetically wins.
+pub fn ring_color(roles: &[Role]) -> Option<&str> {
+    roles
+        .iter()
+        .filter(|r| shown_publicly(r) && r.color.is_some())
+        .min_by_key(|r| (std::cmp::Reverse(r.position), r.name.to_lowercase()))
+        .and_then(|r| r.color.as_deref())
 }
 
 /// The built-in role `system` (`user`, `admin` or `root`).
@@ -502,6 +520,7 @@ mod tests {
             public,
             system: None,
             invisible,
+            color: None,
         }
     }
 
@@ -518,6 +537,36 @@ mod tests {
         ];
         assert_eq!(display_rank(&held), Some(40));
         assert_eq!(display_rank(&[role(900, true, true)]), None);
+    }
+
+    fn coloured(position: i32, name: &str, color: &str, public: bool, invisible: bool) -> Role {
+        Role {
+            name: name.to_owned(),
+            color: Some(color.to_owned()),
+            ..role(position, public, invisible)
+        }
+    }
+
+    #[test]
+    fn the_ring_is_the_most_senior_coloured_public_role() {
+        assert_eq!(ring_color(&[]), None);
+        // Uncoloured roles never count, however senior.
+        assert_eq!(ring_color(&[role(900, true, false)]), None);
+        let held = [
+            role(90, true, false),
+            coloured(10, "low", "#111111", true, false),
+            coloured(50, "mid", "#222222", true, false),
+            // Senior but hidden or invisible: never the ring.
+            coloured(80, "hidden", "#333333", false, false),
+            coloured(85, "unseen", "#444444", true, true),
+        ];
+        assert_eq!(ring_color(&held), Some("#222222"));
+        // At one position the name first alphabetically wins, whatever the order held.
+        let tie = [
+            coloured(20, "Zed", "#aaaaaa", true, false),
+            coloured(20, "amy", "#bbbbbb", true, false),
+        ];
+        assert_eq!(ring_color(&tie), Some("#bbbbbb"));
     }
 
     fn grant(role: u128, position: i32, permission: &str, effect: &str) -> Grant {

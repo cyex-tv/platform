@@ -7,6 +7,9 @@ import { PERMISSIONS } from '../editors.mjs';
 import { emoteGrant, err } from '../sets.mjs';
 
 // The signed-in operations of this area, by operation name: null when the operation is not here.
+// The API's role colour rule (`colour` in admin.rs): #rrggbb in any case, stored lower case; '' clears (update only).
+const COLOR = /^#[0-9a-f]{6}$/i;
+const badColor = () => err('A role colour is a hex colour like #3b82f6.', 'bad_color');
 export function signedInRoles(op, body, v, ADMIN) {
   switch (op) {
     case 'Roles':
@@ -17,18 +20,20 @@ export function signedInRoles(op, body, v, ADMIN) {
     case 'AllRoles':
       return { data: { roles: ROLES.map(roleOut) } };
     case 'CreateRole': {
+      if (v.input.color != null && !COLOR.test(v.input.color.trim())) return badColor();
       if (!(v.input.position >= 1 && v.input.position < 1000000)) return err('Positions are 1 to 999999: above the User role, below the top role.', 'bad_position');
       if (ROLES.some((x) => x.name.toLowerCase() === v.input.name.toLowerCase())) return err('A role with that name exists.', 'role_name_taken');
       const overlap = (v.input.denies ?? []).some((k) => v.input.permissions.includes(k));
       if (overlap) return err('A permission can’t be both allowed and denied.', 'bad_permissions');
       const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null, denies: v.input.denies ?? [],
-        invisible: v.input.invisible ?? false, public: v.input.invisible ? false : (v.input.public ?? false), builtIn: null };
+        invisible: v.input.invisible ?? false, color: v.input.color?.trim().toLowerCase() ?? null, public: v.input.invisible ? false : (v.input.public ?? false), builtIn: null };
       ROLES.push(r);
       ROLES.sort((a, b) => b.position - a.position);
       return { data: { createRole: roleOut(r) } };
     }
     case 'UpdateRole': {
       const r = ROLES.find((x) => x.id === v.id);
+      if (v.input.color != null && v.input.color.trim() !== '' && !COLOR.test(v.input.color.trim())) return badColor();
       if (!r) return err('Not found.', 'not_found');
       if (r.builtIn === 'ROOT') return err('This is a built-in role; it can’t be changed this way.', 'built_in_role');
       if (!roleOut(r).editable) return err('You can’t edit a role you hold. Someone above you has to.', 'own_role');
@@ -36,7 +41,8 @@ export function signedInRoles(op, body, v, ADMIN) {
       const allows = v.input.permissions ?? r.permissions;
       const denies = v.input.denies ?? r.denies ?? [];
       if (denies.some((k) => allows.includes(k))) return err('A permission can’t be both allowed and denied.', 'bad_permissions');
-      Object.assign(r, Object.fromEntries(Object.entries(v.input).filter(([, x]) => x != null)));
+      Object.assign(r, Object.fromEntries(Object.entries(v.input).filter(([k, x]) => x != null && k !== 'color')));
+      if (v.input.color != null) r.color = v.input.color.trim() === '' ? null : v.input.color.trim().toLowerCase();
       if (r.invisible) r.public = false;
       if (r.description === '') r.description = null;
       ROLES.sort((a, b) => b.position - a.position);

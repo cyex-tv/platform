@@ -190,6 +190,18 @@ fn description(raw: &str) -> ApiResult<Option<String>> {
     Ok((!text.is_empty()).then(|| text.to_owned()))
 }
 
+/// A role colour: `#rrggbb`, any case, stored lower case. Anything else is `bad_color`.
+fn colour(raw: &str) -> ApiResult<String> {
+    let c = raw.trim();
+    if c.len() == 7 && c.starts_with('#') && c[1..].bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Ok(c.to_ascii_lowercase());
+    }
+    Err(bad(
+        "bad_color",
+        "A role colour is a hex colour like #3b82f6.",
+    ))
+}
+
 /// Known, deduplicated and sorted, or `unknown_permission`.
 fn permission_list(raw: &[String]) -> ApiResult<Vec<String>> {
     let set: BTreeSet<String> = raw.iter().map(|p| p.trim().to_owned()).collect();
@@ -290,6 +302,7 @@ async fn view(conn: &mut PgConnection, role: &roles::Role, actor: &Actor) -> Api
         denies,
         public: role.public,
         invisible: role.invisible,
+        color: role.color.clone(),
         built_in: built_in(role),
         editable,
         assignable,
@@ -305,6 +318,7 @@ fn snapshot(role: &Role) -> Value {
         "denies": role.denies,
         "public": role.public,
         "invisible": role.invisible,
+        "color": role.color,
     })
 }
 
@@ -601,6 +615,7 @@ pub async fn create(state: &AppState, caller: &Caller, input: &CreateRole) -> Ap
     let perms = permission_list(&input.permissions)?;
     let denies = permission_list(input.denies.as_deref().unwrap_or_default())?;
     disjoint(&perms, &denies)?;
+    let color = input.color.as_deref().map(colour).transpose()?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     lock(&mut tx).await?;
@@ -644,6 +659,20 @@ pub async fn create(state: &AppState, caller: &Caller, input: &CreateRole) -> Ap
     } else {
         role
     };
+    let role = if color.is_some() {
+        roles::update(
+            &mut tx,
+            role.id,
+            &RolePatch {
+                color: Some(color.as_deref()),
+                ..RolePatch::default()
+            },
+        )
+        .await
+        .map_err(db_error)?
+    } else {
+        role
+    };
     let out = view(&mut tx, &role, &actor).await?;
     record_audit(
         &mut tx,
@@ -670,6 +699,18 @@ pub async fn update(
         .map(permission_list)
         .transpose()?;
     let denies = input.denies.as_deref().map(permission_list).transpose()?;
+    // An empty string clears the colour.
+    let color = input
+        .color
+        .as_deref()
+        .map(|c| {
+            if c.trim().is_empty() {
+                Ok(None)
+            } else {
+                colour(c).map(Some)
+            }
+        })
+        .transpose()?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     lock(&mut tx).await?;
@@ -727,6 +768,7 @@ pub async fn update(
             name: name.as_deref(),
             description: description.as_ref().map(|d| d.as_deref()),
             position: input.position,
+            color: color.as_ref().map(Option::as_deref),
         },
     )
     .await

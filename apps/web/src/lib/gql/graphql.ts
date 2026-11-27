@@ -73,6 +73,12 @@ export type AccountProfile = {
   editors: Array<AccountSummary>;
   /** Linked Twitch and Kick accounts: platform, login and display name only. Twitch first. */
   identities: Array<PublicIdentity>;
+  /**
+   * The colour of the profile picture's ring: the `#rrggbb` of the most senior of the
+   * public `roles` that has one; null when none does (the neutral ring). Never from the
+   * badge or paint.
+   */
+  roleColor?: Maybe<Scalars['String']['output']>;
   /** Roles marked public, most senior first. */
   roles: Array<PublicRole>;
 };
@@ -704,6 +710,8 @@ export type CreateBadgeInput = {
 };
 
 export type CreateRoleInput = {
+  /** Its colour, `#rrggbb` (any case, stored lower case). Default none. */
+  color?: InputMaybe<Scalars['String']['input']>;
   /** What it denies. Never also in `permissions` (`bad_permissions`). */
   denies?: InputMaybe<Array<Scalars['String']['input']>>;
   description?: InputMaybe<Scalars['String']['input']>;
@@ -2335,6 +2343,8 @@ export type OrderStatus =
 /** One of your own roles, as `me.roles` lists it. */
 export type OwnRole = {
   __typename?: 'OwnRole';
+  /** The role's colour, `#rrggbb`, if it has one. */
+  color?: Maybe<Scalars['String']['output']>;
   id: Scalars['String']['output'];
   /** Never shown publicly, whatever `public` says (only you and staff see it). */
   invisible: Scalars['Boolean']['output'];
@@ -2547,6 +2557,8 @@ export type PublicLimits = {
 /** A role as anyone may see it on a profile. */
 export type PublicRole = {
   __typename?: 'PublicRole';
+  /** The role's colour, `#rrggbb`, if it has one. */
+  color?: Maybe<Scalars['String']['output']>;
   id: Scalars['String']['output'];
   name: Scalars['String']['output'];
 };
@@ -3704,6 +3716,12 @@ export type Role = {
    */
   builtIn?: Maybe<BuiltInRole>;
   /**
+   * Optional colour, `#rrggbb` in lower case. Drawn as a dot on its chips and, for the most
+   * senior coloured public role, as the ring round its holders' profile pictures
+   * (`AccountProfile.roleColor`). Readable on both themes: the editor shows the contrast.
+   */
+  color?: Maybe<Scalars['String']['output']>;
+  /**
    * What it denies, sorted: a Deny here beats an Allow on any lower role (the User role
    * included). Never also in `permissions`; a permission in neither is left to the roles below.
    */
@@ -4076,6 +4094,8 @@ export type UpdateEmoteInput = {
 };
 
 export type UpdateRoleInput = {
+  /** Its colour, `#rrggbb`. An empty string clears it. */
+  color?: InputMaybe<Scalars['String']['input']>;
   /**
    * Replaces what it denies. A name in both lists is `bad_permissions`; one given in only one
    * of them leaves the other list (moving a name there from the other is fine).
@@ -4314,7 +4334,7 @@ export type RestoreAccountMutation = { __typename?: 'Mutation', restoreAccount: 
 export type MyRolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type MyRolesQuery = { __typename?: 'Query', me: { __typename?: 'Me', id: string, roles: Array<{ __typename?: 'OwnRole', id: string, name: string, public: boolean, invisible: boolean }> } };
+export type MyRolesQuery = { __typename?: 'Query', me: { __typename?: 'Me', id: string, roles: Array<{ __typename?: 'OwnRole', id: string, name: string, public: boolean, invisible: boolean, color?: string | null }> } };
 
 export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -4356,7 +4376,7 @@ export type UserDetailsQueryVariables = Exact<{
 }>;
 
 
-export type UserDetailsQuery = { __typename?: 'Query', accountStatus?: { __typename?: 'AccountStatus', uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null }, accountRoles?: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
+export type UserDetailsQuery = { __typename?: 'Query', accountStatus?: { __typename?: 'AccountStatus', uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null }, accountRoles?: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, color?: string | null, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
 
 export type AccountPermissionsQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -4368,7 +4388,7 @@ export type AccountPermissionsQuery = { __typename?: 'Query', accountPermissions
 export type AllRolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type AllRolesQuery = { __typename?: 'Query', roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
+export type AllRolesQuery = { __typename?: 'Query', roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, color?: string | null, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
 
 export type PlaceRestrictionMutationVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -4463,7 +4483,7 @@ export type AccountProfileQueryVariables = Exact<{
 }>;
 
 
-export type AccountProfileQuery = { __typename?: 'Query', accountProfile?: { __typename?: 'AccountProfile', createdAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }>, roles: Array<{ __typename?: 'PublicRole', id: string, name: string }>, activeSets: Array<{ __typename?: 'ActiveChannelSet', platform: Platform, login: string, setId: string, setName: string }>, editors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }> } | null };
+export type AccountProfileQuery = { __typename?: 'Query', accountProfile?: { __typename?: 'AccountProfile', roleColor?: string | null, createdAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }>, roles: Array<{ __typename?: 'PublicRole', id: string, name: string, color?: string | null }>, activeSets: Array<{ __typename?: 'ActiveChannelSet', platform: Platform, login: string, setId: string, setName: string }>, editors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }> } | null };
 
 export type MyCosmeticsQueryVariables = Exact<{
   accountId?: InputMaybe<Scalars['String']['input']>;
@@ -4876,7 +4896,7 @@ export type AccountRolesQueryVariables = Exact<{
 }>;
 
 
-export type AccountRolesQuery = { __typename?: 'Query', accountRoles: Array<{ __typename?: 'Role', id: string, name: string, position: number }> };
+export type AccountRolesQuery = { __typename?: 'Query', accountRoles: Array<{ __typename?: 'Role', id: string, name: string, position: number, color?: string | null }> };
 
 export type AccountEditorsQueryVariables = Exact<{
   accountId?: InputMaybe<Scalars['String']['input']>;
@@ -5054,12 +5074,12 @@ export type RejectMutationVariables = Exact<{
 
 export type RejectMutation = { __typename?: 'Mutation', rejectEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
 
-export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean };
+export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, color?: string | null, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean };
 
 export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
+export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, color?: string | null, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
 
 export type RoleLimitFieldsFragment = { __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, max: number, windowSeconds?: number | null, value?: number | null };
 
@@ -5102,7 +5122,7 @@ export type CreateRoleMutationVariables = Exact<{
 }>;
 
 
-export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean } };
+export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, color?: string | null, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean } };
 
 export type UpdateRoleMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -5110,7 +5130,7 @@ export type UpdateRoleMutationVariables = Exact<{
 }>;
 
 
-export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean } };
+export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, color?: string | null, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean } };
 
 export type DeleteRoleMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -5701,6 +5721,7 @@ export const RoleFieldsFragmentDoc = new TypedDocumentString(`
   denies
   public
   invisible
+  color
   builtIn
   editable
   assignable
@@ -6297,6 +6318,7 @@ export const MyRolesDocument = new TypedDocumentString(`
       name
       public
       invisible
+      color
     }
   }
 }
@@ -6462,6 +6484,7 @@ export const UserDetailsDocument = new TypedDocumentString(`
   denies
   public
   invisible
+  color
   builtIn
   editable
   assignable
@@ -6493,6 +6516,7 @@ export const AllRolesDocument = new TypedDocumentString(`
   denies
   public
   invisible
+  color
   builtIn
   editable
   assignable
@@ -6723,7 +6747,9 @@ export const AccountProfileDocument = new TypedDocumentString(`
     roles {
       id
       name
+      color
     }
+    roleColor
     activeSets {
       platform
       login
@@ -7841,6 +7867,7 @@ export const AccountRolesDocument = new TypedDocumentString(`
     id
     name
     position
+    color
   }
 }
     `) as unknown as TypedDocumentString<AccountRolesQuery, AccountRolesQueryVariables>;
@@ -8381,6 +8408,7 @@ export const RolesDocument = new TypedDocumentString(`
   denies
   public
   invisible
+  color
   builtIn
   editable
   assignable
@@ -8520,6 +8548,7 @@ export const CreateRoleDocument = new TypedDocumentString(`
   denies
   public
   invisible
+  color
   builtIn
   editable
   assignable
@@ -8539,6 +8568,7 @@ export const UpdateRoleDocument = new TypedDocumentString(`
   denies
   public
   invisible
+  color
   builtIn
   editable
   assignable

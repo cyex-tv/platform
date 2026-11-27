@@ -155,16 +155,5 @@ export function apiVars(b: Browse, page: number) {
   };
 }
 
-/** The most common tags across `items`, most used first (ties by name), `n` at most, leaving out `skip`. */
-export function topTags(items: { tags?: string[] }[], n = 12, skip: readonly string[] = []): { tag: string; count: number }[] {
-  const seen = new Map<string, number>();
-  for (const e of items)
-    for (const t of new Set((e.tags ?? []).map(cleanTag).filter(Boolean))) if (!skip.includes(t)) seen.set(t, (seen.get(t) ?? 0) + 1);
-  return [...seen]
-    .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
-    .slice(0, n);
-}
-
 /** The columns the table can sort by, and the sort each one stands for (the API has no other). */
 export const COLUMN_SORT = { channels: 'top', added: 'new' } as const;

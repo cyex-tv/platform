@@ -50,14 +50,16 @@ export function accountProfile(id) {
     ? myIdentities().map((i) => ({ platform: i.platform, login: i.login, displayName: i.displayName }))
     : searchPeople().find((h) => h.account.id === id)?.identities ?? [];
   const roles = (ACCOUNT_ROLES[id] ?? []).map((r) => ROLES.find((x) => x.id === r)).filter((r) => r?.public && !r.invisible)
-    .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name }));
+    .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name, color: r.color ?? null }));
+  // The ring: the most senior public role with a colour (never the badge or paint).
+  const roleColor = roles.find((r) => r.color)?.color ?? null;
   const activeSets = [...CHANNELS, ...EDITOR_CHANNELS].filter((c) => c.account.id === id && c.activeSetId).map((c) => {
     const set = findSet(c.activeSetId);
     return set ? { platform: c.platform, login: c.login, setId: set.id, setName: set.name } : null;
   }).filter(Boolean);
   // Editors, names only (never their permissions).
   const editors = id === ME_ID ? ACCOUNT_EDITORS.map((e) => e.account) : id === OTHERS[0].id ? [ME_SUMMARY, OTHERS[3]] : [];
-  return { account, identities, roles, activeSets, editors, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z', collectionPublic: !!COLLECTION_PUBLIC[id] };
+  return { account, identities, roles, roleColor, activeSets, editors, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z', collectionPublic: !!COLLECTION_PUBLIC[id] };
 }
 // accountCosmetics(accountIds): what each account shows, with the badge and paint themselves.
 export function accountCosmetics(ids) {

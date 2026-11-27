@@ -48,7 +48,7 @@
   }
 </script>
 
-<Popover label="Notifications" align="end" width="380px" sheet bind:open>
+<Popover label="Notifications" align="end" width="380px" sheet stable bind:open>
   {#snippet trigger(props)}
     <button
       class="bell"
@@ -74,7 +74,7 @@
     <State bare title="Nothing yet">Moderation decisions, editor changes and cosmetics show up here.</State>
   {:else}
     <ul class="list">
-      {#each recent as n (n.id)}<li><NotificationRow note={n} onpick={pick} /></li>{/each}
+      {#each recent as n (n.id)}<li><NotificationRow note={n} onpick={pick} onread={(x) => markRead([x.id])} /></li>{/each}
     </ul>
   {/if}
   {#snippet footer()}
@@ -91,8 +91,11 @@
   .badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-pill);
     background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center;
     font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--bg); }
-  /* The popover's own body is the one scroll container; the title row stays in view. */
-  .head { position: sticky; top: -8px; z-index: 1; background: var(--elevated); display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 0 4px 0 12px; }
+  /* The popover's own body is the one scroll container (8px padding, a stable scrollbar gutter);
+     the title row is pulled flush to its top edge (-8px) and sticks there (top: -8px), so it never
+     moves when the list scrolls, and it covers the list as it passes under. */
+  .head { position: sticky; top: -8px; z-index: 1; margin: -8px -8px 4px; padding: 8px 12px 0 20px; min-height: 48px; background: var(--elevated);
+    border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .head h2 { margin: 0; font-size: var(--t-ui); font-weight: 600; }
   .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .phone { border-color: transparent; }

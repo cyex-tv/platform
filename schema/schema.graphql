@@ -70,6 +70,12 @@ type AccountProfile {
 	"""
 	roles: [PublicRole!]!
 	"""
+	The colour of the profile picture's ring: the `#rrggbb` of the most senior of the
+	public `roles` that has one; null when none does (the neutral ring). Never from the
+	badge or paint.
+	"""
+	roleColor: String
+	"""
 	Each channel's active set, for channels showing one.
 	"""
 	activeSets: [ActiveChannelSet!]!
@@ -1003,6 +1009,10 @@ input CreateRoleInput {
 	Never show it publicly, and leave it out wherever roles rank people. Default false.
 	"""
 	invisible: Boolean
+	"""
+	Its colour, `#rrggbb` (any case, stored lower case). Default none.
+	"""
+	color: String
 }
 
 input CreateSetInput {
@@ -2476,6 +2486,10 @@ type OwnRole {
 	Never shown publicly, whatever `public` says (only you and staff see it).
 	"""
 	invisible: Boolean!
+	"""
+	The role's colour, `#rrggbb`, if it has one.
+	"""
+	color: String
 }
 
 """
@@ -2787,6 +2801,10 @@ A role as anyone may see it on a profile.
 type PublicRole {
 	id: String!
 	name: String!
+	"""
+	The role's colour, `#rrggbb`, if it has one.
+	"""
+	color: String
 }
 
 type Query {
@@ -3642,6 +3660,12 @@ type Role {
 	"""
 	invisible: Boolean!
 	"""
+	Optional colour, `#rrggbb` in lower case. Drawn as a dot on its chips and, for the most
+	senior coloured public role, as the ring round its holders' profile pictures
+	(`AccountProfile.roleColor`). Readable on both themes: the editor shows the contrast.
+	"""
+	color: String
+	"""
 	Set on the built-in roles: `USER` (every account holds it), `ADMIN` and `ROOT` (the
 	owners' top role, shown only to its holders).
 	"""
@@ -4179,6 +4203,10 @@ input UpdateRoleInput {
 	Never show it publicly, and leave it out wherever roles rank people.
 	"""
 	invisible: Boolean
+	"""
+	Its colour, `#rrggbb`. An empty string clears it.
+	"""
+	color: String
 }
 
 input UpdateSetEmoteInput {

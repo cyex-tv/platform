@@ -2,9 +2,8 @@
   // What an item looks like on the buyer's own name, for the inspector: each paint on the dark and
   // the light chat ground side by side and as a chat line, in one hairline frame (no gaps, no
   // boxes); then every badge at its sizes on one baseline (1x, 2x, 3x, like the emote page's
-  // sizes) with the pixel size in mono, and under it the picture at its real size (BadgeOriginal). `full` off shows the first paint only.
+  // sizes) with the pixel size in mono. `full` off shows the first paint only.
   import BadgeIcon from '$lib/cosmetics/BadgeIcon.svelte';
-  import BadgeOriginal from '$lib/cosmetics/BadgeOriginal.svelte';
   import type { Badge, Paint } from '$lib/cosmetics/store.svelte';
   import { clean } from '$lib/format';
   import Sample from './Sample.svelte';
@@ -44,7 +43,6 @@
               <li><span class="px"><BadgeIcon badge={b} size={s.px} label={s.x === 1} /></span><span class="x">{s.x}x</span><span class="dm">{s.px}×{s.px}</span></li>
             {/each}
           </ul>
-          <BadgeOriginal badge={b} caption />
         </div>
       {/each}
     </section>

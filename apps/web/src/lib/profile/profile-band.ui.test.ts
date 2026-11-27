@@ -79,3 +79,38 @@ describe('profile head', () => {
   });
 });
 
+
+// The ring round the avatar is the colour of the account's highest role that has one (the API
+// resolves it: `roleColor`), never the paint or badge; without one it keeps the neutral ring.
+describe('profile ring', () => {
+  const ring = (container: HTMLElement) => container.querySelector<HTMLElement>('.ring')!;
+  const draw = (extra: Record<string, unknown>) =>
+    render(ProfileHeader, { props: { account: { id: 'OTHER', displayName: 'quietoak' }, relation: NOBODY, profile: { ...profile, ...extra } as never, flat: true } });
+
+  it('uses the role colour', () => {
+    const { container } = draw({ roleColor: '#3b82f6' });
+    expect(ring(container).style.background).toBe('rgb(59, 130, 246)');
+  });
+
+  it('stays neutral without a coloured role, and ignores a malformed colour', () => {
+    expect(ring(draw({ roleColor: null }).container).style.background).toBe('');
+    expect(ring(draw({ roleColor: 'red' }).container).style.background).toBe('');
+  });
+
+  it('is not drawn from the paint', async () => {
+    const { seedLook } = await import('$lib/cosmetics/store.svelte');
+    seedLook('PAINTED', { badge: null, paint: { kind: 'SOLID', stops: [{ at: 0, color: '#ff00ff' }], repeat: false, angle: 0, shadows: [] } } as never);
+    const { container } = render(ProfileHeader, {
+      props: { account: { id: 'PAINTED', displayName: 'painter' }, relation: NOBODY, profile: { ...profile, roleColor: null } as never, flat: true },
+    });
+    expect(ring(container).style.background).toBe('');
+  });
+
+  it('shows a role colour as a dot on its flag, readable text unchanged', () => {
+    const { container } = draw({ roles: [{ id: 'R1', name: 'Moderator', color: '#3b82f6' }, { id: 'R2', name: 'Artist', color: null }] });
+    const flags = container.querySelectorAll('li.flag');
+    expect((flags[0].querySelector('.cdot') as HTMLElement).style.background).toBe('rgb(59, 130, 246)');
+    expect(flags[1].querySelector('.cdot')).toBeNull();
+    expect(flags[0].textContent?.trim()).toBe('Moderator');
+  });
+});
