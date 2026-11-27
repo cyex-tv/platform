@@ -114,7 +114,9 @@ pub async fn run(ctx: Ctx, job: Job) -> Result<(), JobError> {
     let bytes = original.bytes.clone();
     // The fixed emote rules, the same the upload was checked under (a `limits` an older job
     // carries is ignored: emote rules are the same for everyone).
-    let limits = cyex_tv_media::Limits::emote();
+    // The 4:1 shape rule is the upload's (the API); an original already stored is made again
+    // whatever its shape, and fitted in the box as before.
+    let limits = cyex_tv_media::Limits::emote_original();
     // The guard sets the flag if the time limit drops this future, so the thread stops too.
     let cancel = CancelOnDrop::default();
     let flag = cancel.flag();

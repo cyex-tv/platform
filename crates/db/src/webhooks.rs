@@ -24,6 +24,9 @@ pub const WINDOW_FAILED_PERCENT: i32 = 80;
 /// Live webhooks, across all channels, that may ask for the cosmetics catalog's events (each of
 /// those events is sent to all of them).
 pub const MAX_COSMETIC_SUBSCRIBERS: i64 = 1000;
+/// Live webhooks one account's channel may have asking for those events, so a few accounts
+/// can't fill [`MAX_COSMETIC_SUBSCRIBERS`] between them.
+pub const MAX_COSMETIC_PER_ACCOUNT: i64 = 2;
 /// The cosmetics catalog's event types.
 pub const COSMETIC_EVENTS: [&str; 3] = ["cosmetic.created", "cosmetic.updated", "cosmetic.deleted"];
 
@@ -82,6 +85,25 @@ pub async fn cosmetic_subscribers(conn: &mut PgConnection, except: Option<Uuid>)
         "SELECT count(*) FROM webhooks
           WHERE enabled AND event_types && $1 AND ($2::uuid IS NULL OR id <> $2)",
     )
+    .bind(&COSMETIC_EVENTS[..])
+    .bind(except)
+    .fetch_one(conn)
+    .await?)
+}
+
+/// Live webhooks on `account_id`'s channel that ask for the cosmetics catalog's events, `except`
+/// one (being changed).
+pub async fn cosmetic_subscribers_of(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    except: Option<Uuid>,
+) -> DbResult<i64> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*) FROM webhooks w JOIN channels c ON c.id = w.channel_id
+          WHERE c.account_id = $1 AND w.enabled AND w.event_types && $2
+            AND ($3::uuid IS NULL OR w.id <> $3)",
+    )
+    .bind(account_id)
     .bind(&COSMETIC_EVENTS[..])
     .bind(except)
     .fetch_one(conn)

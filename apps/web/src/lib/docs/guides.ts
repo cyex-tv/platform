@@ -96,6 +96,21 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'naming',
+    title: 'Names in REST and GraphQL',
+    search: 'naming snake_case camelCase enum case per_page perPage is_static isStatic rest graphql mapping',
+    blocks: [
+      p('REST and GraphQL answer the same things with the same values; only the spelling of names differs, by fixed rules. A test reads every resource both ways and fails if a field or a value differs.'),
+      table(
+        ['Field names', 'REST is `snake_case`, GraphQL `camelCase`: `is_static` / `isStatic`, `platform_user_id` / `platformUserId`, `removed_ids` / `removedIds`.'],
+        ['Enum values', 'REST is lower case, GraphQL SCREAMING_SNAKE: `twitch` / `TWITCH`, `approved` / `APPROVED`, `linear_gradient` / `LINEAR_GRADIENT`.'],
+        ['Inputs', 'The same rule for query strings and bodies: `per_page` / `perPage`, `user_ids` / `userIds`. `GET /v1/cosmetics/users` takes its IDs as one comma-separated `ids`; GraphQL `userCosmetics` takes a list `userIds`.'],
+        ['IDs and times', 'Identical: Snowflakes as strings, times as RFC 3339 with milliseconds.'],
+        ['Lists', 'REST wraps a list in an object (`{ "sets": [ … ] }`, `{ "users": [ … ] }`); GraphQL returns the list itself.'],
+      ),
+    ],
+  },
+  {
     id: 'signing-in',
     title: 'Signing in',
     search: 'auth authentication session cookie origin login',
