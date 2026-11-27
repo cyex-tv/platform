@@ -12,8 +12,8 @@
 //!   was merged itself is followed to the final one; the source can't be the target
 //!   (`merge_into_self`) or merged already (`already_merged`).
 //! - **One transaction**: both emotes locked in ID order (`FOR NO KEY UPDATE`), then the sets
-//!   holding the source in ID order (`FOR UPDATE`, as the set-version triggers lock them, ADR
-//!   0035). A deadlock (`40P01`) is retried, at most three times in all.
+//!   holding the source in ID order (`FOR NO KEY UPDATE`, the set-version triggers' order and
+//!   lock, ADR 0035). A deadlock (`40P01`) is retried, at most three times in all.
 //! - Audited as `emote.merged` on both emotes; both owners get `emote.merged` (not the one who
 //!   merged); every affected set gets its events (`set.emote_removed` for the source,
 //!   `set.emote_added` for the target where it moved).

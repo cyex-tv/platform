@@ -635,8 +635,9 @@ pub async fn merge_plan(
 /// Merges `source` into `target` (ADR 0040). Call it in a transaction, after
 /// [`lock_for_merge`] and the checks. In order:
 ///
-/// 1. Locks every set holding the source, in ID order `FOR UPDATE`: the lock the set-version
-///    triggers take (ADR 0035), taken up front so they find it held.
+/// 1. Locks every set holding the source, in ID order `FOR NO KEY UPDATE`: the set-version
+///    triggers' order and lock (ADR 0035, as #203 makes them), taken up front so they find it
+///    held. It doesn't wait for member inserts' `FOR KEY SHARE` on a set.
 /// 2. Sets holding both drop the source's membership (the target's stays, with its name):
 ///    logged as `removed` for the source.
 /// 3. Every other membership of the source names the target instead, keeping its name and
@@ -655,7 +656,7 @@ pub async fn merge(
     sqlx::query(
         "SELECT s.id FROM emote_sets s
          WHERE s.id IN (SELECT m.set_id FROM emote_set_members m WHERE m.emote_id = $1)
-         ORDER BY s.id FOR UPDATE",
+         ORDER BY s.id FOR NO KEY UPDATE",
     )
     .bind(source)
     .execute(&mut *conn)

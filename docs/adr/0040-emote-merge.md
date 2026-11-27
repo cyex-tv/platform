@@ -25,7 +25,7 @@ The same picture often exists as several emotes (re-uploads, an old and a better
 
 **Locks** (matching ADR 0035's triggers)
 - Both emotes are locked first, in ID order, `FOR NO KEY UPDATE`: that waits for any other change of either emote but not for a member insert, which takes `FOR KEY SHARE` on its emote while it holds its set's lock.
-- Then every set holding the source, in ID order, `FOR UPDATE`: the same mode and order as the set-version triggers, taken up front so they find the locks held and no lock is upgraded mid-transaction.
+- Then every set holding the source, in ID order, `FOR NO KEY UPDATE`: the order and lock the set-version triggers take once #203 (review fixes) lands, taken up front so the triggers find them held. Until then main's triggers ask `FOR UPDATE` on those rows, a stronger lock than held; the rare deadlock that upgrade can meet is retried (below).
 - Postgres can still pick a merge as a deadlock victim against some other ordering; `40P01` is retried, at most three tries in all, and a target merged between the lookup and the lock is followed on the next try.
 
 **Delta sync**
