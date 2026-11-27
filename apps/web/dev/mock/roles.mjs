@@ -12,6 +12,7 @@ export const ROLES = [
   { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, color: '#3b82f6', permissions: ['emotes.review', 'emotes.review_personal', 'emotes.takedown', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets'], public: true, denies: [], invisible: false, builtIn: null },
   { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, color: '#d6409f', permissions: [], public: true, denies: [], invisible: false, builtIn: null },
   { id: 'ROLE5', name: 'Muted', description: 'Can’t upload emotes or file reports. Sits above User, so its denies beat what everyone is allowed.', position: 5, permissions: [], denies: ['emotes.upload', 'reports.file'], public: false, invisible: true, builtIn: null },
+  { id: 'ROLESUB', name: 'Subscriber', description: 'Supporters of cyex.tv. Ten personal set slots.', position: 1, permissions: [], public: true, denies: [], invisible: false, builtIn: null },
   { id: 'ROLEUSER', name: 'User', description: 'Every account has this role. Its permissions are everyone’s.', position: 0, permissions: ['emotes.upload', 'reports.file'], public: false, denies: [], invisible: false, builtIn: 'USER' },
 ];
 export const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id]: ['ROLE3', 'ROLE5'], [ME_ID]: [] };
@@ -63,7 +64,7 @@ export const LIMIT_DEFAULTS = [
 ];
 /** The most a role may set a limit to (the API's `max`). */
 export const limitMax = (key) => LIMIT_DEFAULTS.find((l) => l[0] === key)?.[4] ?? 1000000;
-export const ROLE_LIMITS = { ROLE2: { pending_emotes: 100 } };
+export const ROLE_LIMITS = { ROLE2: { pending_emotes: 100 }, ROLESUB: { personal_set_slots: 10 } };
 export const limitsOut = (o = {}) => LIMIT_DEFAULTS.map(([key, group, d, w, max = 1000000]) => ({ key, group, default: d, max, windowSeconds: w, value: o[key] ?? null }));
 /** An account's limit: the most generous override among its roles, else the default. */
 export const limitOf = (accountId, key) => {

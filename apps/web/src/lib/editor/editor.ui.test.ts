@@ -109,6 +109,9 @@ describe('the upload dialog’s modes', () => {
     const rule = (id: string) => document.querySelector(`.rule[data-rule="${id}"]`)!;
     // 1200 × 300 at 10 ms a frame: too big a side and too fast.
     expect(rule('side').classList.contains('fail')).toBe(true);
+    // Only the five rules are listed: the pixel budget is checked but not shown.
+    expect(document.querySelector('.rule[data-rule="pixels"]')).toBeNull();
+    expect([...document.querySelectorAll('.rule .name')].map((n) => n.firstChild?.textContent)).toEqual(['Size', 'Shape', 'Frames', 'Frame rate', 'File size']);
     expect(rule('fps').classList.contains('fail')).toBe(true);
     expect(cont().disabled).toBe(true);
     await fireEvent.click(within(rule('side') as HTMLElement).getByRole('button', { name: 'Fit to 1.000 px' }));

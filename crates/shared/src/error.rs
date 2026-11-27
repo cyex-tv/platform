@@ -78,7 +78,7 @@ impl ApiError {
         self
     }
 
-    /// Tells the client how many seconds to wait (sent as `Retry-After` on a 429).
+    /// Tells the client how many seconds to wait (sent as `Retry-After` on a 429, and on a 503 that sets it).
     #[must_use]
     pub fn retry_after(mut self, seconds: u64) -> Self {
         self.retry_after = Some(seconds.max(1));
@@ -114,8 +114,12 @@ impl IntoResponse for ApiError {
             message: self.message,
             details: self.details,
         };
-        let wait = (self.status == StatusCode::TOO_MANY_REQUESTS)
-            .then(|| self.retry_after.unwrap_or(DEFAULT_RETRY_AFTER));
+        // A 429 always says how long to wait; a 503 only when it was told (`busy`).
+        let wait = match self.status {
+            StatusCode::TOO_MANY_REQUESTS => Some(self.retry_after.unwrap_or(DEFAULT_RETRY_AFTER)),
+            StatusCode::SERVICE_UNAVAILABLE => self.retry_after,
+            _ => None,
+        };
         let mut response = (self.status, Json(body)).into_response();
         if let Some(wait) = wait {
             response
@@ -138,6 +142,14 @@ mod tests {
         assert_eq!(timed.into_response().headers()[RETRY_AFTER], "1");
         let other = ApiError::new(StatusCode::BAD_REQUEST, "bad", "x").retry_after(5);
         assert!(other.into_response().headers().get(RETRY_AFTER).is_none());
+    }
+
+    #[test]
+    fn a_503_carries_retry_after_only_when_told() {
+        let busy = ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "busy", "x").retry_after(5);
+        assert_eq!(busy.into_response().headers()[RETRY_AFTER], "5");
+        let down = ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "unavailable", "x");
+        assert!(down.into_response().headers().get(RETRY_AFTER).is_none());
     }
 }
 

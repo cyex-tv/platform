@@ -4,8 +4,14 @@ import { graphql } from '../gql';
 // Admin: review, reports, users, roles, audit.
 
 export const ADMIN_COUNTS = graphql(`
-  query AdminCounts($review: Boolean!, $reports: Boolean!) {
+  query AdminCounts($review: Boolean!, $reports: Boolean!, $personal: Boolean!) {
     reviewQueue(page: 1, perPage: 1) @include(if: $review) {
+      total
+      counts {
+        personal
+      }
+    }
+    personalQueue: reviewQueue(page: 1, perPage: 1, filter: { tab: PERSONAL }) @include(if: $personal) {
       total
     }
     reportQueue(page: 1, perPage: 1) @include(if: $reports) {

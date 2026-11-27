@@ -1030,6 +1030,39 @@ async fn personal_set_capacity_comes_from_override_roles_then_default() {
     db.close().await;
 }
 
+/// The "Subscriber" role the migration makes gives 10 personal set slots, is public, holds no
+/// permission and no colour, and sits just above the User role (ADR 0038).
+#[tokio::test]
+async fn subscriber_role_gives_ten_personal_set_slots() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    let set = sets::ensure_personal(&mut c, owner).await.unwrap();
+    assert_eq!(set.capacity, 3);
+
+    let role = roles::list(&mut c)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.name == "Subscriber")
+        .expect("the migration makes a Subscriber role");
+    assert_eq!(role.position, 1);
+    assert!(role.public && role.color.is_none());
+    assert!(
+        roles::permissions(&mut c, role.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    roles::assign(&mut c, owner, role.id, None).await.unwrap();
+    let found = sets::personal_for(&mut c, owner).await.unwrap().unwrap();
+    assert_eq!(found.capacity, 10);
+
+    drop(c);
+    db.close().await;
+}
+
 #[tokio::test]
 async fn concurrent_adds_respect_capacity() {
     let db = db!();

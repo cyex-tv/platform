@@ -310,7 +310,7 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   AccountReports: (c) => ({ accountId: c.otherAccount }),
   AdminAccount: (c) => ({ accountId: c.otherAccount }),
   AccountRestrictions: (c) => ({ accountId: c.otherAccount }),
-  AdminCounts: () => ({ review: true, reports: true }),
+  AdminCounts: () => ({ review: true, reports: true, personal: true }),
   ShopCounts: () => ({ items: true, orders: true, codes: true }),
   ReviewQueue: () => ({ page: 1, perPage: 5 }),
   ReportQueue: () => ({ page: 1, perPage: 5 }),

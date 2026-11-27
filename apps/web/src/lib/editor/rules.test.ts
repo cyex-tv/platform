@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EDITOR_LIMITS, allPass, checkRules, editorLimits, fixLabel, onlySizePending } from './rules';
+import { EDITOR_LIMITS, allPass, checkRules, editorLimits, fixLabel, onlySizePending, visibleRules } from './rules';
 import { chunks, isWebp, muxAnimation, readAnimation, stillWebp } from './riff';
 
 const ok = { width: 112, height: 112, frames: 20, shortest: 40, duration: 800, size: 200_000 };
@@ -10,6 +10,15 @@ describe('upload rules', () => {
     const r = checkRules(ok, EDITOR_LIMITS);
     expect(allPass(r)).toBe(true);
     expect(r.find((x) => x.id === 'side')?.value).toBe('112 × 112 px');
+  });
+
+  it('lists the five rules and hides the pixel budget while it passes', () => {
+    const all = checkRules(ok, EDITOR_LIMITS);
+    expect(all.map((r) => r.id)).toContain('pixels'); // still checked
+    expect(visibleRules(all).map((r) => r.label)).toEqual(['Size', 'Shape', 'Frames', 'Frame rate', 'File size']);
+    // ... and shown if it ever fails, so a blocked upload is never unexplained.
+    const over = checkRules({ ...ok, width: 1000, height: 1000, frames: 101 }, EDITOR_LIMITS);
+    expect(visibleRules(over).map((r) => r.id)).toContain('pixels');
   });
 
   it('fails each limit with its fix', () => {

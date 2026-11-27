@@ -563,3 +563,13 @@ DROP INDEX CONCURRENTLY IF EXISTS emotes_keyset_popular;
 ```
 
 Restarting the api does the same for the indexes the migrations create.
+
+# Upload checks at the same time
+
+The API decodes every uploaded emote and cosmetic picture before it stores it. How many of those
+checks run together is `CYEX_TV_UPLOAD_CHECKS` in the API's env (see `.env.example`). Unset, it is
+the number of CPUs the container sees (at least 1), a safe default. A request waits up to 10 s for
+a free slot, then gets `503 busy` with `Retry-After: 5` and nothing is stored; the website and
+apps just send it again. Set a lower number on a small host (for example `2`) if uploads make
+reads slow, a higher one if `busy` shows up in the logs while the CPU is idle. Needs an API
+restart.

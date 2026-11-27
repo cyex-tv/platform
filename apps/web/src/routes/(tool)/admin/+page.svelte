@@ -21,6 +21,7 @@
   import { actionText } from '$lib/admin/audit';
   import AccountLink from '$lib/admin/AccountLink.svelte';
   import Split from '$lib/admin/ui/Split.svelte';
+  import { adminCountVars, reviewWaiting } from '$lib/admin/review-count';
   import { quiet } from '$lib/quiet';
 
   const review = can('emotes.review');
@@ -39,7 +40,7 @@
   const NEXT = 6;
 
   $effect(() => {
-    gql(ADMIN_COUNTS, { review, reports })
+    gql(ADMIN_COUNTS, adminCountVars(can))
       .then((r) => (counts = r))
       .catch(fail);
     if (review) void quiet(gql(REVIEW_QUEUE, { page: 1, perPage: NEXT, filter: null }).then((r) => (nextReview = r.reviewQueue.items)), 'overview review');
@@ -89,7 +90,7 @@
   });
   function figure(s: Section): number | undefined {
     switch (s.href) {
-      case '/admin/review': return counts?.reviewQueue?.total;
+      case '/admin/review': return reviewWaiting(counts, can);
       case '/admin/reports': return counts?.reportQueue?.total;
       case '/admin/shop/items': return shopCounts.items;
       case '/admin/shop/orders': return shopCounts.orders;
@@ -133,7 +134,7 @@
       <div class="wait">
         <header>
           <a class="fig" href="/admin/review"><span class="adm-label"><Icon name="inbox" size={14} />Review</span>
-            <span class="num" class:some={(counts?.reviewQueue?.total ?? 0) > 0}>{#if loaded}{count(counts?.reviewQueue?.total ?? 0)}{:else}<span class="ph ui-skeleton"></span>{/if}</span>
+            <span class="num" class:some={(reviewWaiting(counts, can) ?? 0) > 0}>{#if loaded}{count(reviewWaiting(counts, can) ?? 0)}{:else}<span class="ph ui-skeleton"></span>{/if}</span>
             <span class="sub">waiting for a verdict</span></a>
           <a class="ui-btn secondary small" href="/admin/review">Open queue<Icon name="arrow-right" size={14} /></a>
         </header>

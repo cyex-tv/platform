@@ -839,21 +839,21 @@ pub(crate) async fn image_from_bytes(
     let own = state.limits.load(&state.db, caller.account_id).await;
     let limits = picture_limits_for(kind, &own);
     let size = file.len();
-    let probe: Probe = tokio::task::spawn_blocking(move || cyex_tv_media::probe(&bytes, &limits))
-        .await
-        .map_err(|_| ApiError::internal())?
+    let probe: Probe = crate::check_gate::gate()
+        .run(move || cyex_tv_media::probe(&bytes, &limits))
+        .await?
         .map_err(|err| crate::upload::media_error_sized(err, &limits, size))?;
     check_dimensions(kind, probe.width, probe.height)?;
     if probe.animated && picture_profile(kind).max_animated_scale_bytes.is_some() {
         // An animated badge must animate in chat: its 72 px file at most 512 KB. Said now, not
         // after the worker tried.
         let bytes = file.clone();
-        tokio::task::spawn_blocking(move || {
-            cyex_tv_media::encode::check_animated_scales(&bytes, &limits, picture_profile(kind))
-        })
-        .await
-        .map_err(|_| ApiError::internal())?
-        .map_err(media_error)?;
+        crate::check_gate::gate()
+            .run(move || {
+                cyex_tv_media::encode::check_animated_scales(&bytes, &limits, picture_profile(kind))
+            })
+            .await?
+            .map_err(media_error)?;
     }
     let sha256: [u8; 32] = Sha256::digest(&file).into();
     let sha_hex = sigv4::hex(&sha256);
