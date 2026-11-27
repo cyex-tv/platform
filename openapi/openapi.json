@@ -2540,6 +2540,7 @@
         "enum": [
           "internal",
           "unavailable",
+          "busy",
           "not_implemented",
           "not_found",
           "forbidden",
@@ -2720,6 +2721,12 @@
             "group": "General",
             "meaning": "The service or a dependency is not available right now.",
             "when": "Sign-in with a platform is not configured, uploads or storage are down, or the database cannot be reached (503)."
+          },
+          {
+            "code": "busy",
+            "group": "General",
+            "meaning": "Too many uploads are being checked right now.",
+            "when": "An upload waited its turn for a free check slot and none came free in time (503, with Retry-After). Nothing was stored; send it again."
           },
           {
             "code": "not_implemented",
