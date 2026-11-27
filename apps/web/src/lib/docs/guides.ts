@@ -289,6 +289,15 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'role-colours',
+    title: 'Role colours',
+    search: 'role color colour hex ring avatar profile roleColor public',
+    blocks: [
+      p('A role can have a colour: `Role.color`, a hex colour like `#3b82f6` (`#rrggbb`, stored in lower case, or null for none). Set it with `createRole` or `updateRole` and the `color` input, which needs `roles.manage` like any other change to a role. `updateRole` takes an empty string to clear it and leaves it alone when you leave it out. Anything that is not `#rrggbb` is `bad_color`. The change is in the audit log with the rest of the role.'),
+      p('On a public profile, `accountProfile.roles` lists the public roles with their `color`, most senior first. `accountProfile.roleColor` is the colour of the ring round the profile picture: the `color` of the first of those roles that has one, or null for the neutral ring. It never comes from the badge or paint, and a role that is hidden or invisible never counts, so the ring looks the same to everyone. Show a role’s colour as a dot next to its name, not as the text colour: a role colour is checked for 3:1 contrast on both the light and the dark ground only as a hint in the editor, not by the API.'),
+    ],
+  },
+  {
     id: 'paging',
     title: 'Paging',
     search: 'paging pagination cursor after next page perpage link rel next bad_cursor',

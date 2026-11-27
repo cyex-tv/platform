@@ -11,6 +11,7 @@ export const ROLE_FIELDS = graphql(`
     denies
     public
     invisible
+    color
     builtIn
     editable
     assignable

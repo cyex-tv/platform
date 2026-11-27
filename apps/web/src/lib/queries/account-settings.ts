@@ -127,6 +127,7 @@ export const MY_ROLES = graphql(`
         name
         public
         invisible
+        color
       }
     }
   }

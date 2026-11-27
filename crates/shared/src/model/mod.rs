@@ -123,6 +123,9 @@ pub struct OwnRole {
     #[serde(default)]
     #[schema(required = false)]
     pub invisible: bool,
+    /// The role's colour, `#rrggbb`, if it has one.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 /// How a session signed in.
@@ -1394,6 +1397,11 @@ pub struct Role {
     /// rank people. Staff and its holders still see it.
     #[serde(default)]
     pub invisible: bool,
+    /// Optional colour, `#rrggbb` in lower case. Drawn as a dot on its chips and, for the most
+    /// senior coloured public role, as the ring round its holders' profile pictures
+    /// (`AccountProfile.roleColor`). Readable on both themes: the editor shows the contrast.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Set on the built-in roles: `USER` (every account holds it), `ADMIN` and `ROOT` (the
     /// owners' top role, shown only to its holders).
     #[serde(default)]
@@ -1450,6 +1458,9 @@ pub struct PermissionDecision {
 pub struct PublicRole {
     pub id: String,
     pub name: String,
+    /// The role's colour, `#rrggbb`, if it has one.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 /// The set a channel shows now, on a profile ("Active emotes").
@@ -1473,6 +1484,11 @@ pub struct AccountProfile {
     pub identities: Vec<PublicIdentity>,
     /// Roles marked public, most senior first.
     pub roles: Vec<PublicRole>,
+    /// The colour of the profile picture's ring: the `#rrggbb` of the most senior of the
+    /// public `roles` that has one; null when none does (the neutral ring). Never from the
+    /// badge or paint.
+    #[serde(default)]
+    pub role_color: Option<String>,
     /// Each channel's active set, for channels showing one.
     pub active_sets: Vec<ActiveChannelSet>,
     pub created_at: String,
@@ -1802,6 +1818,9 @@ pub struct CreateRole {
     /// Never show it publicly, and leave it out wherever roles rank people. Default false.
     #[serde(default)]
     pub invisible: Option<bool>,
+    /// Its colour, `#rrggbb` (any case, stored lower case). Default none.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1824,6 +1843,9 @@ pub struct UpdateRole {
     /// Never show it publicly, and leave it out wherever roles rank people.
     #[serde(default)]
     pub invisible: Option<bool>,
+    /// Its colour, `#rrggbb`. An empty string clears it.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 /// Which part of the site a limit covers, for grouping them on the role page.

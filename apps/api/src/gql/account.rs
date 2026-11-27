@@ -53,6 +53,7 @@ pub(super) async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
             name: r.name,
             public: false,
             invisible: true,
+            color: r.color,
         })
         .chain(
             cyex_tv_db::roles::roles_of(&mut conn, account.id)
@@ -64,6 +65,7 @@ pub(super) async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
                     name: r.name,
                     public: r.public,
                     invisible: r.invisible,
+                    color: r.color,
                 }),
         )
         .collect();
