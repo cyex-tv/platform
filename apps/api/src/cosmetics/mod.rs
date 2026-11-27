@@ -815,6 +815,23 @@ pub async fn upload_image(
     require_any(&mut conn, caller, &[permissions::COSMETICS_MANAGE]).await?;
     drop(conn);
     rate_limited(state, caller)?;
+    image_from_bytes(state, caller, kind, file).await
+}
+
+/// The cosmetics rate limit, for a direct upload (counted once, when its URL is asked for).
+pub(crate) fn upload_rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
+    rate_limited(state, caller)
+}
+
+/// [`upload_image`] after its permission and rate checks: the bytes are checked (format, decode,
+/// limits, shape, animated sizes) and stored, and the picture made. A direct upload's finalize
+/// runs this on the stored object (ADR 0036).
+pub(crate) async fn image_from_bytes(
+    state: &AppState,
+    caller: &Caller,
+    kind: CosmeticKind,
+    file: Bytes,
+) -> ApiResult<CosmeticImage> {
     let Some(store) = state.store.clone() else {
         return Err(ApiError::unavailable("Uploads aren't available right now."));
     };

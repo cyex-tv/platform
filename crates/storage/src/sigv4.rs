@@ -130,6 +130,79 @@ pub fn authorization(
     )
 }
 
+/// The payload hash of a presigned request: the body isn't known when the URL is made.
+pub const UNSIGNED_PAYLOAD: &str = "UNSIGNED-PAYLOAD";
+
+/// A presigned URL ("query string authentication"): `url` (endpoint and encoded `path`) with
+/// the `X-Amz-*` parameters and the signature, valid for `expires_secs` from `now`. `headers`
+/// are the ones the request must carry exactly as signed (lowercase names, `host` among them);
+/// the body is unsigned.
+pub fn presigned_url(
+    creds: &Credentials,
+    method: &str,
+    url: &Url,
+    path: &str,
+    headers: &[(String, String)],
+    expires_secs: u32,
+    now: DateTime<Utc>,
+) -> Url {
+    let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
+    let date = now.format("%Y%m%d").to_string();
+    let scope = format!("{date}/{}/s3/aws4_request", creds.region);
+    let mut sorted: Vec<(String, String)> = headers
+        .iter()
+        .map(|(k, v)| (k.to_lowercase(), v.trim().to_owned()))
+        .collect();
+    sorted.sort();
+    let signed_headers = sorted
+        .iter()
+        .map(|(k, _)| k.as_str())
+        .collect::<Vec<_>>()
+        .join(";");
+    let mut query: Vec<(String, String)> = vec![
+        ("X-Amz-Algorithm".to_owned(), "AWS4-HMAC-SHA256".to_owned()),
+        (
+            "X-Amz-Credential".to_owned(),
+            format!("{}/{scope}", creds.access_key_id),
+        ),
+        ("X-Amz-Date".to_owned(), amz_date.clone()),
+        ("X-Amz-Expires".to_owned(), expires_secs.to_string()),
+        ("X-Amz-SignedHeaders".to_owned(), signed_headers.clone()),
+    ];
+    query.sort();
+    let canonical_query = query
+        .iter()
+        .map(|(k, v)| format!("{}={}", encode(k, false), encode(v, false)))
+        .collect::<Vec<_>>()
+        .join("&");
+    let canonical_headers: String = sorted.iter().map(|(k, v)| format!("{k}:{v}\n")).collect();
+    let canonical_request = format!(
+        "{method}\n{path}\n{canonical_query}\n{canonical_headers}\n{signed_headers}\n{UNSIGNED_PAYLOAD}"
+    );
+    let string_to_sign = format!(
+        "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
+        sha256_hex(canonical_request.as_bytes())
+    );
+    let signature = hex(&hmac(&signing_key(creds, &date), string_to_sign.as_bytes()));
+    let mut out = url.clone();
+    // `path` is already encoded; set it as is.
+    out.set_path(path);
+    out.set_query(Some(&format!(
+        "{canonical_query}&X-Amz-Signature={signature}"
+    )));
+    out
+}
+
+fn signing_key(creds: &Credentials, date: &str) -> Vec<u8> {
+    let k_date = hmac(
+        format!("AWS4{}", creds.secret_access_key).as_bytes(),
+        date.as_bytes(),
+    );
+    let k_region = hmac(&k_date, creds.region.as_bytes());
+    let k_service = hmac(&k_region, b"s3");
+    hmac(&k_service, b"aws4_request")
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
@@ -137,7 +210,7 @@ mod tests {
     use super::*;
 
     /// The GET example from AWS's SigV4 documentation for S3 ("Example: GET Object"), with its
-    /// published example credentials.
+    /// published example credentials, signed in the header and as a presigned URL.
     #[test]
     fn matches_the_aws_get_object_example() {
         let creds = Credentials {
@@ -170,6 +243,25 @@ mod tests {
             "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, \
              SignedHeaders=host;range;x-amz-content-sha256;x-amz-date, \
              Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41"
+        );
+
+        // The presigned GET of the same documentation ("Example: Query string authentication"):
+        // an unsigned payload, `host` only, valid a day.
+        let base = Url::parse("https://examplebucket.s3.amazonaws.com").unwrap();
+        let host = vec![(
+            "host".to_owned(),
+            "examplebucket.s3.amazonaws.com".to_owned(),
+        )];
+        let signed = presigned_url(&creds, "GET", &base, "/test.txt", &host, 86_400, now);
+        assert_eq!(
+            signed.as_str(),
+            format!(
+                "https://examplebucket.s3.amazonaws.com/test.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256\
+                 &X-Amz-Credential={}%2F20130524%2Fus-east-1%2Fs3%2Faws4_request\
+                 &X-Amz-Date=20130524T000000Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host\
+                 &X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404",
+                creds.access_key_id
+            )
         );
     }
 

@@ -14,6 +14,7 @@ pub mod channel_counts;
 pub mod channels;
 pub mod codes;
 pub mod cosmetics;
+pub mod direct_uploads;
 pub mod editors;
 pub mod emotes;
 mod error;

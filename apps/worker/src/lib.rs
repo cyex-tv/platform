@@ -29,6 +29,7 @@ use sqlx::postgres::PgListener;
 pub mod cosmetics;
 pub mod purge;
 pub mod transcode;
+pub mod uploads;
 pub mod webhooks;
 
 /// How a job failed.
@@ -701,6 +702,13 @@ pub async fn run(
                 }
                 if let Err(err) = clean_up(&ctx.db).await {
                     tracing::error!(error = %err, "clean-up failed");
+                }
+                if let Some(store) = &ctx.store {
+                    match uploads::clean_up(&ctx.db, store).await {
+                        Ok(0) => {}
+                        Ok(n) => tracing::info!(removed = n, "direct uploads cleaned up"),
+                        Err(err) => tracing::error!(error = %err, "cleaning up direct uploads failed"),
+                    }
                 }
                 if let Some(paddle) = &ctx.paddle {
                     match cancel_stale_checkouts(&ctx.db, paddle).await {
