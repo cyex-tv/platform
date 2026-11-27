@@ -954,13 +954,16 @@ pub async fn account_profile(
             display_name: i.display_name,
         })
         .collect();
-    let roles = roles::public_roles_of(&mut conn, id)
+    let public_roles = roles::public_roles_of(&mut conn, id)
         .await
-        .map_err(db_error)?
+        .map_err(db_error)?;
+    let role_color = roles::ring_color(&public_roles).map(str::to_owned);
+    let roles = public_roles
         .into_iter()
         .map(|r| PublicRole {
             id: ids::to_text(r.id),
             name: r.name,
+            color: r.color,
         })
         .collect();
     let channel_rows: Vec<_> = channels::list_for_account(&mut conn, id)
@@ -996,6 +999,7 @@ pub async fn account_profile(
         account: summary,
         identities,
         roles,
+        role_color,
         active_sets,
         created_at: views::time(row.created_at),
         editors,

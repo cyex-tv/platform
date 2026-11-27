@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const calls: { op: string; vars: any }[] = [];
 const role = (o: Record<string, unknown>) => ({ description: null, position: 10, permissions: [], denies: [], public: false, invisible: false, builtIn: null, editable: true, assignable: true, ...o });
 const ROLES = [
-  role({ id: 'R1', name: 'Moderator', position: 50, permissions: ['emotes.review'] }),
+  role({ id: 'R1', name: 'Moderator', position: 50, permissions: ['emotes.review'], color: '#3b82f6' }),
   role({ id: 'RU', name: 'User', position: 0, builtIn: 'USER', permissions: ['emotes.upload'] }),
 ];
 
@@ -103,5 +103,53 @@ describe('the role editor sends allows, denies and invisible', () => {
     const dialog = await screen.findByRole('dialog', { name: /Edit .*User/ });
     expect(within(dialog).queryByRole('radio', { name: 'Deny' })).toBeNull();
     expect(within(dialog).getByText(/Deny isn’t offered here/)).toBeTruthy();
+  });
+});
+
+describe('the role editor sets the colour', () => {
+  it('a preset or typed hex is sent as #rrggbb; clearing it sends an empty string on update', async () => {
+    const user = userEvent.setup();
+    render(Page);
+    await screen.findByRole('list', { name: 'Roles' });
+    await user.click(screen.getByRole('button', { name: /New role/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'New role' });
+    await user.type(within(dialog).getByLabelText('Name'), 'Tinted');
+    expect(within(dialog).getByText(/Optional/)).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Blue' }));
+    expect((within(dialog).getByLabelText('Hex colour') as HTMLInputElement).value).toBe('#3b82f6');
+    expect(within(dialog).getByText(/Readable on both themes/)).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent('CreateRole')).toBeTruthy());
+    expect(sent('CreateRole').input.color).toBe('#3b82f6');
+  });
+
+  it('warns about a colour that is faint on one theme and refuses a malformed one', async () => {
+    const user = userEvent.setup();
+    render(Page);
+    await screen.findByRole('list', { name: 'Roles' });
+    await user.click(screen.getByRole('button', { name: /New role/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'New role' });
+    await user.type(within(dialog).getByLabelText('Name'), 'Pale');
+    const hex = within(dialog).getByLabelText('Hex colour');
+    await user.type(hex, 'FFFFFF');
+    expect(within(dialog).getByText(/Hard to see on the light theme/)).toBeTruthy();
+    await user.clear(hex);
+    await user.type(hex, '#12');
+    expect(within(dialog).getByText('Use a hex colour like #3b82f6.')).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(sent('CreateRole')).toBeUndefined();
+  });
+
+  it('editing shows the current colour and Clear sends an empty string', async () => {
+    const user = userEvent.setup();
+    state.url = new URL('http://localhost/admin/roles?role=R1');
+    render(Page);
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog', { name: /Edit .*Moderator/ });
+    expect((within(dialog).getByLabelText('Hex colour') as HTMLInputElement).value).toBe('#3b82f6');
+    await user.click(within(dialog).getByRole('button', { name: 'Clear' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent('UpdateRole')).toBeTruthy());
+    expect(sent('UpdateRole').input.color).toBe('');
   });
 });

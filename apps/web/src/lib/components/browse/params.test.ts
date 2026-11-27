@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { active, apiSort, apiVars, change, cleanTags, CLEARED, parse, toSearch, topTags, without } from './params';
+import { active, apiSort, apiVars, change, cleanTags, CLEARED, parse, toSearch, without } from './params';
 
 const u = (s: string) => parse(new URLSearchParams(s));
 
@@ -53,12 +53,6 @@ describe('browse params', () => {
     expect(change(b, without(b, 'zeroWidth')).zeroWidth).toBe(false);
     expect(change(b, without(b, 'kind')).kind).toBe('all');
     expect(toSearch(change(b, CLEARED))).toBe('');
-  });
-  it('counts the most used tags, leaving out the chosen ones', () => {
-    const items = [{ tags: ['cat', 'Cute'] }, { tags: ['cute', 'cute'] }, { tags: [] }, {}];
-    expect(topTags(items)).toEqual([{ tag: 'cute', count: 2 }, { tag: 'cat', count: 1 }]);
-    expect(topTags(items, 1)).toHaveLength(1);
-    expect(topTags(items, 12, ['cute'])).toEqual([{ tag: 'cat', count: 1 }]);
   });
 });
 

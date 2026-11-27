@@ -389,8 +389,10 @@
 
   /* The tabs: a strip over hairline-ruled rows. */
   .tabbed { min-width: 0; }
-  .tabbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
-  .tablist { display: flex; gap: 4px; padding: 3px; margin: -3px -3px -3px -13px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+  /* The tabs keep their full width; the pager (or See all) wraps under them, right-aligned, when the two don't fit. */
+  .tabbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 12px; min-height: 44px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .tabbar > :global(:not(.tablist)) { margin-left: auto; }
+  .tablist { display: flex; max-width: 100%; gap: 4px; padding: 3px; margin: -3px -3px -3px -13px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
   .tabbtn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px; border: 0; border-radius: var(--radius-btn);
     background: none; color: var(--muted); font: inherit; font-size: var(--t-ui); font-weight: 500; white-space: nowrap; cursor: pointer;
     transition: color var(--fast); touch-action: manipulation; }
@@ -429,7 +431,6 @@
     .short { display: inline; }
     .tablist { gap: 0; }
     .tabbtn { padding: 0 8px; gap: 6px; }
-    .tabbar { flex-wrap: wrap; row-gap: 4px; }
     .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 

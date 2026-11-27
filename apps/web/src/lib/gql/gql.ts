@@ -34,7 +34,7 @@ type Documents = {
     "\n  mutation DeleteAccount($confirm: String!) {\n    deleteAccount(confirm: $confirm)\n  }\n": typeof types.DeleteAccountDocument,
     "\n  query PendingDeletion {\n    pendingDeletion {\n      requestedAt\n      eraseAfter\n      displayName\n      avatar\n    }\n  }\n": typeof types.PendingDeletionDocument,
     "\n  mutation RestoreAccount {\n    restoreAccount\n  }\n": typeof types.RestoreAccountDocument,
-    "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n        invisible\n      }\n    }\n  }\n": typeof types.MyRolesDocument,
+    "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n        invisible\n        color\n      }\n    }\n  }\n": typeof types.MyRolesDocument,
     "\n  query Me {\n    me {\n      id\n      createdAt\n      permissions\n      displayPlatform\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.MeDocument,
     "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int, $filter: ActivityFilter) {\n    accountActivityPage(accountId: $accountId, before: $before, limit: $limit, filter: $filter) {\n      entries {\n        id\n        kind\n        actor {\n          id\n          displayName\n          avatar\n        }\n        editor {\n          id\n          displayName\n          avatar\n        }\n        set {\n          id\n          name\n        }\n        emote {\n          id\n          name\n          host\n          files {\n            name\n            width\n            height\n            isStatic\n          }\n        }\n        fromName\n        toName\n        badge {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        paint {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        createdAt\n      }\n      next\n    }\n  }\n": typeof types.AccountActivityDocument,
     "\n  query EmoteActivity($emoteId: String!, $before: String, $limit: Int, $actorId: String) {\n    emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit, actorId: $actorId) {\n      entries {\n        id\n        kind\n        actor {\n          id\n          displayName\n          avatar\n        }\n        set {\n          id\n          name\n        }\n        emote {\n          id\n          name\n          host\n          files {\n            name\n            width\n            height\n            isStatic\n          }\n        }\n        fromName\n        toName\n        badge {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        paint {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        createdAt\n      }\n      next\n    }\n  }\n": typeof types.EmoteActivityDocument,
@@ -55,7 +55,7 @@ type Documents = {
     "\n  query Cosmetics {\n    cosmetics {\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": typeof types.CosmeticsDocument,
     "\n  query UserCosmetics($platform: Platform!, $userIds: [String!]!) {\n    userCosmetics(platform: $platform, userIds: $userIds) {\n      platformUserId\n      badgeId\n      paintId\n    }\n  }\n": typeof types.UserCosmeticsDocument,
     "\n  query AccountCosmetics($accountIds: [String!]!) {\n    accountCosmetics(accountIds: $accountIds) {\n      accountId\n      badge {\n        ...BadgeFields\n      }\n      paint {\n        ...PaintFields\n      }\n    }\n  }\n": typeof types.AccountCosmeticsDocument,
-    "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n    }\n  }\n": typeof types.AccountProfileDocument,
+    "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n        color\n      }\n      roleColor\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n    }\n  }\n": typeof types.AccountProfileDocument,
     "\n  query MyCosmetics($accountId: String) {\n    myCosmetics(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n      badgeId\n      paintId\n    }\n  }\n": typeof types.MyCosmeticsDocument,
     "\n  mutation SelectCosmetics($badgeId: String, $paintId: String, $ownerId: String) {\n    selectCosmetics(badgeId: $badgeId, paintId: $paintId, ownerId: $ownerId) {\n      badgeId\n      paintId\n    }\n  }\n": typeof types.SelectCosmeticsDocument,
     "\n  query CosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      ...CosmeticImageFields\n    }\n  }\n": typeof types.CosmeticImageDocument,
@@ -112,7 +112,7 @@ type Documents = {
     "\n  mutation UnhideCreator($accountId: String!) {\n    unhideCreator(accountId: $accountId)\n  }\n": typeof types.UnhideCreatorDocument,
     "\n  mutation FavouriteEmote($id: String!) {\n    favouriteEmote(id: $id)\n  }\n": typeof types.FavouriteEmoteDocument,
     "\n  mutation UnfavouriteEmote($id: String!) {\n    unfavouriteEmote(id: $id)\n  }\n": typeof types.UnfavouriteEmoteDocument,
-    "\n  query AccountRoles($accountId: String!) {\n    accountRoles(accountId: $accountId) {\n      id\n      name\n      position\n    }\n  }\n": typeof types.AccountRolesDocument,
+    "\n  query AccountRoles($accountId: String!) {\n    accountRoles(accountId: $accountId) {\n      id\n      name\n      position\n      color\n    }\n  }\n": typeof types.AccountRolesDocument,
     "\n  query AccountEditors($accountId: String) {\n    accountEditors(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": typeof types.AccountEditorsDocument,
     "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      allSets\n    }\n  }\n": typeof types.EditorOfDocument,
     "\n  query AccountSets($accountId: String!) {\n    accountSets(accountId: $accountId, preview: 12) {\n      id\n      name\n      kind\n      capacity\n      slotsUsed\n      active\n      preview {\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.AccountSetsDocument,
@@ -139,7 +139,7 @@ type Documents = {
     "\n  mutation AddEmoteNote($emoteId: String!, $body: String!) {\n    addEmoteNote(emoteId: $emoteId, body: $body) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": typeof types.AddEmoteNoteDocument,
     "\n  mutation DeleteEmoteNote($id: String!) {\n    deleteEmoteNote(id: $id)\n  }\n": typeof types.DeleteEmoteNoteDocument,
     "\n  mutation Reject($id: String!, $reason: String!) {\n    rejectEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": typeof types.RejectDocument,
-    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    builtIn\n    editable\n    assignable\n  }\n": typeof types.RoleFieldsFragmentDoc,
+    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    color\n    builtIn\n    editable\n    assignable\n  }\n": typeof types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": typeof types.RolesDocument,
     "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    max\n    windowSeconds\n    value\n  }\n": typeof types.RoleLimitFieldsFragmentDoc,
     "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.LimitDefaultsDocument,
@@ -231,7 +231,7 @@ const documents: Documents = {
     "\n  mutation DeleteAccount($confirm: String!) {\n    deleteAccount(confirm: $confirm)\n  }\n": types.DeleteAccountDocument,
     "\n  query PendingDeletion {\n    pendingDeletion {\n      requestedAt\n      eraseAfter\n      displayName\n      avatar\n    }\n  }\n": types.PendingDeletionDocument,
     "\n  mutation RestoreAccount {\n    restoreAccount\n  }\n": types.RestoreAccountDocument,
-    "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n        invisible\n      }\n    }\n  }\n": types.MyRolesDocument,
+    "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n        invisible\n        color\n      }\n    }\n  }\n": types.MyRolesDocument,
     "\n  query Me {\n    me {\n      id\n      createdAt\n      permissions\n      displayPlatform\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": types.MeDocument,
     "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int, $filter: ActivityFilter) {\n    accountActivityPage(accountId: $accountId, before: $before, limit: $limit, filter: $filter) {\n      entries {\n        id\n        kind\n        actor {\n          id\n          displayName\n          avatar\n        }\n        editor {\n          id\n          displayName\n          avatar\n        }\n        set {\n          id\n          name\n        }\n        emote {\n          id\n          name\n          host\n          files {\n            name\n            width\n            height\n            isStatic\n          }\n        }\n        fromName\n        toName\n        badge {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        paint {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        createdAt\n      }\n      next\n    }\n  }\n": types.AccountActivityDocument,
     "\n  query EmoteActivity($emoteId: String!, $before: String, $limit: Int, $actorId: String) {\n    emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit, actorId: $actorId) {\n      entries {\n        id\n        kind\n        actor {\n          id\n          displayName\n          avatar\n        }\n        set {\n          id\n          name\n        }\n        emote {\n          id\n          name\n          host\n          files {\n            name\n            width\n            height\n            isStatic\n          }\n        }\n        fromName\n        toName\n        badge {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        paint {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        createdAt\n      }\n      next\n    }\n  }\n": types.EmoteActivityDocument,
@@ -252,7 +252,7 @@ const documents: Documents = {
     "\n  query Cosmetics {\n    cosmetics {\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": types.CosmeticsDocument,
     "\n  query UserCosmetics($platform: Platform!, $userIds: [String!]!) {\n    userCosmetics(platform: $platform, userIds: $userIds) {\n      platformUserId\n      badgeId\n      paintId\n    }\n  }\n": types.UserCosmeticsDocument,
     "\n  query AccountCosmetics($accountIds: [String!]!) {\n    accountCosmetics(accountIds: $accountIds) {\n      accountId\n      badge {\n        ...BadgeFields\n      }\n      paint {\n        ...PaintFields\n      }\n    }\n  }\n": types.AccountCosmeticsDocument,
-    "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n    }\n  }\n": types.AccountProfileDocument,
+    "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n        color\n      }\n      roleColor\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n    }\n  }\n": types.AccountProfileDocument,
     "\n  query MyCosmetics($accountId: String) {\n    myCosmetics(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n      badgeId\n      paintId\n    }\n  }\n": types.MyCosmeticsDocument,
     "\n  mutation SelectCosmetics($badgeId: String, $paintId: String, $ownerId: String) {\n    selectCosmetics(badgeId: $badgeId, paintId: $paintId, ownerId: $ownerId) {\n      badgeId\n      paintId\n    }\n  }\n": types.SelectCosmeticsDocument,
     "\n  query CosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      ...CosmeticImageFields\n    }\n  }\n": types.CosmeticImageDocument,
@@ -309,7 +309,7 @@ const documents: Documents = {
     "\n  mutation UnhideCreator($accountId: String!) {\n    unhideCreator(accountId: $accountId)\n  }\n": types.UnhideCreatorDocument,
     "\n  mutation FavouriteEmote($id: String!) {\n    favouriteEmote(id: $id)\n  }\n": types.FavouriteEmoteDocument,
     "\n  mutation UnfavouriteEmote($id: String!) {\n    unfavouriteEmote(id: $id)\n  }\n": types.UnfavouriteEmoteDocument,
-    "\n  query AccountRoles($accountId: String!) {\n    accountRoles(accountId: $accountId) {\n      id\n      name\n      position\n    }\n  }\n": types.AccountRolesDocument,
+    "\n  query AccountRoles($accountId: String!) {\n    accountRoles(accountId: $accountId) {\n      id\n      name\n      position\n      color\n    }\n  }\n": types.AccountRolesDocument,
     "\n  query AccountEditors($accountId: String) {\n    accountEditors(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": types.AccountEditorsDocument,
     "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      allSets\n    }\n  }\n": types.EditorOfDocument,
     "\n  query AccountSets($accountId: String!) {\n    accountSets(accountId: $accountId, preview: 12) {\n      id\n      name\n      kind\n      capacity\n      slotsUsed\n      active\n      preview {\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.AccountSetsDocument,
@@ -336,7 +336,7 @@ const documents: Documents = {
     "\n  mutation AddEmoteNote($emoteId: String!, $body: String!) {\n    addEmoteNote(emoteId: $emoteId, body: $body) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": types.AddEmoteNoteDocument,
     "\n  mutation DeleteEmoteNote($id: String!) {\n    deleteEmoteNote(id: $id)\n  }\n": types.DeleteEmoteNoteDocument,
     "\n  mutation Reject($id: String!, $reason: String!) {\n    rejectEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": types.RejectDocument,
-    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    builtIn\n    editable\n    assignable\n  }\n": types.RoleFieldsFragmentDoc,
+    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    color\n    builtIn\n    editable\n    assignable\n  }\n": types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": types.RolesDocument,
     "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    max\n    windowSeconds\n    value\n  }\n": types.RoleLimitFieldsFragmentDoc,
     "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n": types.LimitDefaultsDocument,
@@ -488,7 +488,7 @@ export function graphql(source: "\n  mutation RestoreAccount {\n    restoreAccou
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n        invisible\n      }\n    }\n  }\n"): typeof import('./graphql').MyRolesDocument;
+export function graphql(source: "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n        invisible\n        color\n      }\n    }\n  }\n"): typeof import('./graphql').MyRolesDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -572,7 +572,7 @@ export function graphql(source: "\n  query AccountCosmetics($accountIds: [String
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AccountProfileDocument;
+export function graphql(source: "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n        color\n      }\n      roleColor\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AccountProfileDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -800,7 +800,7 @@ export function graphql(source: "\n  mutation UnfavouriteEmote($id: String!) {\n
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query AccountRoles($accountId: String!) {\n    accountRoles(accountId: $accountId) {\n      id\n      name\n      position\n    }\n  }\n"): typeof import('./graphql').AccountRolesDocument;
+export function graphql(source: "\n  query AccountRoles($accountId: String!) {\n    accountRoles(accountId: $accountId) {\n      id\n      name\n      position\n      color\n    }\n  }\n"): typeof import('./graphql').AccountRolesDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -908,7 +908,7 @@ export function graphql(source: "\n  mutation Reject($id: String!, $reason: Stri
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    builtIn\n    editable\n    assignable\n  }\n"): typeof import('./graphql').RoleFieldsFragmentDoc;
+export function graphql(source: "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    color\n    builtIn\n    editable\n    assignable\n  }\n"): typeof import('./graphql').RoleFieldsFragmentDoc;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

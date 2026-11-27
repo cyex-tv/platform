@@ -15,9 +15,9 @@ export const setPendingDeletion = (v) => { PENDING_DELETION = v; };
 export const setRestoreCookie = (v) => { RESTORE_COOKIE = v; };
 // As the API's me.roles: with every permission (the mock's owner) the top role comes first, hidden.
 export const MY_ROLES = (admin) => [
-  ...(admin ? [{ id: ROLES.find((r) => r.builtIn === 'ROOT')?.id ?? 'owner', name: 'Owner', public: false, invisible: true }] : []),
+  ...(admin ? [{ id: ROLES.find((r) => r.builtIn === 'ROOT')?.id ?? 'owner', name: 'Owner', public: false, invisible: true, color: null }] : []),
   ...(ACCOUNT_ROLES[ME_ID] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean)
-    .sort((a, b) => b.position - a.position).filter((r) => r.builtIn !== 'ROOT').map((r) => ({ id: r.id, name: r.name, public: r.public, invisible: !!r.invisible })),
+    .sort((a, b) => b.position - a.position).filter((r) => r.builtIn !== 'ROOT').map((r) => ({ id: r.id, name: r.name, public: r.public, invisible: !!r.invisible, color: r.color ?? null })),
 ];
 
 // Every account has a default set named after it (made at sign-up).

@@ -26,7 +26,7 @@
 </script>
 
 {#if me}
-  <Popover label="Your account" kind="menu" align="end" width="260px" bind:open>
+  <Popover label="Your account" kind="menu" align="end" width="260px" hover bind:open>
     {#snippet trigger(props)}
       <button class="who" type="button" {...props}>
         <span class="pic"><Avatar src={who?.avatar} {name} size={24} />{#if whatsNew.unseen}<span class="dot" aria-hidden="true"></span>{/if}</span>
