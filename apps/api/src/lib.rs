@@ -7,6 +7,7 @@ pub mod account;
 pub mod activity;
 pub mod admin;
 pub mod catalog;
+pub mod check_gate;
 pub mod codes;
 pub mod console_token;
 pub mod cors;

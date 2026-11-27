@@ -69,6 +69,12 @@ pub const ERROR_CODES: &[ErrorCode] = &[
     ),
     e(
         "General",
+        "busy",
+        "Too many uploads are being checked right now.",
+        "An upload waited its turn for a free check slot and none came free in time (503, with Retry-After). Nothing was stored; send it again.",
+    ),
+    e(
+        "General",
         "not_implemented",
         "The endpoint is part of the contract but not built yet.",
         "You call a route that answers 501.",

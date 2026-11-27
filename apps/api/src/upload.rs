@@ -408,9 +408,9 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     let file = input.file.clone();
     let limits = Limits::emote();
     let (limits_for_error, size) = (limits, input.file.len());
-    let probe: Probe = tokio::task::spawn_blocking(move || cyex_tv_media::probe(&file, &limits))
-        .await
-        .map_err(|_| ApiError::internal())?
+    let probe: Probe = crate::check_gate::gate()
+        .run(move || cyex_tv_media::probe(&file, &limits))
+        .await?
         .map_err(|err| media_error_sized(err, &limits_for_error, size))?;
     let sha256: [u8; 32] = Sha256::digest(&input.file).into();
     let sha_hex = sigv4::hex(&sha256);

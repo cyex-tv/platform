@@ -154,7 +154,8 @@ async fn the_built_in_roles_exist_and_the_top_one_is_hidden() {
         .iter()
         .map(|r| r["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["Owner", "Admin", "User"], "{r}");
+    // "Subscriber" is the migration's own role (ADR 0038), just above User.
+    assert_eq!(names, ["Owner", "Admin", "Subscriber", "User"], "{r}");
     assert_eq!(list[0]["builtIn"], "ROOT");
     assert_eq!(list[0]["position"], roles::ROOT_POSITION);
     assert_eq!(
@@ -165,13 +166,15 @@ async fn the_built_in_roles_exist_and_the_top_one_is_hidden() {
     assert_eq!(list[0]["assignable"], false);
     assert_eq!(list[1]["builtIn"], "ADMIN");
     assert_eq!(list[1]["editable"], true);
-    assert_eq!(list[2]["builtIn"], "USER");
+    assert_eq!(list[2]["name"], "Subscriber");
+    assert_eq!(list[2]["permissions"], json!([]));
+    assert_eq!(list[3]["builtIn"], "USER");
     // The everyday permissions (migration `role_deny_invisible`).
     assert_eq!(
-        list[2]["permissions"],
+        list[3]["permissions"],
         json!(["emotes.upload", "reports.file"])
     );
-    assert_eq!(list[2]["assignable"], false);
+    assert_eq!(list[3]["assignable"], false);
 
     // An admin never sees the top role, not in the list and not on the owner's account.
     let r = w.gql(&admin, ROLES, json!({})).await;
@@ -181,7 +184,7 @@ async fn the_built_in_roles_exist_and_the_top_one_is_hidden() {
         .iter()
         .map(|r| r["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["Admin", "User"], "{r}");
+    assert_eq!(names, ["Admin", "Subscriber", "User"], "{r}");
     let q = "query($a: String!) { accountRoles(accountId: $a) { name builtIn } }";
     let r = w.gql(&admin, q, json!({ "a": owner.tid() })).await;
     assert_eq!(r["data"]["accountRoles"], json!([]), "{r}");

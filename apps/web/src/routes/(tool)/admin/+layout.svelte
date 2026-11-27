@@ -9,6 +9,7 @@
   import { gql } from '$lib/api';
   import type { AdminCountsQuery } from '$lib/gql/graphql';
   import { ADMIN_COUNTS } from '$lib/queries';
+  import { adminCountVars, asksForCounts, reviewWaiting } from '$lib/admin/review-count';
   import AdminShell from '$lib/admin/shell/AdminShell.svelte';
   import { adminRail as adminRailFor } from '$lib/admin/shell/sections';
   import PageTitle from '$lib/components/PageTitle.svelte';
@@ -25,10 +26,10 @@
   let counts = $state<AdminCountsQuery | null>(null);
   $effect(() => {
     if (!admin) return;
-    const review = can('emotes.review');
-    const reports = review || can('emotes.takedown') || can('reports.manage');
-    if (!review && !reports) return;
-    void quiet(gql(ADMIN_COUNTS, { review, reports }).then((r) => (counts = r)), 'admin counts');
+    void session.me; // permissions come from the account
+    const vars = adminCountVars(can);
+    if (!asksForCounts(vars)) return;
+    void quiet(gql(ADMIN_COUNTS, vars).then((r) => (counts = r)), 'admin counts');
   });
 
   $effect(() => {
@@ -37,7 +38,7 @@
 
   const adminRail = $derived.by<RailGroup[]>(() => {
     void session.me; // permissions come from the account
-    const c = { review: counts?.reviewQueue?.total, reports: counts?.reportQueue?.total, items: shopCounts.items, orders: shopCounts.orders, codes: shopCounts.codes };
+    const c = { review: reviewWaiting(counts, can), reports: counts?.reportQueue?.total, items: shopCounts.items, orders: shopCounts.orders, codes: shopCounts.codes };
     return adminRailFor(can, c, page.url.pathname);
   });
 </script>

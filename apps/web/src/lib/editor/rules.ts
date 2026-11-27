@@ -138,6 +138,13 @@ export function checkRules(o: Output, l: EditorLimits): Rule[] {
 
 export const seconds = (ms: number) => `${String(Math.round(ms / 100) / 10).replace('.', ',')} s`;
 
+/**
+ * The rules the checklist shows. The pixel budget across all frames is checked (it gates upload
+ * and the decoder needs it) but stays out of sight while it passes: the side and frame limits
+ * already keep an emote far below it, so a line for it is noise. It appears if it ever fails.
+ */
+export const visibleRules = (rules: readonly Rule[]): Rule[] => rules.filter((r) => r.id !== 'pixels' || r.state !== 'pass');
+
 /** Every rule passes (none failing or still waiting for the encoder). */
 export const allPass = (rules: readonly Rule[]) => rules.every((r) => r.state === 'pass');
 

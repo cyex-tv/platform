@@ -5214,10 +5214,11 @@ export type EmotesWithSameFileQuery = { __typename?: 'Query', emotesWithSameFile
 export type AdminCountsQueryVariables = Exact<{
   review: Scalars['Boolean']['input'];
   reports: Scalars['Boolean']['input'];
+  personal: Scalars['Boolean']['input'];
 }>;
 
 
-export type AdminCountsQuery = { __typename?: 'Query', reviewQueue?: { __typename?: 'ReviewQueue', total: number }, reportQueue?: { __typename?: 'ReportQueue', total: number }, globalSet: { __typename?: 'EmoteSet', id: string } };
+export type AdminCountsQuery = { __typename?: 'Query', reviewQueue?: { __typename?: 'ReviewQueue', total: number, counts: { __typename?: 'ReviewCounts', personal: number } }, personalQueue?: { __typename?: 'ReviewQueue', total: number }, reportQueue?: { __typename?: 'ReportQueue', total: number }, globalSet: { __typename?: 'EmoteSet', id: string } };
 
 export type ReviewQueueQueryVariables = Exact<{
   page?: InputMaybe<Scalars['Int']['input']>;
@@ -8687,8 +8688,14 @@ export const EmotesWithSameFileDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<EmotesWithSameFileQuery, EmotesWithSameFileQueryVariables>;
 export const AdminCountsDocument = new TypedDocumentString(`
-    query AdminCounts($review: Boolean!, $reports: Boolean!) {
+    query AdminCounts($review: Boolean!, $reports: Boolean!, $personal: Boolean!) {
   reviewQueue(page: 1, perPage: 1) @include(if: $review) {
+    total
+    counts {
+      personal
+    }
+  }
+  personalQueue: reviewQueue(page: 1, perPage: 1, filter: {tab: PERSONAL}) @include(if: $personal) {
     total
   }
   reportQueue(page: 1, perPage: 1) @include(if: $reports) {

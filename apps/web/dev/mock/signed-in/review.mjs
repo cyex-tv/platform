@@ -1,7 +1,7 @@
 // Mock API: signed in/review. See ../mock-api.mjs.
 import { ME_ID, ME_SUMMARY, OWNERS } from '../config.mjs';
 import { GLOBAL } from '../set-data.mjs';
-import { CLOSED_REPORTS, FILE_EMOTES, NSFW_REFUSAL, PENDING, REPORTS, REQUEUED, RESOLVED, REVIEW_REASONS, batchIds, decideListing, duplicatesOf, logEmote, rejectOutright, reviewApprovals, reviewQueueAnswer, setReviewReasons } from '../review.mjs';
+import { CLOSED_REPORTS, FILE_EMOTES, NSFW_REFUSAL, PENDING, REPORTS, REQUEUED, RESOLVED, REVIEW_REASONS, batchIds, decideListing, duplicatesOf, personalPending, logEmote, rejectOutright, reviewApprovals, reviewQueueAnswer, setReviewReasons } from '../review.mjs';
 import { NOTES } from '../account.mjs';
 import { noteOff } from '../site.mjs';
 import { anyEmote, err } from '../sets.mjs';
@@ -22,7 +22,14 @@ function tell(e, kind, payload) {
 export function signedInReview(op, body, v, ADMIN) {
   switch (op) {
     case 'AdminCounts':
-      return { data: { reviewQueue: { total: PENDING.length }, reportQueue: { total: REPORTS.length }, globalSet: { id: GLOBAL.id } } };
+      return {
+        data: {
+          ...(v.review === false ? {} : { reviewQueue: { total: PENDING.length, counts: { personal: personalPending().length } } }),
+          ...(v.personal ? { personalQueue: { total: personalPending().length } } : {}),
+          reportQueue: { total: REPORTS.length },
+          globalSet: { id: GLOBAL.id },
+        },
+      };
     case 'ReviewQueue':
       if (!ADMIN) return err('This needs emotes.review.', 'forbidden');
       return reviewQueueAnswer(v);

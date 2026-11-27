@@ -812,3 +812,67 @@ async fn edit_permissions_owner_fields_and_staff_listing() {
     assert_eq!(r["setEmoteFlags"]["approvals"]["publicListing"], "APPROVED");
     w.db.close().await;
 }
+
+/// The admin rail's counts (`AdminCounts`): each part is gated by its own permission, so someone
+/// holding only `emotes.review_personal` can read the personal-use count and nothing more.
+const ADMIN_COUNTS: &str = "query($review: Boolean!, $personal: Boolean!) {
+    reviewQueue(page: 1, perPage: 1) @include(if: $review) { total counts { personal } }
+    personalQueue: reviewQueue(page: 1, perPage: 1, filter: { tab: PERSONAL }) @include(if: $personal) { total }
+}";
+
+#[tokio::test]
+async fn the_rail_count_for_personal_use_follows_its_permission() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let alice = w.user("1", "alice", &[]).await;
+    let lister = w.user("2", "lister", &["emotes.review"]).await;
+    let helper = w.user("3", "helper", &["emotes.review_personal"]).await;
+    let both = w.user("4", "both", BOTH).await;
+    let id = w.pending(&alice, "aliceRail").await;
+    w.ok(
+        &lister,
+        REVIEW,
+        json!({ "ids": [id], "i": { "publicListing": "APPROVE" } }),
+    )
+    .await;
+
+    // Only the personal permission: the personal count, and the main queue stays closed.
+    let r = w
+        .ok(
+            &helper,
+            ADMIN_COUNTS,
+            json!({ "review": false, "personal": true }),
+        )
+        .await;
+    assert_eq!(r["personalQueue"]["total"], 1);
+    let r = w
+        .gql(
+            &helper,
+            ADMIN_COUNTS,
+            json!({ "review": true, "personal": false }),
+        )
+        .await;
+    assert_eq!(code(&r), "forbidden", "{r}");
+    // Someone with neither permission gets nothing.
+    let nobody = w.user("5", "nobody", &[]).await;
+    let r = w
+        .gql(
+            &nobody,
+            ADMIN_COUNTS,
+            json!({ "review": false, "personal": true }),
+        )
+        .await;
+    assert_eq!(code(&r), "forbidden", "{r}");
+    // Both: the main queue's answer carries the personal count to add to it.
+    let r = w
+        .ok(
+            &both,
+            ADMIN_COUNTS,
+            json!({ "review": true, "personal": false }),
+        )
+        .await;
+    assert_eq!(r["reviewQueue"]["total"], 0);
+    assert_eq!(r["reviewQueue"]["counts"]["personal"], 1);
+    w.db.close().await;
+}

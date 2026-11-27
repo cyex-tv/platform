@@ -998,7 +998,7 @@ async fn personal_set_capacity_comes_from_override_roles_then_default() {
     give_role(
         &mut c,
         owner,
-        "subscriber",
+        "supporter",
         json!({ "personal_set_slots": 10 }),
     )
     .await;
@@ -1025,6 +1025,39 @@ async fn personal_set_capacity_comes_from_override_roles_then_default() {
         sets::set_capacity_or_reset(&mut c, channel.id, None).await,
         Err(DbError::InvalidSetKind)
     ));
+
+    drop(c);
+    db.close().await;
+}
+
+/// The "Subscriber" role the migration makes gives 10 personal set slots, is public, holds no
+/// permission and no colour, and sits just above the User role (ADR 0038).
+#[tokio::test]
+async fn subscriber_role_gives_ten_personal_set_slots() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    let set = sets::ensure_personal(&mut c, owner).await.unwrap();
+    assert_eq!(set.capacity, 3);
+
+    let role = roles::list(&mut c)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.name == "Subscriber")
+        .expect("the migration makes a Subscriber role");
+    assert_eq!(role.position, 1);
+    assert!(role.public && role.color.is_none());
+    assert!(
+        roles::permissions(&mut c, role.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    roles::assign(&mut c, owner, role.id, None).await.unwrap();
+    let found = sets::personal_for(&mut c, owner).await.unwrap().unwrap();
+    assert_eq!(found.capacity, 10);
 
     drop(c);
     db.close().await;
@@ -1261,8 +1294,11 @@ async fn roles_and_their_permissions() {
         .into_iter()
         .map(|r| r.name)
         .collect();
-    // With the built-in roles (migration default_roles) around them.
-    assert_eq!(names, ["Owner", "Admin", "Staff", "Moderator", "User"]);
+    // With the built-in roles (migration default_roles) and the Subscriber role around them.
+    assert_eq!(
+        names,
+        ["Owner", "Admin", "Staff", "Moderator", "Subscriber", "User"]
+    );
     assert_eq!(
         roles::roles_of(&mut c, admin).await.unwrap()[0].id,
         staff.id

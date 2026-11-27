@@ -12,7 +12,7 @@
   import { RATIOS } from './geometry';
   import { cropRatio, deleteShape, flipH, flipV, isStretched, outSize, resetCrop, resize, resizeKeep, rotateCcw, rotateCw, setCrop, shapesOn, updateShape, fitTo, type Shape } from './model';
   import { paintOutput, measureText } from './render';
-  import { fixLabel } from './rules';
+  import { fixLabel, visibleRules } from './rules';
   import { PRESETS, readRecent, saveRecent, withRecent } from './colors';
   import { bytes, count } from '$lib/format';
   import { seconds } from './rules';
@@ -270,7 +270,7 @@
       <section class="sec rules" aria-labelledby="rules-{uid}">
         <h3 class="ui-label" id="rules-{uid}">Upload rules</h3>
         <ul aria-live="polite" aria-relevant="text">
-          {#each rules as r (r.id)}
+          {#each visibleRules(rules) as r (r.id)}
             <li class="rule {r.state}" data-rule={r.id}>
               <span class="ic" aria-hidden="true"><EditorIcon name={r.state === 'pass' ? 'pass' : r.state === 'fail' ? 'fail' : 'wait'} size={16} /></span>
               <span class="rl">
