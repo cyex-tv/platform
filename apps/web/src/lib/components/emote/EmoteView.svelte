@@ -377,10 +377,11 @@
   .head-actions :global(.actions-row) { justify-content: flex-start; }
 
   /* The facts: label and value cells sharing hairlines. */
-  .facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); border: 1px solid var(--border);
+  /* Cells grow to fill their row, so a short last row never leaves empty slots (4 to 6 facts). */
+  .facts { margin: 0; display: flex; flex-wrap: wrap; border: 1px solid var(--border);
     border-radius: var(--radius-card); overflow: hidden; }
   /* Hairlines right of and under every cell; the frame clips the outer ones, so a short last row leaves no grey gap. */
-  .facts > div { display: grid; align-content: start; gap: 2px; padding: 10px 12px; min-width: 0; box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border); }
+  .facts > div { flex: 1 1 120px; display: grid; align-content: start; gap: 2px; padding: 10px 12px; min-width: 0; box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border); }
   dt { font-size: var(--t-fine); color: var(--muted); white-space: nowrap; }
   dd { margin: 0; display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-ui); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
   dd.num { font-variant-numeric: tabular-nums; }
@@ -431,7 +432,7 @@
     .short { display: inline; }
     .tablist { gap: 0; }
     .tabbtn { padding: 0 8px; gap: 6px; }
-    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .facts > div { flex-basis: 40%; }
   }
 
   /* Phones: the actions move to a bar fixed to the bottom of the screen, above the home indicator.

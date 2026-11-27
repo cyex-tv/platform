@@ -39,7 +39,7 @@ fn code(response: &Value) -> &str {
         .unwrap_or_default()
 }
 
-const QUEUE: &str = "query($f: ReviewQueueFilter, $p: Int, $n: Int) { reviewQueue(filter: $f, page: $p, perPage: $n) { total counts { public limited } items { id name state visibility owner { displayName } } } }";
+const QUEUE: &str = "query($f: ReviewQueueFilter, $p: Int, $n: Int) { reviewQueue(filter: $f, page: $p, perPage: $n) { total counts { public limited personal } items { id name state visibility owner { displayName } } } }";
 const APPROVE: &str = "mutation($id: String!, $v: EmoteVisibility) { approveEmote(id: $id, visibility: $v) { state visibility flags { private } } }";
 const REJECT: &str =
     "mutation($id: String!) { rejectEmote(id: $id, reason: \"Too blurry\") { state } }";
@@ -203,18 +203,26 @@ async fn tabs_search_and_order() {
     let body = w.gql(Some(&mod_), QUEUE, json!({})).await;
     assert_eq!(
         body["data"]["reviewQueue"]["counts"],
-        json!({ "public": 2, "limited": 2 })
+        // ADR 0038: every pending non-private emote is unlisted, so LinkOnly is "public" too.
+        json!({ "public": 3, "limited": 1, "personal": 0 })
     );
 
     let (public, total) = w.names(&mod_, json!({ "tab": "PUBLIC" })).await;
     assert_eq!(
         (public, total),
-        (vec!["OldPublic".to_owned(), "NewPublic".to_owned()], 2)
+        (
+            vec![
+                "OldPublic".to_owned(),
+                "LinkOnly".to_owned(),
+                "NewPublic".to_owned()
+            ],
+            3
+        )
     );
     let (limited, _) = w
         .names(&mod_, json!({ "tab": "LIMITED", "descending": true }))
         .await;
-    assert_eq!(limited, ["MineOnly", "LinkOnly"]);
+    assert_eq!(limited, ["MineOnly"]);
 
     // Search: by name, by uploader login, any case; LIKE characters mean themselves.
     let (by_name, _) = w.names(&mod_, json!({ "search": "only" })).await;
@@ -243,11 +251,11 @@ async fn tabs_search_and_order() {
         .gql(
             Some(&mod_),
             QUEUE,
-            json!({ "f": { "tab": "LIMITED" }, "p": 2, "n": 1 }),
+            json!({ "f": { "tab": "PUBLIC" }, "p": 2, "n": 1 }),
         )
         .await;
-    assert_eq!(body["data"]["reviewQueue"]["total"], 2);
-    assert_eq!(body["data"]["reviewQueue"]["items"][0]["name"], "MineOnly");
+    assert_eq!(body["data"]["reviewQueue"]["total"], 3);
+    assert_eq!(body["data"]["reviewQueue"]["items"][0]["name"], "LinkOnly");
 
     // Resolved: reviewed ones, the latest review first.
     let r = w.gql(Some(&mod_), REJECT, json!({ "id": unlisted })).await;
@@ -257,7 +265,7 @@ async fn tabs_search_and_order() {
     let body = w.gql(Some(&mod_), QUEUE, json!({})).await;
     assert_eq!(
         body["data"]["reviewQueue"]["counts"],
-        json!({ "public": 2, "limited": 1 })
+        json!({ "public": 2, "limited": 1, "personal": 0 })
     );
 
     // Bad input and no permission.
@@ -296,9 +304,9 @@ async fn approve_as_unlisted_or_private() {
         .await;
     assert_eq!(r["data"]["approveEmote"]["visibility"], "PRIVATE");
     assert_eq!(r["data"]["approveEmote"]["flags"]["private"], true);
-    // No visibility: it stays as the uploader chose.
+    // No visibility: the listing is approved (ADR 0038), so it is public whatever was asked at upload.
     let r = w.gql(Some(&mod_), APPROVE, json!({ "id": c })).await;
-    assert_eq!(r["data"]["approveEmote"]["visibility"], "UNLISTED");
+    assert_eq!(r["data"]["approveEmote"]["visibility"], "PUBLIC");
 
     // The audit entry says what it became; the history shows it to reviewers.
     let h = w.gql(Some(&mod_), HISTORY, json!({ "id": a })).await;

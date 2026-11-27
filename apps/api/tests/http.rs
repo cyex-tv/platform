@@ -210,6 +210,9 @@ async fn graphql_permission_names_are_public() {
     let names = response["data"]["permissions"].as_array().unwrap();
     assert!(names.iter().any(|n| n == "emotes.review"));
     assert!(names.iter().any(|n| n == "roles.manage"));
+    // ADR 0038.
+    assert!(names.iter().any(|n| n == "emotes.review_personal"));
+    assert!(names.iter().any(|n| n == "emotes.transfer"));
 }
 
 #[tokio::test]
@@ -680,6 +683,30 @@ async fn meta_lists_the_scale_deprecation_for_badge_and_paint_files() {
         .expect("EmoteFile.scale");
     assert!(line.contains("@deprecated"), "{line}");
     assert!(line.contains("Emote files keep"), "{line}");
+}
+
+// ADR 0038: transfer requests are retired, and `/v1/meta` says so.
+#[tokio::test]
+async fn meta_lists_the_retired_transfer_requests() {
+    let response = cyex_tv_api::app(offline_state())
+        .oneshot(Request::get("/v1/meta").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let meta: Value = serde_json::from_slice(&body).unwrap();
+    let entry = meta["deprecations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["id"] == "emote_transfer_requests")
+        .expect("the transfer-request deprecation is listed");
+    assert_eq!(entry["since"], "2026-11-27");
+    assert!(
+        entry["replacement"]
+            .as_str()
+            .unwrap()
+            .contains("emotes.transfer")
+    );
 }
 
 /// The properties a schema has, following one `allOf`.

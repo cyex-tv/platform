@@ -116,6 +116,7 @@ const STAFF: &[&str] = &[
     "assignRole",
     "unassignRole",
     "reviewEmotes",
+    "reviewApprovals",
     "requeueEmotes",
     "setEmoteFlags",
     "dismissReports",
@@ -147,6 +148,11 @@ fn valid_input(field: &str) -> Option<String> {
         ),
         "createCodeBatch" => format!(
             "mutation {{ createCodeBatch(input: {{ name: \"Sweep\", prefix: \"SWEEP\", count: 1, badgeIds: [\"{}\"] }}) {{ codes }} }}",
+            id()
+        ),
+        // ADR 0038: an empty verdict is `bad_approvals`, which is checked before the permission.
+        "reviewApprovals" => format!(
+            "mutation {{ reviewApprovals(ids: [\"{}\"], input: {{ publicListing: APPROVE }}) {{ done }} }}",
             id()
         ),
         "createRole" => {

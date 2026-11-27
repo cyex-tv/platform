@@ -666,12 +666,14 @@
 
 <style>
   /* The toolbar: tabs, search, sorting on one row; it wraps where the column is narrow. */
-  .tabs { flex: none; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  /* Four tabs with counts are wider than a phone: the strip scrolls sideways instead of widening the
+     page (on narrow screens, inline-size containment keeps its content out of the column's minimum width). */
+  .tabs { flex: none; max-width: 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .tabs::-webkit-scrollbar { display: none; }
   .find { flex: 1 1 180px; min-width: 0; }
   .pick { flex: none; width: auto; padding-left: 10px; }
   @media (max-width: 899.98px) {
-    .tabs { flex-basis: 100%; }
+    .tabs { flex: 1 1 100%; contain: inline-size; }
     .find { flex-basis: 100%; max-width: none; }
     .pick { flex: 1 1 0; }
   }

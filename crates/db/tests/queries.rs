@@ -10,7 +10,7 @@ use cyex_tv_db::emotes::{self, EmotePatch, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::sets::{self, NewMember};
 use cyex_tv_db::{DbError, audit, channels, files, ids, outbox, roles, search};
-use cyex_tv_shared::model::{EmoteState, EventType, Platform, SetKind};
+use cyex_tv_shared::model::{ApprovalState, EmoteState, EventType, Platform, SetKind};
 use cyex_tv_shared::permissions;
 use serde_json::json;
 use sqlx::postgres::PgListener;
@@ -1630,7 +1630,8 @@ async fn every_search_uses_the_listed_emote_rule() {
         make(
             "visunlisted",
             EmotePatch {
-                unlisted: Some(true),
+                // ADR 0038: `unlisted` follows the listing approval (a trigger), so deny it.
+                listing_review: Some(ApprovalState::Denied),
                 ..EmotePatch::default()
             },
             owner,

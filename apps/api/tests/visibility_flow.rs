@@ -180,7 +180,8 @@ async fn unlisted_emotes_open_by_link_but_stay_out_of_listings() {
         .await;
     assert_eq!(code(&r), "bad_visibility", "{r}");
     // A moderator takes it off the listings (setEmoteFlags, mod_flags_flow); here, as stored.
-    sqlx::query("UPDATE emotes SET unlisted = true WHERE name = 'AnnQuiet'")
+    // ADR 0038: `unlisted` follows the listing review, so the listing is denied.
+    sqlx::query("UPDATE emotes SET listing_review = 'denied' WHERE name = 'AnnQuiet'")
         .execute(&mut *w.db.conn().await)
         .await
         .unwrap();
@@ -265,7 +266,9 @@ async fn unlisted_emotes_open_by_link_but_stay_out_of_listings() {
     assert!(text.contains(&shown), "{r}");
     assert!(!text.contains(&quiet), "{r}");
 
-    // Its owner can't move it off unlisted either: only staff list it again (ADR 0020).
+    // ADR 0038: its owner may make it private (the old "A moderator took this emote off the
+    // listings" error is gone), and "not private" again leaves the listing denied: still
+    // unlisted. Only staff list it again.
     let r = w
         .gql(
             Some(&ann),
@@ -273,9 +276,17 @@ async fn unlisted_emotes_open_by_link_but_stay_out_of_listings() {
             json!({ "id": quiet, "i": { "visibility": "PRIVATE" } }),
         )
         .await;
-    assert_eq!(code(&r), "bad_visibility", "{r}");
+    assert_eq!(r["data"]["updateEmote"]["visibility"], "PRIVATE", "{r}");
+    let r = w
+        .gql(
+            Some(&ann),
+            UPDATE,
+            json!({ "id": quiet, "i": { "private": false } }),
+        )
+        .await;
+    assert_eq!(r["data"]["updateEmote"]["visibility"], "UNLISTED", "{r}");
     // A moderator lists it again (as stored); then its owner may make it private.
-    sqlx::query("UPDATE emotes SET unlisted = false WHERE name = 'AnnQuiet'")
+    sqlx::query("UPDATE emotes SET listing_review = 'approved' WHERE name = 'AnnQuiet'")
         .execute(&mut *w.db.conn().await)
         .await
         .unwrap();

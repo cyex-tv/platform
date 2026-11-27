@@ -298,6 +298,15 @@ async fn unlisted_and_leaving_emotes_in_feeds() {
             emotes::set_state(&mut conn, e.id, cyex_tv_shared::model::EmoteState::Approved)
                 .await
                 .unwrap();
+            // ADR 0038: `unlisted` follows the listing approval and set_state(Approved) approves
+            // it, so an unlisted emote is one whose listing was denied afterwards.
+            if unlisted {
+                sqlx::query("UPDATE emotes SET listing_review = 'denied' WHERE id = $1")
+                    .bind(e.id)
+                    .execute(&mut *conn)
+                    .await
+                    .unwrap();
+            }
             ids::to_text(e.id)
         }
     };
