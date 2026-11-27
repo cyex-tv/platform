@@ -168,7 +168,12 @@ pub async fn review_top_uploaders(
     let limit = limit_of(limit);
     let read = QueueRead::from_filter(filter.cloned().unwrap_or_default())?;
     let mut conn = conn(state).await?;
-    require_any(&mut conn, caller, &[permissions::EMOTES_REVIEW]).await?;
+    require_any(
+        &mut conn,
+        caller,
+        crate::moderation::queue_permissions(read.tab),
+    )
+    .await?;
     let counts = reads::queue_top_uploaders(&mut conn, read.tab, read.search.as_deref(), limit)
         .await
         .map_err(db_error)?;

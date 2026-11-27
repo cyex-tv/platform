@@ -56,7 +56,7 @@ describe('the emote page preview', () => {
   it('keeps the useful facts and drops kind, formats and file sizes', () => {
     view();
     const facts = [...document.querySelectorAll('.facts dt')].map((d) => d.textContent);
-    expect(facts).toEqual(['Channels', 'Uploaded', 'Review']);
+    expect(facts).toEqual(['Channels', 'Uploaded', 'Public listing', 'Personal use']);
     expect(document.body.textContent).not.toMatch(/Kind|Format|File at|KB\b|\d B\b/);
   });
 

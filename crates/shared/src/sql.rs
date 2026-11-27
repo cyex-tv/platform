@@ -6,7 +6,7 @@ use sqlx::error::BoxDynError;
 use sqlx::postgres::{PgArgumentBuffer, PgTypeInfo, PgValueRef};
 use sqlx::{Decode, Encode, Postgres, Type};
 
-use crate::model::{EmoteState, Platform, SetKind, SetVisibility};
+use crate::model::{ApprovalState, EmoteState, Platform, SetKind, SetVisibility};
 
 macro_rules! text_enum {
     ($($ty:ty),+) => {$(
@@ -34,4 +34,4 @@ macro_rules! text_enum {
     )+};
 }
 
-text_enum!(Platform, EmoteState, SetKind, SetVisibility);
+text_enum!(Platform, EmoteState, ApprovalState, SetKind, SetVisibility);

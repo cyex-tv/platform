@@ -24,6 +24,7 @@ function emote(over: Partial<PageEmote> = {}): PageEmote {
     createdAt: '2026-11-17T10:00:00.000Z',
     channelCount: 0,
     visibility: 'PUBLIC',
+    approvals: { publicListing: 'APPROVED', personalUse: 'APPROVED' },
     flags: { zeroWidth: false, private: false, wide: false },
     owner: { id: 'A1', displayName: 'nora_byte', avatar: null },
     files: [1, 2, 3, 4].flatMap((s) => [file(s), file(s, { isStatic: true, size: 400 * s })]),

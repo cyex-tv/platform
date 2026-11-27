@@ -31,6 +31,33 @@ const FIELD: Record<string, string> = {
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+const VERDICT: Record<string, string> = { approved: 'approved', denied: 'denied', pending: 'back to pending' };
+
+/**
+ * What an approvals audit row says (`emote.approved` and `emote.approvals_changed`, ADR 0039):
+ * "Public listing approved", "Personal use denied: Blurry". Only the parts that changed (a part
+ * with no "before" counts as changed); both approved reads as one phrase. Empty when the row has
+ * no approvals in it (an older row).
+ */
+function approvalText(before: Record<string, unknown>, after: Record<string, unknown>): string {
+  const listing = typeof after.public_listing === 'string' ? after.public_listing : '';
+  const personal = typeof after.personal_use === 'string' ? after.personal_use : '';
+  // A part still pending on a first verdict wasn't decided: it isn't mentioned.
+  const moved = (was: unknown, now: string) => !!now && was !== now && !(now === 'pending' && was === undefined);
+  const l = moved(before.public_listing, listing) ? listing : '';
+  const u = moved(before.personal_use, personal) ? personal : '';
+  if (!l && !u) return '';
+  const reason = typeof after.reason === 'string' && after.reason.trim() ? after.reason.trim() : '';
+  const bits: string[] = [];
+  if (l === 'approved' && u === 'approved') bits.push('Approved for public listing and personal use');
+  else {
+    if (l) bits.push(`Public listing ${VERDICT[l] ?? l}`);
+    if (u) bits.push(`${bits.length ? 'personal' : 'Personal'} use ${VERDICT[u] ?? u}`);
+  }
+  const text = bits.join(', ');
+  return reason && (l === 'denied' || u === 'denied') ? `${text}: ${reason}` : text;
+}
+
 /** One history line: what happened, and an optional detail (a reason, a note, what changed). */
 export function describe(e: HistoryEntry): { text: string; detail?: string } {
   const before = parse(e.before);
@@ -38,8 +65,16 @@ export function describe(e: HistoryEntry): { text: string; detail?: string } {
   const vis = typeof after.visibility === 'string' ? after.visibility : '';
   const reason = typeof after.reason === 'string' ? after.reason : undefined;
   switch (e.action) {
-    case 'emote.approved':
+    case 'emote.approved': {
+      // ADR 0039: the first listing verdict, with the personal-use state it was decided with.
+      const text = approvalText(before, after);
+      if (text) return { text };
       return { text: vis && vis !== 'public' ? `Approved as ${vis}` : 'Approved' };
+    }
+    case 'emote.approvals_changed':
+      return { text: approvalText(before, after) || 'Changed the approvals' };
+    case 'emote.transferred':
+      return { text: after.via === 'emotes.transfer' ? 'Transferred to another account by staff' : 'Transferred to another account' };
     case 'emote.rejected':
       return { text: 'Rejected', detail: reason };
     case 'emote.resubmitted':
@@ -135,26 +170,160 @@ export function approveFailure(err: unknown, name: string): string {
   return `${name} wasn’t approved. ${why}`;
 }
 
-type Held = { id: string; visibility: string };
-type QueueView<T extends Held> = { items: T[]; total: number; counts: { public: number; limited: number } };
+// What a reviewer can decide, and what each button or key sends (ADR 0039). Two questions per
+// upload: may it be listed publicly, and may it be a personal emote. "Approve both" is the common
+// case; a reviewer who holds only one of the two permissions gets the one they can do.
+
+/** The two review permissions the signed-in reviewer holds (`emotes.review`, `emotes.review_personal`). */
+export type Reviewer = { listing: boolean; personal: boolean };
+/** The queue the actions are for: the main one (listing first), or the personal-use one. */
+export type Mode = 'main' | 'personal';
+export type Action = 'both' | 'listing' | 'personal' | 'deny-listing' | 'deny-personal' | 'reject';
+export type Verdict = 'APPROVE' | 'DENY';
+/** What `reviewApprovals` is told: each part left out stays as it is. */
+export type Decision = { listing?: Verdict; personal?: Verdict };
+
+/** Which actions the reviewer has in a queue, primary first. Empty when they can decide nothing there. */
+export function actionsFor(mode: Mode, r: Reviewer): Action[] {
+  if (mode === 'personal') return r.personal ? ['personal', 'deny-personal'] : [];
+  if (!r.listing) return [];
+  return r.personal ? ['both', 'listing', 'personal', 'deny-listing', 'deny-personal', 'reject'] : ['listing', 'deny-listing', 'reject'];
+}
+
+/** The name on a button. Without the personal permission "Approve" is the listing alone. */
+export function actionLabel(a: Action, r: Reviewer, mode: Mode = 'main'): string {
+  switch (a) {
+    case 'both':
+      return 'Approve both';
+    case 'listing':
+      return r.personal ? 'Approve public listing' : 'Approve';
+    case 'personal':
+      return mode === 'personal' ? 'Approve personal use' : 'Approve personal use only';
+    case 'deny-listing':
+      return 'Deny public listing';
+    case 'deny-personal':
+      return 'Deny personal use';
+    case 'reject':
+      return 'Reject';
+  }
+}
+
+/** What an action decides; null for Reject (the emote is refused outright, with its own call). */
+export function decisionOf(a: Action): Decision | null {
+  switch (a) {
+    case 'both':
+      return { listing: 'APPROVE', personal: 'APPROVE' };
+    case 'listing':
+      return { listing: 'APPROVE' };
+    case 'personal':
+      return { personal: 'APPROVE' };
+    case 'deny-listing':
+      return { listing: 'DENY' };
+    case 'deny-personal':
+      return { personal: 'DENY' };
+    case 'reject':
+      return null;
+  }
+}
+
+/** A denial and a rejection need a reason the owner sees; an approval is sent after its undo time. */
+export const needsReason = (a: Action) => a === 'deny-listing' || a === 'deny-personal' || a === 'reject';
+
+/** The `ApprovalsInput` for a decision. `onlyPending` stays at the API's default (true) in queues. */
+export function approvalsInput(d: Decision, reason?: string) {
+  return {
+    ...(d.listing ? { publicListing: d.listing } : {}),
+    ...(d.personal ? { personalUse: d.personal } : {}),
+    ...(reason ? { reason } : {}),
+  };
+}
+
+/** The action a key stands for in a queue (A, L, P, D, N, R); null for any other, or one the reviewer lacks. */
+export function actionForKey(key: string, mode: Mode, r: Reviewer): Action | null {
+  const k = key.toLowerCase();
+  let want: Action | null = null;
+  if (mode === 'personal') {
+    if (k === 'a' || k === 'p') want = 'personal';
+    else if (k === 'd' || k === 'n') want = 'deny-personal';
+  } else if (k === 'a') want = r.personal ? 'both' : 'listing';
+  else if (k === 'l') want = 'listing';
+  else if (k === 'p') want = 'personal';
+  else if (k === 'd') want = 'deny-listing';
+  else if (k === 'n') want = 'deny-personal';
+  else if (k === 'r') want = 'reject';
+  return want && actionsFor(mode, r).includes(want) ? want : null;
+}
+
+/** What a toast says after the action, in the past tense: "Wave approved for public listing and personal use." */
+export function actionDone(a: Action): string {
+  switch (a) {
+    case 'both':
+      return 'approved for public listing and personal use';
+    case 'listing':
+      return 'approved for public listing';
+    case 'personal':
+      return 'approved for personal use';
+    case 'deny-listing':
+      return 'denied public listing';
+    case 'deny-personal':
+      return 'denied personal use';
+    case 'reject':
+      return 'rejected';
+  }
+}
+
+export type ApprovalState = 'PENDING' | 'APPROVED' | 'DENIED';
+export type Approvals = { publicListing: ApprovalState; personalUse: ApprovalState };
+
+/** Small chips for a card: the approvals that are decided (a pending part says nothing in its own queue). */
+export function approvalChips(e: { approvals?: Approvals | null }, resolved: boolean): { text: string; tone: 'ok' | 'warn' }[] {
+  const a = e.approvals;
+  if (!a) return [];
+  const out: { text: string; tone: 'ok' | 'warn' }[] = [];
+  if (resolved && a.publicListing === 'APPROVED') out.push({ text: 'Listed', tone: 'ok' });
+  else if (resolved && a.publicListing === 'DENIED') out.push({ text: 'Not listed', tone: 'warn' });
+  if (a.personalUse === 'APPROVED') out.push({ text: 'Personal', tone: 'ok' });
+  else if (a.personalUse === 'DENIED') out.push({ text: 'No personal', tone: 'warn' });
+  return out;
+}
+
+/** How an approval state reads on a fact line. */
+export const APPROVAL_LABEL: Record<string, string> = { PENDING: 'Waiting', APPROVED: 'Approved', DENIED: 'Denied' };
+
+/** An approval waiting out its undo time: what it takes out of the tab and the counts. */
+type Held = {
+  id: string;
+  /** Private uploads count in the "unlisted and private" tab. */
+  private: boolean;
+  /** It leaves the main queue (a listing verdict). */
+  main: boolean;
+  /** It leaves the personal queue (a personal verdict on an upload whose personal use was pending). */
+  personal: boolean;
+};
+type Counts = { public: number; limited: number; personal: number };
+type QueueView<T extends { id: string }> = { items: T[]; total: number; counts: Counts };
 
 /**
  * The queue as the page shows it while approvals wait out their undo time: the server still has
  * those uploads pending (nothing was sent yet), so every load brings them back. They are left out
- * of the cards, and taken off the tab counts (by the visibility they had) and off the total when
- * they belong to the tab shown. `tab` is the API's (PENDING, PUBLIC, LIMITED or RESOLVED).
+ * of the cards when the verdict takes them out of the tab shown, and taken off the tab counts
+ * and the total. `tab` is the API's (PENDING, PUBLIC, LIMITED, PERSONAL or RESOLVED).
  */
-export function withheld<T extends Held>(data: QueueView<T> | null | undefined, held: readonly Held[], tab: string): QueueView<T> {
-  if (!data) return { items: [], total: 0, counts: { public: 0, limited: 0 } };
+export function withheld<T extends { id: string }>(data: QueueView<T> | null | undefined, held: readonly Held[], tab: string): QueueView<T> {
+  if (!data) return { items: [], total: 0, counts: { public: 0, limited: 0, personal: 0 } };
   if (!held.length || tab === 'RESOLVED') return data;
-  const ids = new Set(held.map((e) => e.id));
-  const pub = held.filter((e) => e.visibility === 'PUBLIC').length;
-  const lim = held.length - pub;
-  const inTab = tab === 'PUBLIC' ? pub : tab === 'LIMITED' ? lim : held.length;
+  const leaves = (h: Held) => (tab === 'PERSONAL' ? h.personal : h.main && (tab === 'PUBLIC' ? !h.private : tab === 'LIMITED' ? h.private : true));
+  const out = new Set(held.filter(leaves).map((h) => h.id));
+  const main = held.filter((h) => h.main);
+  const pub = main.filter((h) => !h.private).length;
   return {
-    items: data.items.filter((e) => !ids.has(e.id)),
-    total: Math.max(0, data.total - inTab),
-    counts: { public: Math.max(0, data.counts.public - pub), limited: Math.max(0, data.counts.limited - lim) },
+    items: data.items.filter((e) => !out.has(e.id)),
+    total: Math.max(0, data.total - out.size),
+    counts: {
+      public: Math.max(0, data.counts.public - pub),
+      limited: Math.max(0, data.counts.limited - (main.length - pub)),
+      personal: Math.max(0, data.counts.personal - held.filter((h) => h.personal).length),
+    },
   };
 }
 
@@ -169,4 +338,25 @@ export function toEnd<T extends { id: string }, Q extends { items: T[] }>(data: 
   if (!moved.length) return data;
   const out = new Set(moved.map((e) => e.id));
   return { ...data, items: [...data.items.filter((e) => !out.has(e.id)), ...moved] };
+}
+
+/** Which queues an action takes an upload out of: the main one (a listing verdict or a rejection) and the personal one. */
+export function partsOf(a: Action): { main: boolean; personal: boolean } {
+  const d = decisionOf(a);
+  return d ? { main: !!d.listing, personal: !!d.personal } : { main: true, personal: true };
+}
+
+const STATE: Record<Verdict, ApprovalState> = { APPROVE: 'APPROVED', DENY: 'DENIED' };
+
+/** An upload's approvals after a decision (null: rejected, both denied); what the cards show before the next load. */
+export function settle<T extends Approvals | null | undefined>(a: T, d: Decision | null): T | Approvals {
+  if (!a) return a;
+  if (!d) return { publicListing: 'DENIED', personalUse: 'DENIED' };
+  return { publicListing: d.listing ? STATE[d.listing] : a.publicListing, personalUse: d.personal ? STATE[d.personal] : a.personalUse };
+}
+
+/** The account page's filter on personal use (the rows already loaded). */
+export type PersonalFilter = 'all' | 'APPROVED' | 'PENDING' | 'DENIED';
+export function byPersonal<T extends { approvals?: Approvals | null }>(rows: readonly T[], f: PersonalFilter): T[] {
+  return f === 'all' ? [...rows] : rows.filter((e) => e.approvals?.personalUse === f);
 }

@@ -149,6 +149,7 @@ function baseAnswer(body, session, admin) {
     if (flags.has('NSFW')) hits = [];
     if (flags.has('ZERO_WIDTH')) hits = hits.filter((e) => e.flags.zeroWidth);
     if (flags.has('WIDE')) hits = hits.filter((e) => e.flags.wide);
+    if (flags.has('PERSONAL_USE')) hits = hits.filter((e) => e.approvals?.personalUse === 'APPROVED');
     if (tags.length) hits = hits.filter((e) => tags.every((t) => e.tags.some((g) => g.toLowerCase() === t)));
     hits = sorted(hits, v.sort ?? 'RELEVANCE', v.window ?? 'WEEK');
     const p = pageOf(hits, v);
@@ -438,10 +439,11 @@ createServer(async (req, res) => {
     flags.nsfw = false;
     const visField = (field('visibility') ?? '').trim().toLowerCase();
     if (visField && !['public', 'unlisted', 'private'].includes(visField)) return json(res, 400, { error: 'bad_form', message: 'Visibility is public or private.' });
-    // Uploads are public unless private; only staff (the mock admin) may upload unlisted.
+    // Every upload starts unlisted and in review (ADR 0039): the owner only makes it private, `public`
+    // means "not private", and `unlisted` is for staff (the mock admin).
     if (visField === 'unlisted' && !admin) return json(res, 400, { error: 'bad_visibility', message: UNLISTED_REFUSAL });
-    const visibility = visField ? visField.toUpperCase() : flags.private ? 'PRIVATE' : 'PUBLIC';
-    if (field('private') !== undefined && visField && flags.private !== (visibility === 'PRIVATE'))
+    const visibility = visField === 'private' || (!visField && flags.private) ? 'PRIVATE' : 'UNLISTED';
+    if (field('private') !== undefined && visField && flags.private !== (visField === 'private'))
       return json(res, 400, { error: 'bad_form', message: 'visibility and private say different things.' });
     flags.private = visibility === 'PRIVATE';
     // Upload as (ADR 0014): an account where you hold EMOTE_UPLOAD on every set owns it.
@@ -516,7 +518,7 @@ createServer(async (req, res) => {
 
 // The REST API's JSON: snake_case keys and lower-case enum values (the GraphQL shapes are camelCase
 // with upper-case enums).
-const REST_ENUM_KEYS = new Set(['kind', 'shape', 'format', 'state', 'visibility', 'processing']);
+const REST_ENUM_KEYS = new Set(['kind', 'shape', 'format', 'state', 'visibility', 'processing', 'publicListing', 'personalUse']);
 /** What both upload routes add to their object: `state` and `limits_used` (crates/shared/src/upload.rs). */
 const UPLOAD_LIMITS = { emote: { max_bytes: 8 * 1024 * 1024, max_side: 1000, max_frames: 1000 }, badge: { max_bytes: 8 * 1024 * 1024, max_side: 2048, max_frames: 120 }, paint: { max_bytes: 8 * 1024 * 1024, max_side: 4096, max_frames: 120 } };
 function uploadReply(x, kind, state) {

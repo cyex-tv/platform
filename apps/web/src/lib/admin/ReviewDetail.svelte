@@ -2,15 +2,15 @@
   // One upload in the review queue, up close: "n / total" with previous and next (the arrow
   // keys), its kind, name, uploader, flags and tags, the picture at every size chat uses with its
   // dimensions and weight, and two tabs: Activity (what happened to it, with date and time) and
-  // Notes (what reviewers tell each other). Reject and Approve sit at the bottom with the smaller
-  // verdicts (approve as unlisted, approve for its owner only) between them. A approves, R
-  // rejects, U and P approve unlisted and private, S skips to the next; after a verdict the page
-  // opens the next one. Under the facts, "Possible duplicates": other emotes from the very same
+  // Notes (what reviewers tell each other). Reject and Approve both sit at the bottom with the
+  // single approvals and denials (public listing, personal use, ADR 0039) between them. A approves
+  // (both), L the listing, P personal use, D and N deny the listing or personal use, R rejects, S
+  // skips to the next; after a verdict the page opens the next one. Under the facts, "Possible duplicates": other emotes from the very same
   // file, then ones with a close name (emoteDuplicates), each opening in a new tab.
   import { gql } from '$lib/api';
   import { ready, src } from '$lib/emote';
   import { bytes, clean, count, dateTime } from '$lib/format';
-  import type { EmoteFieldsFragment, EmoteHistoryQuery, EmoteVisibility } from '$lib/gql/graphql';
+  import type { EmoteFieldsFragment, EmoteHistoryQuery } from '$lib/gql/graphql';
   import { ADD_EMOTE_NOTE, DELETE_EMOTE_NOTE, EMOTE_DUPLICATES, EMOTE_HISTORY, EMOTE_NOTES } from '$lib/queries';
   import type { EmoteDuplicatesQuery } from '$lib/gql/graphql';
   import Thumb from '$lib/tool/Thumb.svelte';
@@ -22,11 +22,12 @@
   import { useCopied } from '$lib/clipboard.svelte';
   import AccountLink from './AccountLink.svelte';
   import NoteList from './NoteList.svelte';
-  import EmoteFlagsPanel, { canEditFlags } from './EmoteFlagsPanel.svelte';
-  import { describe, kindOf, sizes } from './queue';
+  import ApprovalsPanel from './ApprovalsPanel.svelte';
+  import { can } from '$lib/tool/session.svelte';
+  import { actionForKey, actionLabel, actionsFor, APPROVAL_LABEL, describe, kindOf, sizes, type Action, type Approvals, type Mode, type Reviewer } from './queue';
 
   type Props = {
-    emote: EmoteFieldsFragment | null;
+    emote: (EmoteFieldsFragment & { approvals?: Approvals | null }) | null;
     /** 1-based place in the whole filtered queue, and its size. */
     place: number;
     total: number;
@@ -39,21 +40,25 @@
     onnext: () => void;
     /** S: on to the next upload without a verdict. */
     onskip: () => void;
-    onapprove: (visibility?: EmoteVisibility) => void;
-    onreject: () => void;
+    /** The queue shown (the personal-use one only decides personal use) and what this reviewer may do. */
+    mode?: Mode;
+    reviewer: Reviewer;
+    onact: (action: Action) => void;
     onclose: () => void;
-    /** Staff with emotes.flags saved new flags (ADR 0024): the API's answer. */
-    onflags?: (e: EmoteFieldsFragment) => void;
+    /** A resolved upload's approvals were changed in the Approvals tab: the API's answer. */
+    onapprovals?: (id: string, a: Approvals) => void;
   };
-  let { emote, place, total, busy, resolved, hasPrev, hasNext, onprev, onnext, onskip, onapprove, onreject, onclose, onflags }: Props = $props();
+  let { emote, place, total, busy, resolved, hasPrev, hasNext, onprev, onnext, onskip, mode = 'main', reviewer, onact, onclose, onapprovals }: Props = $props();
 
   let dialog: HTMLDialogElement;
-  let tab = $state<'activity' | 'notes' | 'flags'>('activity');
-  // Staff with emotes.flags change a reviewed upload's flags here too (ADR 0024).
-  const flagTab = $derived(resolved && canEditFlags());
+  let tab = $state<'activity' | 'notes' | 'approvals'>('activity');
+  // Staff change a reviewed upload's approvals here (ADR 0039).
+  const approvalTab = $derived(resolved && (can('emotes.review') || can('emotes.review_personal')));
   $effect(() => {
-    if (!flagTab && tab === 'flags') tab = 'activity';
+    if (!approvalTab && tab === 'approvals') tab = 'activity';
   });
+  const actions = $derived(actionsFor(mode, reviewer));
+  const primary = $derived(actions[0]);
   let noteCount = $state<number | null>(null);
   let history = $state<EmoteHistoryQuery['emoteHistory'] | null>(null);
   let historyProblem = $state(false);
@@ -130,14 +135,12 @@
       return;
     }
     if (resolved || busy || ev.repeat) return;
-    if (k === 'a' && ready(emote)) (ev.preventDefault(), onapprove());
-    else if (k === 'u' && ready(emote)) (ev.preventDefault(), onapprove('UNLISTED'));
-    else if (k === 'p' && ready(emote)) (ev.preventDefault(), onapprove('PRIVATE'));
-    else if (k === 'r') (ev.preventDefault(), onreject());
+    const a = actionForKey(ev.key, mode, reviewer);
+    if (a && (a.startsWith('deny') || a === 'reject' || ready(emote))) (ev.preventDefault(), onact(a));
   }
 
   const files = $derived(emote ? sizes(emote.files) : []);
-  const VIS: Record<EmoteVisibility, string> = { PUBLIC: 'Public', UNLISTED: 'Unlisted', PRIVATE: 'Private (owner only)' };
+  const label = (v?: string) => (v ? (APPROVAL_LABEL[v] ?? v) : 'Waiting');
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -178,11 +181,12 @@
             <p class="who"><Icon name="user" size={14} /> <AccountLink id={e.owner?.id} name={e.owner?.displayName} /></p>
             <dl class="adm-kv">
               <dt>Uploaded</dt><dd>{dateTime(e.createdAt)}</dd>
-              <dt>Visibility</dt><dd>{VIS[e.visibility]}</dd>
+              <dt>Public listing</dt><dd><span class="ui-chip {e.approvals?.publicListing === 'APPROVED' ? 'approved' : e.approvals?.publicListing === 'DENIED' ? 'rejected' : ''}">{label(e.approvals?.publicListing)}</span></dd>
+              <dt>Personal use</dt><dd><span class="ui-chip {e.approvals?.personalUse === 'APPROVED' ? 'approved' : e.approvals?.personalUse === 'DENIED' ? 'rejected' : ''}">{label(e.approvals?.personalUse)}</span></dd>
               <dt>State</dt><dd><span class="ui-chip {e.state.toLowerCase()}">{e.state === 'TAKEN_DOWN' ? 'Taken down' : e.state.charAt(0) + e.state.slice(1).toLowerCase()}</span></dd>
-              {#if e.flags.zeroWidth || e.flags.wide}
+              {#if e.flags.zeroWidth || e.flags.wide || e.flags.private}
                 <dt>Flags</dt>
-                <dd class="chips">{#if e.flags.zeroWidth}<span class="ui-chip">Zero-width</span>{/if}{#if e.flags.wide}<span class="ui-chip">Wide</span>{/if}</dd>
+                <dd class="chips">{#if e.flags.private}<span class="ui-chip">Private</span>{/if}{#if e.flags.zeroWidth}<span class="ui-chip">Zero-width</span>{/if}{#if e.flags.wide}<span class="ui-chip">Wide</span>{/if}</dd>
               {/if}
               <dt>Tags</dt>
               <dd class="chips">{#each e.tags as t (t)}<span class="ui-chip" title={t}><bdi>{t}</bdi></span>{:else}<span class="ui-hint">None</span>{/each}</dd>
@@ -229,7 +233,7 @@
                 options={[
                   { value: 'activity', label: history ? `Activity (${history.length + 1})` : 'Activity' },
                   { value: 'notes', label: noteCount === null ? 'Notes' : `Notes (${noteCount})` },
-                  ...(flagTab ? [{ value: 'flags' as const, label: 'Emote flags' }] : []),
+                  ...(approvalTab ? [{ value: 'approvals' as const, label: 'Approvals' }] : []),
                 ]} />
             </div>
             <div class="pane">
@@ -269,25 +273,27 @@
                   oncount={(n) => (noteCount = n)}
                 />
               </div>
-              {#if flagTab}
-                <div hidden={tab !== 'flags'}>
-                  <EmoteFlagsPanel bare emote={e} id="rd-flags" onsaved={(next) => (onflags?.(next), loadHistory(e.id))} />
+              {#if approvalTab}
+                <div hidden={tab !== 'approvals'}>
+                  <ApprovalsPanel emote={e} id="rd-approvals" onsaved={(a) => (onapprovals?.(e.id, a), loadHistory(e.id))} />
                 </div>
               {/if}
             </div>
           </section>
         </div>
 
-        {#if !resolved}
+        {#if !resolved && actions.length}
+          {@const singles = actions.filter((a) => a !== 'reject' && a !== primary)}
           <footer>
-            <button class="ui-btn danger" type="button" disabled={busy} onclick={onreject}><Icon name="x" size={15} />Reject</button>
+            {#if actions.includes('reject')}<button class="ui-btn danger" type="button" disabled={busy} onclick={() => onact('reject')}><Icon name="x" size={15} />Reject</button>{/if}
             <span class="small">
               <IconButton label="Skip to the next, no verdict" icon="arrow-right" variant="outline" tip="top" disabled={!hasNext} onclick={onskip} />
-              <IconButton label="Approve as unlisted" icon="eye-off" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('UNLISTED')} />
-              <IconButton label="Approve for its owner only" icon="user" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('PRIVATE')} />
+              {#each singles as a (a)}
+                <IconButton label={actionLabel(a, reviewer, mode)} icon={a === 'listing' ? 'eye' : a === 'personal' ? 'user' : a === 'deny-listing' ? 'eye-off' : 'user-x'} variant="outline" tip="top" disabled={busy || (!a.startsWith('deny') && !ready(e))} onclick={() => onact(a)} />
+              {/each}
               <IconButton label="Open the uploader’s account" icon="circle-user" variant="outline" tip="top" href={e.owner ? `/admin/users/${encodeURIComponent(e.owner.id)}` : undefined} disabled={!e.owner} />
             </span>
-            <button class="ui-btn primary" type="button" disabled={busy || !ready(e)} onclick={() => onapprove()}><Icon name="check" size={15} />Approve</button>
+            <button class="ui-btn primary" type="button" disabled={busy || !ready(e)} onclick={() => onact(primary)}><Icon name="check" size={15} />{actionLabel(primary, reviewer, mode)}</button>
           </footer>
         {/if}
       </div>

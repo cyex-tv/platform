@@ -514,6 +514,83 @@ impl FromStr for EmoteState {
     }
 }
 
+/// Where one of an emote's two approvals stands (ADR 0039): its public listing or its personal use.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalState {
+    /// Waiting for a reviewer. Every upload starts here.
+    #[default]
+    Pending,
+    Approved,
+    Denied,
+}
+
+impl ApprovalState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Approved => "approved",
+            Self::Denied => "denied",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("unknown approval state: {0}")]
+pub struct UnknownApprovalState(pub String);
+
+impl FromStr for ApprovalState {
+    type Err = UnknownApprovalState;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pending" => Ok(Self::Pending),
+            "approved" => Ok(Self::Approved),
+            "denied" => Ok(Self::Denied),
+            other => Err(UnknownApprovalState(other.to_owned())),
+        }
+    }
+}
+
+/// An emote's two approvals (ADR 0039). Each is decided on its own, in review.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EmoteApprovals {
+    /// Whether it may be listed: found by search and browse and shown on its creator's page.
+    /// Until it is `APPROVED` the emote is unlisted (unless private).
+    pub public_listing: ApprovalState,
+    /// Whether it may go in a personal set (shown in chat everywhere its owner chats). A personal
+    /// set takes only emotes whose personal use is `APPROVED`.
+    pub personal_use: ApprovalState,
+}
+
+/// A reviewer's answer to one of the two approvals.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalDecision {
+    Approve,
+    Deny,
+}
+
+/// What `reviewApprovals` decides (ADR 0039). Leave a part out to keep it as it is.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "ApprovalsInput"))]
+pub struct ApprovalsInput {
+    /// Approve or deny the public listing. Needs `emotes.review`.
+    pub public_listing: Option<ApprovalDecision>,
+    /// Approve or deny personal use. Needs `emotes.review_personal`.
+    pub personal_use: Option<ApprovalDecision>,
+    /// Why, 1 to 500 characters; the owner sees it. Needed with any `DENY`.
+    pub reason: Option<String>,
+    /// Default `true` (what the queues send): a part that is no longer pending is skipped, and an
+    /// emote with nothing pending left is listed in `failed` as `not_pending`. `false` changes a
+    /// decision already made (the edit dialog).
+    pub only_pending: Option<bool>,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct EmoteFlags {
@@ -686,6 +763,10 @@ pub struct Emote {
     #[serde(default)]
     #[schema(required = false)]
     pub visibility: EmoteVisibility,
+    /// Its public listing and personal use approvals (ADR 0039).
+    #[serde(default)]
+    #[schema(required = false)]
+    pub approvals: EmoteApprovals,
     pub animated: bool,
     pub tags: Vec<String>,
     /// For example `https://cdn.cyex.tv/emotes/<sha256>`.
@@ -1180,6 +1261,8 @@ pub enum EmoteFlag {
         graphql(deprecation = "NSFW emotes aren't allowed on cyex.tv; this flag finds nothing.")
     )]
     Nsfw,
+    /// Approved for personal use (ADR 0039): it can go in a personal set.
+    PersonalUse,
 }
 
 /// How far back `TRENDING` counts channel adds.
@@ -1311,10 +1394,13 @@ pub struct LoginMatch {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct ReviewCounts {
-    /// Pending and public.
+    /// Pending and not private: listed once its listing is approved.
     pub public: u64,
-    /// Pending and unlisted or private.
+    /// Pending and private (every upload is unlisted until its listing is approved, ADR 0039).
     pub limited: u64,
+    /// Personal use pending, emote usable: the personal queue (ADR 0039).
+    #[serde(default)]
+    pub personal: u64,
 }
 
 /// A part of the review queue.
@@ -1325,12 +1411,15 @@ pub enum ReviewTab {
     /// Every pending emote. The default.
     #[default]
     Pending,
-    /// Pending and public: search shows it once approved.
+    /// Pending and not private: search shows it once its listing is approved.
     Public,
-    /// Pending and unlisted or private.
+    /// Pending and private.
     Limited,
     /// Approved or rejected by a reviewer.
     Resolved,
+    /// The personal queue (ADR 0039): personal use pending, and the emote may be used (pending
+    /// or approved). Needs `emotes.review_personal` (or `emotes.review`).
+    Personal,
 }
 
 /// How the review queue is ordered. Ties go by upload time.
@@ -1363,6 +1452,9 @@ pub struct ReviewQueueFilter {
     /// Only this uploader's emotes (an account ID).
     #[serde(default)]
     pub uploader_id: Option<String>,
+    /// Only emotes whose personal use is in this state (ADR 0039), for example `APPROVED`.
+    #[serde(default)]
+    pub personal_use: Option<ApprovalState>,
 }
 
 /// A note reviewers keep on one emote (`emotes.review`). The uploader never sees it.

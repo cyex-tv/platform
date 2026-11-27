@@ -4,14 +4,15 @@
   // (cells sharing hairlines) with dimensions and weight, one line of chat at chat size, the name,
   // the uploader with their painted name and their history here (earlier uploads, how many were
   // approved, rejected or still wait), flags and tags, the facts, possible duplicates (the same
-  // file, then close names), and Activity / Notes (and Emote flags on resolved uploads). The
-  // verdicts sit at the panel's foot: Reject, Skip, Unlisted, Owner only, Approve. Their keys
-  // (A, U, P, R, S, Z) are the page's; the panel carries data-inspector so they reach it.
+  // file, then close names), and Activity / Notes (and Approvals on resolved uploads). The
+  // verdicts sit at the panel's foot (ADR 0039): Reject, Skip, the single approvals and denials,
+  // and Approve both. Which ones show follows the queue and the reviewer's permissions. Their keys
+  // (A, L, P, D, N, R, S, Z) are the page's; the panel carries data-inspector so they reach it.
   // Phones and narrow windows keep ReviewDetail (the full-screen dialog).
   import { gql } from '$lib/api';
   import { ready, src } from '$lib/emote';
   import { bytes, clean, count, date, dateTime } from '$lib/format';
-  import type { AccountEmotesQuery, EmoteDuplicatesQuery, EmoteFieldsFragment, EmoteHistoryQuery, EmoteVisibility } from '$lib/gql/graphql';
+  import type { AccountEmotesQuery, EmoteDuplicatesQuery, EmoteFieldsFragment, EmoteHistoryQuery } from '$lib/gql/graphql';
   import { ACCOUNT_EMOTES, ADD_EMOTE_NOTE, DELETE_EMOTE_NOTE, EMOTE_DUPLICATES, EMOTE_HISTORY, EMOTE_NOTES } from '$lib/queries';
   import Thumb from '$lib/tool/Thumb.svelte';
   import { STATE_LABEL } from '$lib/tool/state';
@@ -24,11 +25,12 @@
   import { useCopied } from '$lib/clipboard.svelte';
   import AccountLink from './AccountLink.svelte';
   import NoteList from './NoteList.svelte';
-  import EmoteFlagsPanel, { canEditFlags } from './EmoteFlagsPanel.svelte';
-  import { describe, kindOf, sizes } from './queue';
+  import ApprovalsPanel from './ApprovalsPanel.svelte';
+  import { can } from '$lib/tool/session.svelte';
+  import { actionLabel, actionsFor, APPROVAL_LABEL, describe, kindOf, sizes, type Action, type Approvals, type Mode, type Reviewer } from './queue';
 
   type Props = {
-    emote: EmoteFieldsFragment;
+    emote: EmoteFieldsFragment & { approvals?: Approvals | null };
     /** 1-based place in the whole filtered queue, and its size. */
     place: number;
     total: number;
@@ -36,23 +38,28 @@
     resolved: boolean;
     hasNext: boolean;
     onskip: () => void;
-    onapprove: (visibility?: EmoteVisibility) => void;
-    onreject: () => void;
-    onflags?: (e: EmoteFieldsFragment) => void;
+    /** The queue shown (the personal-use one only decides personal use) and what this reviewer may do. */
+    mode?: Mode;
+    reviewer: Reviewer;
+    onact: (action: Action) => void;
+    /** A resolved upload's approvals were changed in the Approvals tab: the API's answer. */
+    onapprovals?: (id: string, a: Approvals) => void;
   };
-  let { emote, place, total, busy, resolved, hasNext, onskip, onapprove, onreject, onflags }: Props = $props();
+  let { emote, place, total, busy, resolved, hasNext, onskip, mode = 'main', reviewer, onact, onapprovals }: Props = $props();
 
   const e = $derived(emote);
   const files = $derived(sizes(e.files));
   const chatFile = $derived(files.find((f) => f.scale === 1) ?? files[0]);
   const ownerPaint = $derived(e.owner?.id ? (looks[e.owner.id]?.paint ?? null) : null);
-  const VIS: Record<EmoteVisibility, string> = { PUBLIC: 'Public', UNLISTED: 'Unlisted', PRIVATE: 'Owner only' };
+  const actions = $derived(actionsFor(mode, reviewer));
+  const primary = $derived(actions[0]);
   const idCopy = useCopied();
 
-  let tab = $state<'activity' | 'notes' | 'flags'>('activity');
-  const flagTab = $derived(resolved && canEditFlags());
+  let tab = $state<'activity' | 'notes' | 'approvals'>('activity');
+  // After the first verdict staff change either approval here (ADR 0039).
+  const approvalTab = $derived(resolved && (can('emotes.review') || can('emotes.review_personal')));
   $effect(() => {
-    if (!flagTab && tab === 'flags') tab = 'activity';
+    if (!approvalTab && tab === 'approvals') tab = 'activity';
   });
   let noteCount = $state<number | null>(null);
 
@@ -158,12 +165,12 @@
         {:else}<span>Unknown uploader</span>{/if}
         <span class="when">uploaded <time class="adm-num" datetime={e.createdAt}>{dateTime(e.createdAt)}</time></span>
       </p>
-      {#if e.flags.zeroWidth || e.flags.wide || e.visibility !== 'PUBLIC' || e.tags.length}
+      {#if e.flags.zeroWidth || e.flags.wide || e.flags.private || e.tags.length}
         <div class="labels">
           <ul class="adm-flags" aria-label="Flags">
             {#if e.flags.zeroWidth}<li class="on"><Icon name="layers" size={13} />Zero-width</li>{/if}
             {#if e.flags.wide}<li class="on"><Icon name="wide" size={13} />Wide</li>{/if}
-            {#if e.visibility !== 'PUBLIC'}<li class="on"><Icon name={e.visibility === 'UNLISTED' ? 'eye-off' : 'user'} size={13} />{VIS[e.visibility]}</li>{/if}
+            {#if e.flags.private}<li class="on"><Icon name="lock" size={13} />Private</li>{/if}
           </ul>
           {#if e.tags.length}
             <ul class="tags" aria-label="Tags">{#each e.tags as t (t)}<li class="tag"><span class="hash" aria-hidden="true">#</span><bdi>{t}</bdi></li>{/each}</ul>
@@ -172,7 +179,9 @@
       {/if}
       <dl class="adm-facts">
         <div><dt>State</dt><dd class:ok={e.state === 'APPROVED'} class:bad={e.state === 'REJECTED' || e.state === 'TAKEN_DOWN'}>{STATE_LABEL[e.state]}</dd></div>
-        <div><dt>Visibility</dt><dd>{VIS[e.visibility]}</dd></div>
+        <div><dt>Public listing</dt><dd class:ok={e.approvals?.publicListing === 'APPROVED'} class:bad={e.approvals?.publicListing === 'DENIED'}>{e.approvals ? (APPROVAL_LABEL[e.approvals.publicListing] ?? e.approvals.publicListing) : 'Waiting'}</dd></div>
+        <div><dt>Personal use</dt><dd class:ok={e.approvals?.personalUse === 'APPROVED'} class:bad={e.approvals?.personalUse === 'DENIED'}>{e.approvals ? (APPROVAL_LABEL[e.approvals.personalUse] ?? e.approvals.personalUse) : 'Waiting'}</dd></div>
+        <div><dt>Private</dt><dd>{e.flags.private ? 'Yes' : 'No'}</dd></div>
         <div><dt>Uploaded</dt><dd class="n">{date(e.createdAt)}</dd></div>
         <div class="id"><dt>ID</dt><dd class="n"><span class="idv">{e.id}</span><IconButton label={idCopy.copied ? 'Copied' : 'Copy ID'} icon={idCopy.copied ? 'check' : 'copy'} size="s" onclick={() => idCopy.copy(e.id)} /></dd></div>
       </dl>
@@ -245,7 +254,7 @@
         options={[
           { value: 'activity', label: history ? `Activity ${history.length + 1}` : 'Activity', icon: 'activity' },
           { value: 'notes', label: noteCount === null ? 'Notes' : `Notes ${noteCount}`, icon: 'message-square' },
-          ...(flagTab ? [{ value: 'flags' as const, label: 'Emote flags', icon: 'flag' as const }] : []),
+          ...(approvalTab ? [{ value: 'approvals' as const, label: 'Approvals', icon: 'check' as const }] : []),
         ]} />
       <div class="pane">
         <div hidden={tab !== 'activity'}>
@@ -281,24 +290,26 @@
             oncount={(n) => (noteCount = n)}
           />
         </div>
-        {#if flagTab}
-          <div hidden={tab !== 'flags'}>
-            <EmoteFlagsPanel bare emote={e} id="ri-flags" onsaved={(next) => (onflags?.(next), loadHistory(e.id, seq))} />
+        {#if approvalTab}
+          <div hidden={tab !== 'approvals'}>
+            <ApprovalsPanel emote={e} id="ri-approvals" onsaved={(a) => (onapprovals?.(e.id, a), loadHistory(e.id, seq))} />
           </div>
         {/if}
       </div>
     </section>
   </div>
 
-  {#if !resolved}
+  {#if !resolved && actions.length}
+    {@const singles = actions.filter((a) => a !== 'reject' && a !== primary)}
     <footer class="verdicts" aria-label="Verdict">
-      <button class="ui-btn danger small" type="button" disabled={busy} onclick={onreject}><Icon name="x" size={15} />Reject</button>
+      {#if actions.includes('reject')}<button class="ui-btn danger small" type="button" disabled={busy} onclick={() => onact('reject')}><Icon name="x" size={15} />Reject</button>{/if}
       <span class="mid">
         <IconButton label="Skip to the next, no verdict" icon="arrow-right" variant="outline" tip="top" disabled={!hasNext} onclick={onskip} />
-        <IconButton label="Approve as unlisted" icon="eye-off" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('UNLISTED')} />
-        <IconButton label="Approve for its owner only" icon="user" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('PRIVATE')} />
+        {#each singles as a (a)}
+          <IconButton label={actionLabel(a, reviewer, mode)} icon={a === 'listing' ? 'eye' : a === 'personal' ? 'user' : a === 'deny-listing' ? 'eye-off' : 'user-x'} variant="outline" tip="top" disabled={busy || (!a.startsWith('deny') && !ready(e))} onclick={() => onact(a)} />
+        {/each}
       </span>
-      <button class="ui-btn primary small" type="button" disabled={busy || !ready(e)} onclick={() => onapprove()}><Icon name="check" size={15} />Approve</button>
+      <button class="ui-btn primary small" type="button" disabled={busy || !ready(e)} onclick={() => onact(primary)}><Icon name="check" size={15} />{actionLabel(primary, reviewer, mode)}</button>
     </footer>
   {/if}
 </div>
@@ -366,7 +377,7 @@
   .more { color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
   .log time { flex: none; font-size: 12px; color: var(--dim); }
 
-  .verdicts { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px;
+  .verdicts { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px;
     border-top: 1px solid var(--border); background: var(--surface); }
   .mid { display: flex; gap: 6px; }
 </style>

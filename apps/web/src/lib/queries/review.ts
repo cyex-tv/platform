@@ -24,6 +24,7 @@ export const REVIEW_QUEUE = graphql(`
       counts {
         public
         limited
+        personal
       }
       items {
         ...EmoteFields

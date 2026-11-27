@@ -4,8 +4,9 @@
   //   left   the form: Uploading as (a small select, only when you may upload for an account you
   //          edit, ADR 0014; `upload.for` picks one), Name (from the file name until typed), Tags
   //          (TagInput chips), the two flags a creator sets (Overlaying = zero-width, Private =
-  //          only your own channel; everything else is public, unlisted is for moderators and
-  //          NSFW emotes aren't allowed, ADR 0020), how many of yours wait for review, "I accept
+  //          only your own channel; there is no listing choice: every upload starts unlisted and in
+  //          review, moderators approve the public listing and personal use separately, ADR 0039;
+  //          NSFW emotes aren't allowed), how many of yours wait for review, "I accept
   //          the rules and guidelines" (the link opens /guidelines in a new tab), Discard and
   //          Upload.
   //   right  a large drop zone with Browse files; once an image is in, its preview at the sizes
@@ -227,7 +228,7 @@
       const made = await uploadEmote(picked.file, name.trim(), tags, { zeroWidth, visibility }, (p) => (progress = p), forOther ? owner!.id : null, {
         signal: running.signal,
       });
-      notify(`${iso(made.name)} uploaded${forOther ? ` for ${iso(clean(owner!.displayName))}` : ''}. It’s pending until a moderator looks at it.`);
+      notify(`${iso(made.name)} uploaded${forOther ? ` for ${iso(clean(owner!.displayName))}` : ''}. It’s unlisted until a moderator approves it.`);
       const href = openHref(made.id);
       busy = false;
       accepted = false;
@@ -280,6 +281,7 @@
     </div>
 
     <EmoteFlags id="up-{uid}" bind:zeroWidth bind:visibility disabled={busy} />
+    <p class="ui-hint review-note" data-testid="review-note">Every upload is unlisted and goes to review. Moderators approve its public listing and its personal use separately.</p>
 
     {#if room}
       <p class="quota" class:full={room.full} role="status" id="quota-{uid}">
@@ -373,6 +375,7 @@
   .end { grid-column: 1; grid-row: 2; border-right: 1px solid var(--border); }
   .side { grid-column: 2; grid-row: 1 / span 2; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; min-width: 0; min-height: 0; padding: 20px; overflow: hidden auto; }
   .as .ui-input { max-width: none; }
+  .review-note { margin: 0; }
   .quota { margin: 0; font-size: var(--t-small); color: var(--muted); }
   .end { display: grid; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--border); background: var(--elevated); }
   .accept { display: flex; align-items: flex-start; gap: 10px; min-height: 40px; font-size: var(--t-small); font-weight: 500; color: var(--text); cursor: pointer; }

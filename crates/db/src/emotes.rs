@@ -1,7 +1,7 @@
 //! Emotes and their tags. New emotes start `pending` (D10).
 
 use chrono::{DateTime, Utc};
-use cyex_tv_shared::model::EmoteState;
+use cyex_tv_shared::model::{ApprovalState, EmoteState};
 use sqlx::{Connection, FromRow, PgConnection};
 use uuid::Uuid;
 
@@ -21,6 +21,9 @@ pub struct Emote {
     pub nsfw: bool,
     pub animated: bool,
     pub state: EmoteState,
+    /// Public listing and personal use (ADR 0039). `unlisted` follows `listing_review` (a trigger).
+    pub listing_review: ApprovalState,
+    pub personal_review: ApprovalState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -39,8 +42,8 @@ pub struct NewEmote<'a> {
     pub nsfw: bool,
 }
 
-/// Fields to change. `None` leaves a field as it is. Setting `private` or `unlisted` to true
-/// needs the other set to false in the same patch.
+/// Fields to change. `None` leaves a field as it is. `unlisted` is derived by a trigger from
+/// `private` and `listing_review` (ADR 0039): whatever is written to it is replaced.
 #[derive(Clone, Debug, Default)]
 pub struct EmotePatch<'a> {
     pub name: Option<&'a str>,
@@ -48,10 +51,12 @@ pub struct EmotePatch<'a> {
     pub private: Option<bool>,
     pub unlisted: Option<bool>,
     pub nsfw: Option<bool>,
+    pub listing_review: Option<ApprovalState>,
 }
 
 const EMOTE: &str = "id, owner_account_id, file_id, name, zero_width, private, unlisted, nsfw, \
-                     animated, state, created_at, updated_at, deleted_at";
+                     animated, state, listing_review, personal_review, created_at, \
+                     updated_at, deleted_at";
 
 pub async fn create(conn: &mut PgConnection, new: &NewEmote<'_>) -> DbResult<Emote> {
     Ok(sqlx::query_as(&format!(
@@ -102,6 +107,7 @@ pub async fn update(conn: &mut PgConnection, id: Uuid, patch: &EmotePatch<'_>) -
              private = coalesce($4, private),
              nsfw = coalesce($5, nsfw),
              unlisted = coalesce($6, unlisted),
+             listing_review = coalesce($7, listing_review),
              updated_at = now()
          WHERE id = $1 AND deleted_at IS NULL
          RETURNING {EMOTE}"
@@ -112,15 +118,23 @@ pub async fn update(conn: &mut PgConnection, id: Uuid, patch: &EmotePatch<'_>) -
     .bind(patch.private)
     .bind(patch.nsfw)
     .bind(patch.unlisted)
+    .bind(patch.listing_review)
     .fetch_optional(conn)
     .await?
     .ok_or(DbError::NotFound)
 }
 
-/// Approves, rejects or takes down an emote. Audit and events are the caller's part.
+/// Sets an emote's state outright, with both approvals to match (ADR 0039): `approved` approves
+/// the listing and personal use, `rejected` and `taken_down` deny both, `pending` makes both
+/// pending. Takedowns use it; reviews go through [`review`], [`decide_listing`] and
+/// [`decide_personal`]. Audit and events are the caller's part.
 pub async fn set_state(conn: &mut PgConnection, id: Uuid, state: EmoteState) -> DbResult<Emote> {
     sqlx::query_as(&format!(
-        "UPDATE emotes SET state = $2, updated_at = now()
+        "UPDATE emotes SET state = $2, updated_at = now(),
+             listing_review = CASE $2 WHEN 'approved' THEN 'approved' WHEN 'pending' THEN 'pending'
+                                      ELSE 'denied' END,
+             personal_review = CASE $2 WHEN 'approved' THEN 'approved' WHEN 'pending' THEN 'pending'
+                                       ELSE 'denied' END
          WHERE id = $1 AND deleted_at IS NULL
          RETURNING {EMOTE}"
     ))
@@ -220,7 +234,8 @@ pub async fn set_tags(conn: &mut PgConnection, id: Uuid, tags: &[String]) -> DbR
 }
 
 /// Approves or rejects a pending emote. `None` if it isn't pending (or doesn't exist), so two
-/// moderators reviewing at once can't both win.
+/// moderators reviewing at once can't both win. Approving approves its public listing; rejecting
+/// denies both approvals (ADR 0039).
 pub async fn review(
     conn: &mut PgConnection,
     id: Uuid,
@@ -231,7 +246,9 @@ pub async fn review(
     Ok(sqlx::query_as(&format!(
         "UPDATE emotes
          SET state = $2, reviewed_by = $3, reviewed_at = now(), review_reason = $4,
-             requeued_at = NULL, updated_at = now()
+             requeued_at = NULL, updated_at = now(),
+             listing_review = CASE WHEN $2 = 'approved' THEN 'approved' ELSE 'denied' END,
+             personal_review = CASE WHEN $2 = 'approved' THEN personal_review ELSE 'denied' END
          WHERE id = $1 AND deleted_at IS NULL AND state = 'pending'
          RETURNING {EMOTE}"
     ))
@@ -239,6 +256,64 @@ pub async fn review(
     .bind(state)
     .bind(reviewer)
     .bind(reason)
+    .fetch_optional(conn)
+    .await?)
+}
+
+/// Decides an emote's public listing (ADR 0039): approved lists it (unless private), denied
+/// keeps it unlisted. Either way a pending emote becomes usable (`approved`): a denied listing
+/// still goes in channel sets by link. With `only_pending`, only while its listing is pending.
+/// `None` if nothing matched: rejected, taken down, deleted, or (with `only_pending`) decided.
+pub async fn decide_listing(
+    conn: &mut PgConnection,
+    id: Uuid,
+    to: ApprovalState,
+    reviewer: Uuid,
+    reason: Option<&str>,
+    only_pending: bool,
+) -> DbResult<Option<Emote>> {
+    Ok(sqlx::query_as(&format!(
+        "UPDATE emotes
+         SET state = 'approved', listing_review = $2, reviewed_by = $3, reviewed_at = now(),
+             review_reason = $4, requeued_at = NULL, updated_at = now()
+         WHERE id = $1 AND deleted_at IS NULL
+           AND state IN ('pending', 'approved')
+           AND (NOT $5 OR state = 'pending')
+         RETURNING {EMOTE}"
+    ))
+    .bind(id)
+    .bind(to)
+    .bind(reviewer)
+    .bind(reason)
+    .bind(only_pending)
+    .fetch_optional(conn)
+    .await?)
+}
+
+/// Decides an emote's personal use (ADR 0039). Its state stays as it is. With `only_pending`,
+/// only while its personal use is pending. `None` if nothing matched.
+pub async fn decide_personal(
+    conn: &mut PgConnection,
+    id: Uuid,
+    to: ApprovalState,
+    reviewer: Uuid,
+    reason: Option<&str>,
+    only_pending: bool,
+) -> DbResult<Option<Emote>> {
+    Ok(sqlx::query_as(&format!(
+        "UPDATE emotes
+         SET personal_review = $2, personal_reviewed_by = $3, personal_reviewed_at = now(),
+             personal_review_reason = $4, updated_at = now()
+         WHERE id = $1 AND deleted_at IS NULL
+           AND state IN ('pending', 'approved')
+           AND (NOT $5 OR personal_review = 'pending')
+         RETURNING {EMOTE}"
+    ))
+    .bind(id)
+    .bind(to)
+    .bind(reviewer)
+    .bind(reason)
+    .bind(only_pending)
     .fetch_optional(conn)
     .await?)
 }
@@ -262,7 +337,7 @@ pub async fn resubmit(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Emot
     Ok(sqlx::query_as(&format!(
         "UPDATE emotes
          SET state = 'pending', reviewed_by = NULL, reviewed_at = NULL, review_reason = NULL,
-             updated_at = now()
+             listing_review = 'pending', updated_at = now()
          WHERE id = $1 AND deleted_at IS NULL AND state = 'approved'
          RETURNING {EMOTE}"
     ))

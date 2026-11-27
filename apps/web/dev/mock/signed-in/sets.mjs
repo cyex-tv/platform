@@ -110,6 +110,11 @@ export function signedInSets(op, body, v, ADMIN) {
       if (!s || !mayView(s, true)) return err('Not found.', 'not_found');
       if (!setRights(s, ADMIN).emotes) return forbidden();
       const e = findEmote(v.emoteId);
+      if (!e) return err('Not found.', 'not_found');
+      // A personal set takes only emotes approved for personal use (ADR 0039).
+      if (s.kind === 'PERSONAL' && e.approvals?.personalUse !== 'APPROVED')
+        return err(e.approvals?.personalUse === 'DENIED' ? 'That emote was not approved for personal use, so it can’t go in a personal set.'
+          : 'That emote isn’t approved for personal use yet. A personal set takes only emotes approved for personal use.', 'personal_use_not_approved');
       if (s.emotes.length >= s.capacity) return err('The set is full.', 'set_full');
       if (s.emotes.some((m) => m.name === e.name)) return err('Another emote in this set has that name.', 'name_taken');
       s.emotes.push(member(e, v.input?.name ?? e.name));

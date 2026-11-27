@@ -402,7 +402,7 @@ export const guides: Guide[] = [
     title: 'Emotes and files',
     search: 'emote object cdn files webp avif static picture image host',
     blocks: [
-      p('An emote has an `id` (store this, as a string: names change; see [IDs](#ids)), a `name`, `flags` (`zero_width`, `private`, `wide`; `nsfw` is retired and always false: NSFW emotes aren’t allowed), and a `host` with a list of `files`. Public reads only return approved emotes; a pending one shows to its owner alone.'),
+      p('An emote has an `id` (store this, as a string: names change; see [IDs](#ids)), a `name`, `flags` (`zero_width`, `private`, `wide`; `nsfw` is retired and always false: NSFW emotes aren’t allowed), and a `host` with a list of `files`. Public reads only return approved emotes; a pending one shows to its owner alone. Every emote also has two `approvals`, `public_listing` and `personal_use` (see [Approvals and transfers](#approvals)).'),
       p('Each file entry carries its full address as `url` (`<host>/<name>`) and its media type as `mime` (`image/webp` or `image/avif`), so a client uses `url` as it is instead of joining `host` and `name`. `host` and `name` stay. The address is:'),
       { t: 'pre', code: `${EX.host}/2x.webp` },
       fmt(
@@ -435,6 +435,22 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'approvals',
+    title: 'Approvals and transfers',
+    search: 'approvals public listing personal use review unlisted pending approved denied transfer ownership reviewApprovals PERSONAL_USE emotes.review_personal emotes.transfer',
+    blocks: [
+      p('Every emote has two approvals, decided apart by moderators: `approvals.public_listing` (may it be listed in search, browse and its creator’s page) and `approvals.personal_use` (may it go in a personal set, shown in chat everywhere its owner talks). Each is `pending`, `approved` or `denied` over REST and `PENDING`, `APPROVED` or `DENIED` in GraphQL (`Emote.approvals { publicListing personalUse }`). Anyone who may see the emote sees both.'),
+      fmt(
+        ['Uploads', 'Every upload starts `unlisted` with both approvals `pending`, and goes to review. The uploader chooses only zero-width and private; `visibility=unlisted` from anyone without `emotes.flags` or `emotes.edit_any` is `400 bad_visibility`, and `public` means “not private”: it is listed once its listing is approved.'],
+        ['Listing', 'An emote whose listing is `denied` stays usable by link and in channel sets, but unlisted. Search and browse return listed emotes only.'],
+        ['Personal use', 'A personal set takes only emotes with `personal_use` `approved`: anything else is `409 personal_use_not_approved`. Emotes already in a personal set stay there. To find them, pass `PERSONAL_USE` in the `flags` of `searchEmotes`.'],
+      ),
+      p('Staff decide with [reviewApprovals](#gql-mutation-reviewApprovals): up to 100 emotes, `publicListing` and `personalUse` each `APPROVE`, `DENY` or left out, a `reason` for any denial (the owner sees it, otherwise `400 bad_approvals`), and `onlyPending` (default true, what the queues send) to skip parts someone already decided. Listing needs `emotes.review`, personal use `emotes.review_personal`. [reviewQueue](#gql-query-reviewQueue) has a `PERSONAL` tab for approved emotes whose personal use is pending, `counts.personal` and `filter.personalUse`.'),
+      p('The owner is notified of each change: `emote.approved` for the first listing verdict and `emote.approvals_changed` for every later one, both with `public_listing`, `personal_use` and `reason` in the payload.'),
+      p('**Ownership.** Only staff with `emotes.transfer` move an emote, directly, with [transferEmote](#gql-mutation-transferEmote): anyone else, the owner included, gets `403 transfer_staff_only`, and both owners get `emote.transferred` (its `role` is `from` or `to`, and `actor_name` is who moved it). The request flow is retired: `acceptEmoteTransfer`, `declineEmoteTransfer` and `cancelEmoteTransfer` answer `410 transfer_requests_retired`, and `emoteTransferRequests` is always empty. Until its sunset, `GET /v1/meta` lists this as the deprecation `emote_transfer_requests`.'),
+    ],
+  },
+  {
     id: 'sets-and-channels',
     title: 'Sets and channels',
     search: 'set channel personal global active capacity',
@@ -444,7 +460,7 @@ export const guides: Guide[] = [
       fmt(
         ['CHANNEL', 'A channel\'s emotes. A channel can keep several and switch the active one.'],
         ['GLOBAL', 'The cyex.tv global set, shown in every channel.'],
-        ['PERSONAL', 'One per account, made at sign-up: emotes its owner can use in any channel that allows them. 3 slots, or 10 with a subscriber role; `capacity` is the number it has now and `capacityOverride` is set when staff chose it by hand. After losing a role a set may hold more than `capacity`: it keeps them and takes no new one until it is under.'],
+        ['PERSONAL', 'One per account, made at sign-up: emotes its owner can use in any channel that allows them. 3 slots, or 10 with a subscriber role; `capacity` is the number it has now and `capacityOverride` is set when staff chose it by hand. After losing a role a set may hold more than `capacity`: it keeps them and takes no new one until it is under. It takes only emotes whose `personal_use` approval is `approved`; adding any other is `409 personal_use_not_approved`.'],
       ),
       p('So a chat line can use the channel\'s active set, the global set, and its sender\'s personal set where the channel has `allow_personal_emotes` on. Look personal sets up for up to 100 chatters at once with [Look up personal sets](#rest-lookup_personal_sets).'),
     ],

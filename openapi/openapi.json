@@ -1811,6 +1811,15 @@
           }
         }
       },
+      "ApprovalState": {
+        "type": "string",
+        "description": "Where one of an emote's two approvals stands (ADR 0039): its public listing or its personal use.",
+        "enum": [
+          "pending",
+          "approved",
+          "denied"
+        ]
+      },
       "Badge": {
         "type": "object",
         "description": "A chat badge, shown before a chatter's name.",
@@ -2200,6 +2209,10 @@
           "animated": {
             "type": "boolean"
           },
+          "approvals": {
+            "$ref": "#/components/schemas/EmoteApprovals",
+            "description": "Its public listing and personal use approvals (ADR 0039)."
+          },
           "channel_count": {
             "type": "integer",
             "format": "int32",
@@ -2255,6 +2268,24 @@
           "visibility": {
             "$ref": "#/components/schemas/EmoteVisibility",
             "description": "`PUBLIC`, `UNLISTED` or `PRIVATE` (ADR 0020). `flags.private` says the same for\n`PRIVATE`, for clients from before `UNLISTED`."
+          }
+        }
+      },
+      "EmoteApprovals": {
+        "type": "object",
+        "description": "An emote's two approvals (ADR 0039). Each is decided on its own, in review.",
+        "required": [
+          "public_listing",
+          "personal_use"
+        ],
+        "properties": {
+          "personal_use": {
+            "$ref": "#/components/schemas/ApprovalState",
+            "description": "Whether it may go in a personal set (shown in chat everywhere its owner chats). A personal\nset takes only emotes whose personal use is `APPROVED`."
+          },
+          "public_listing": {
+            "$ref": "#/components/schemas/ApprovalState",
+            "description": "Whether it may be listed: found by search and browse and shown on its creator's page.\nUntil it is `APPROVED` the emote is unlisted (unless private)."
           }
         }
       },
@@ -2556,6 +2587,8 @@
           "emote_unavailable",
           "emote_private",
           "not_approved",
+          "personal_use_not_approved",
+          "bad_approvals",
           "already_taken_down",
           "not_pending",
           "bad_emote",
@@ -2581,6 +2614,8 @@
           "no_permissions",
           "retired_permission",
           "bad_editor",
+          "transfer_staff_only",
+          "transfer_requests_retired",
           "same_owner",
           "expired",
           "recipient_not_found",
@@ -3015,6 +3050,18 @@
             "when": "Until approval an emote only goes in its owner's channel sets."
           },
           {
+            "code": "personal_use_not_approved",
+            "group": "Emotes",
+            "meaning": "The emote is not approved for personal use.",
+            "when": "Adding an emote to a personal set before its personal use is approved, or after it was denied (409, ADR 0039)."
+          },
+          {
+            "code": "bad_approvals",
+            "group": "Emotes",
+            "meaning": "The review asks for nothing, or a denial has no reason.",
+            "when": "reviewApprovals without publicListing or personalUse, or with a DENY and no reason (ADR 0039)."
+          },
+          {
             "code": "already_taken_down",
             "group": "Emotes",
             "meaning": "The emote is taken down already.",
@@ -3163,6 +3210,18 @@
             "group": "Editors",
             "meaning": "The editor is not identified properly.",
             "when": "Give the editor's account ID, or a platform and a login."
+          },
+          {
+            "code": "transfer_staff_only",
+            "group": "Transfers",
+            "meaning": "Only staff with emotes.transfer can change who owns an emote.",
+            "when": "transferEmote without the emotes.transfer permission, the emote's owner included (403, ADR 0039)."
+          },
+          {
+            "code": "transfer_requests_retired",
+            "group": "Transfers",
+            "meaning": "Transfer requests are gone: ownership can't be requested.",
+            "when": "acceptEmoteTransfer, declineEmoteTransfer or cancelEmoteTransfer (410, ADR 0039)."
           },
           {
             "code": "same_owner",

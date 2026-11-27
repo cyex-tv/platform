@@ -21,6 +21,24 @@ suite('describe', () => {
     expect(l.href).toBe('/emotes/E1');
     expect(l.icon).toBe('check');
   });
+  it('emote.approved says where the two approvals stand when the payload has them', () => {
+    const l = describe('emote.approved', j({ emote_id: 'E1', name: 'KEKW', public_listing: 'approved', personal_use: 'pending' }));
+    expect(strip(l.text)).toBe('KEKW was approved. Public listing approved, personal use is waiting for review.');
+    const d = describe('emote.approved', j({ name: 'KEKW', public_listing: 'approved', personal_use: 'denied', reason: 'Not for chat.' }));
+    expect(strip(d.text)).toBe('KEKW was approved. Public listing approved, personal use denied. Reason: Not for chat.');
+  });
+  it('emote.approvals_changed names each decision and the reason', () => {
+    const l = describe('emote.approvals_changed', j({ emote_id: 'E3', name: 'Pog', public_listing: 'approved', personal_use: 'approved' }));
+    expect(strip(l.text)).toBe('Pog: public listing approved, personal use approved.');
+    expect(l.href).toBe('/emotes/E3');
+    expect(l.icon).toBe('check');
+    const d = describe('emote.approvals_changed', j({ name: 'Pog', public_listing: 'approved', personal_use: 'denied', reason: 'Too noisy.' }));
+    expect(strip(d.text)).toBe('Pog: public listing approved, personal use denied. Reason: Too noisy.');
+    expect(d.icon).toBe('x');
+    expect(strip(describe('emote.approvals_changed', '{}').text)).toBe('Your emote: its approvals changed.');
+    expect(describe('emote.approvals_changed', j({ emote_id: '../x', public_listing: 'weird' })).href).toBeNull();
+    expect(strip(describe('emote.approvals_changed', j({ name: '<b>x</b>', public_listing: '<i>' })).text)).toBe('<b>x</b>: its approvals changed.');
+  });
   it('emote.rejected carries the reason', () => {
     const l = describe('emote.rejected', j({ emote_id: 'E2', name: 'Pog', reason: 'Too blurry.' }));
     expect(strip(l.text)).toBe('Pog was rejected. Reason: Too blurry.');
@@ -66,8 +84,9 @@ suite('describe', () => {
     expect(strip(describe('emote.transfer_cancelled', j({ ...retired, role: 'editor' })).text)).toBe(
       'Your request to give Pog to Bo was withdrawn: only an emote’s owner can give it away now.',
     );
-    expect(strip(describe('emote.transferred', j({ ...p, role: 'to' })).text)).toBe('Pog is yours now, from Ana.');
+    expect(strip(describe('emote.transferred', j({ ...p, role: 'to' })).text)).toBe('Staff moved Pog to you.');
     expect(strip(describe('emote.transferred', j({ ...p, role: 'editor' })).text)).toBe('Ana accepted: Pog went to Bo.');
+    expect(strip(describe('emote.transferred', j({ ...p, role: 'from' })).text)).toBe('Pog was moved to Bo.');
     expect(describe('emote.transferred', j({ ...p, role: 'from' })).href).toBeNull();
     expect(strip(describe('emote.transfer_declined', j(p)).text)).toBe('Ana declined giving Pog to Bo.');
     expect(strip(describe('emote.transfer_cancelled', j(p)).text)).toBe('Bo withdrew the request to give Pog away.');

@@ -81,7 +81,7 @@
     {#if viewer}
       {#key e.id}
         <div class="acts">
-          <EmoteActions emoteId={e.id} {name} {viewer} picture={e} addable={e.state === 'APPROVED'} reportable={canReport(e, session.me?.id)} owner={e.owner} {path} />
+          <EmoteActions emoteId={e.id} {name} {viewer} picture={e} approvals={e.approvals} addable={e.state === 'APPROVED'} reportable={canReport(e, session.me?.id)} owner={e.owner} {path} />
         </div>
       {/key}
     {/if}
