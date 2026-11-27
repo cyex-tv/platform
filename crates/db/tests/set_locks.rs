@@ -67,6 +67,16 @@ fn member(emote_id: Uuid) -> NewMember<'static> {
     }
 }
 
+/// A wait that never ends (locks held by a connection nobody uses again) fails the test here
+/// instead of hanging the run.
+const PATIENCE: Duration = Duration::from_secs(30);
+
+async fn within<T>(what: &str, f: impl std::future::Future<Output = T>) -> T {
+    tokio::time::timeout(PATIENCE, f)
+        .await
+        .unwrap_or_else(|_| panic!("{what} still waiting after {PATIENCE:?}"))
+}
+
 fn is_deadlock<T>(result: &Result<T, DbError>) -> bool {
     result.as_ref().err().is_some_and(is_conflict)
 }
@@ -112,13 +122,17 @@ async fn add_member_and_remove_from_all_sets_never_deadlock() {
     });
     // Let the removal get as far as it can while the set is held.
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let added = sets::add_member(&mut tx, set.id, member(emote)).await;
+    let added = within(
+        "add_member",
+        sets::add_member(&mut tx, set.id, member(emote)),
+    )
+    .await;
     assert!(!is_deadlock(&added), "add_member deadlocked: {added:?}");
     // The member was still there when the insert ran, so it is a duplicate.
     assert!(matches!(added, Err(DbError::AlreadyInSet)), "{added:?}");
-    tx.commit().await.unwrap();
+    within("commit", tx.commit()).await.unwrap();
 
-    let removed = removal.await.unwrap();
+    let removed = within("the removal", removal).await.unwrap();
     assert!(!is_deadlock(&removed), "removal deadlocked: {removed:?}");
     assert_eq!(removed.unwrap(), vec![(set.id, "wave".to_owned())]);
     db.close().await;
@@ -140,12 +154,15 @@ async fn racing_add_and_remove_many_times_never_deadlocks() {
     let mut b = db.conn().await;
     for round in 0..200 {
         if round % 2 == 0 {
-            let _ = sets::add_member(&mut setup, set.id, member(emote)).await;
+            let _ = within("setup", sets::add_member(&mut setup, set.id, member(emote))).await;
         }
-        let (added, removed) = tokio::join!(
-            sets::add_member(&mut a, set.id, member(emote)),
-            emotes::remove_from_all_sets(&mut b, emote),
-        );
+        let (added, removed) = within(&format!("round {round}"), async {
+            tokio::join!(
+                sets::add_member(&mut a, set.id, member(emote)),
+                emotes::remove_from_all_sets(&mut b, emote),
+            )
+        })
+        .await;
         assert!(!is_deadlock(&added), "round {round}: {added:?}");
         assert!(!is_deadlock(&removed), "round {round}: {removed:?}");
         assert!(

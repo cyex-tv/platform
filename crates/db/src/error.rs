@@ -120,8 +120,13 @@ macro_rules! retrying {
                     tracing::info!(attempt, error = %err, "set write conflicted; trying again");
                     attempt += 1;
                 }
-                // Dropping the savepoint rolls it back, as a plain `?` would.
-                Err(err) => break Err(err),
+                // Rolled back now, not when the connection is next used (what dropping the
+                // transaction does): until then its locks would stay held, and a caller that
+                // keeps the connection would keep every other writer of the set waiting.
+                Err(err) => {
+                    let _ = savepoint.rollback().await;
+                    break Err(err);
+                }
             }
         }
     }};
