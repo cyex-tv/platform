@@ -1037,6 +1037,7 @@ async fn get_global_set(State(state): State<AppState>, headers: HeaderMap) -> Ap
     params(("id" = String, Path, description = "The emote's ID: its Snowflake (digits), or its old ULID while clients move over.")),
     responses(
         (status = 200, body = Emote),
+        (status = 301, description = "The emote was merged into another (ADR 0040): `Location` is `/v1/emotes/{id}` of the emote that took its place. Follow it."),
         (status = 304, description = "Not modified."),
         (status = 404, description = "`not_found`: no such approved emote.", body = ErrorBody)
     )
@@ -1048,10 +1049,43 @@ async fn get_emote(
 ) -> ApiResult<Response> {
     let id = crate::public_ids::canonical(&state, &id).await?;
     let key = cyex_tv_db::ids::from_text(id.trim()).map(read_cache::emote_key);
-    shared_read(&state, &headers, key, ReadCache::EMOTE, || {
-        moderation::emote(&state, None, &id)
+    let read = shared_read(&state, &headers, key, ReadCache::EMOTE, || {
+        moderation::emote_live(&state, None, &id)
     })
-    .await
+    .await;
+    // Only a miss asks whether the emote was merged (ADR 0040), so live reads cost nothing more.
+    match read {
+        Err(e) if e.code == "not_found" => match moderation::merged_target(&state, &id).await? {
+            Some(target) => merged_redirect(&state, target).await,
+            None => Err(e),
+        },
+        other => other,
+    }
+}
+
+/// `301 Moved Permanently` to the emote a merged one went to (ADR 0040), by its Snowflake.
+async fn merged_redirect(state: &AppState, target: uuid::Uuid) -> ApiResult<Response> {
+    let mut conn = state
+        .db
+        .acquire()
+        .await
+        .map_err(crate::errors::sqlx_error)?;
+    let public = cyex_tv_db::public_ids::publics(&mut conn, &[target])
+        .await
+        .map_err(crate::errors::db_error)?
+        .get(&target)
+        .map_or_else(|| cyex_tv_db::ids::to_text(target), ToString::to_string);
+    let mut response = StatusCode::MOVED_PERMANENTLY.into_response();
+    let out = response.headers_mut();
+    out.insert(
+        LOCATION,
+        HeaderValue::from_str(&format!("/v1/emotes/{public}")).map_err(|_| ApiError::internal())?,
+    );
+    out.insert(
+        CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=300"),
+    );
+    Ok(response)
 }
 
 /// Personal sets for up to 100 chatters at once, for clients rendering a chat.

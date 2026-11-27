@@ -81,6 +81,10 @@ const DIFFERENCES: &[Difference] = &[
         reason: "Sign-in redirects, the multipart uploads, the webhooks, health checks and the conditional-request machinery (ETag, Cache-Control, Link, RateLimit-*) are HTTP only.",
     },
     Difference {
+        key: "field:Emote.mergedInto",
+        reason: "Only a merged emote's ID has it (ADR 0040). REST answers that ID with a `301` to the target instead of a body, so its emotes never carry it; GraphQL answers the target under the old ID with `mergedInto`, null everywhere else.",
+    },
+    Difference {
         key: "errors",
         reason: "REST errors are `{ code, message, details }` with a status; GraphQL's are `errors[].extensions` with the same `code`, `limit` and `current` (ADR 0008, 0032).",
     },
@@ -323,7 +327,10 @@ impl Comparison<'_> {
                 continue;
             };
             let Some(r) = rest.get(&key) else {
-                self.diffs.push(format!("{at}: only GraphQL has it ({g})"));
+                let only_graphql = format!("field:{ty}.{}", f.name);
+                if !(g.is_null() && DIFFERENCES.iter().any(|d| d.key == only_graphql)) {
+                    self.diffs.push(format!("{at}: only GraphQL has it ({g})"));
+                }
                 continue;
             };
             self.value(&f.base, f.list, r, g, &at);

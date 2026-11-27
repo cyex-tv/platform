@@ -1,13 +1,13 @@
 <script lang="ts">
   // An emote's actions, kept together: Add to set (the sets on your own channels first, marked "On
   // your channel"), Edit for the owner and for staff (`onedit` opens the edit pop-up; a personal
-  // set is disabled, with the reason, until the emote is approved for personal use), and a More menu with Copy link, Copy name, Hide for me and
+  // set is disabled, with the reason, until the emote is approved for personal use), and a More menu with Copy link, Hide for me and
   // Hide everything by the creator (signed in; Show again once hidden), Download and Report (the
   // last two open in the same panel).
   // Signed out, "Add to set" becomes "Sign in to add". `variant="bar"` is the phone's fixed bar
   // (44px targets, Add to set takes the width, Edit and More shrink to icons). Pass the page's
   // `viewer` so every copy of the actions shares one sign-in check.
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { page } from '$app/state';
   import { clean, iso } from '$lib/format';
   import { useCopied } from '$lib/clipboard.svelte';
@@ -18,10 +18,11 @@
   import Popover from './Popover.svelte';
   import EmoteDownload from './emote/EmoteDownload.svelte';
   import type { PageEmote } from './emote/emote-page';
+  import MergeEmoteDialog from './emote/MergeEmoteDialog.svelte';
   import ReportForm from './emote/ReportForm.svelte';
   import { Viewer } from './emote/viewer.svelte';
   import { roving } from './roving';
-  import { session } from '$lib/tool/session.svelte';
+  import { can, session } from '$lib/tool/session.svelte';
   import { notify } from '$lib/tool/notices.svelte';
   import { listError, personal } from '$lib/personal/lists.svelte';
   import { personalBlock, type Approvals } from './emote/approvals';
@@ -55,15 +56,20 @@
   let moreOpen = $state(false);
   let mode = $state<'menu' | 'download' | 'report'>('menu');
   const linkCopy = useCopied();
-  const nameCopy = useCopied();
   const shown = $derived(clean(name));
+  const canMerge = $derived(can('emotes.merge'));
+  let mergeDialog = $state<MergeEmoteDialog>();
+  // The menu (a sheet on phones) closes first, so the pop-up opens on a clear page.
+  async function openMerge() {
+    moreOpen = false;
+    await tick();
+    mergeDialog?.open();
+  }
   const canDownload = $derived(!!picture && picture.files.length > 0);
 
   const signIn = $derived(`/signin?back=${encodeURIComponent(page.url.pathname)}`);
   const link = () => page.url.origin + (path ?? page.url.pathname);
-  const said = $derived(
-    linkCopy.copied ? 'Link copied' : linkCopy.failed ? 'Couldn’t copy' : nameCopy.copied ? 'Name copied' : nameCopy.failed ? 'Couldn’t copy' : '',
-  );
+  const said = $derived(linkCopy.copied ? 'Link copied' : linkCopy.failed ? 'Couldn’t copy' : '');
   // What adding to a set did, in one short line (not the whole list read out again).
   const setName = (id: string | null) => clean(viewer.own.find((s) => s.id === id)?.name ?? '');
   const addSaid = $derived(
@@ -84,7 +90,7 @@
       notify(listError(e), true);
     }
   }
-  const moreWidth = $derived(mode === 'report' ? '340px' : mode === 'download' ? '300px' : signedIn && canHideCreator ? '280px' : '220px');
+  const moreWidth = $derived(mode === 'report' ? '340px' : mode === 'download' ? '300px' : signedIn && canHideCreator ? '280px' : canMerge ? '260px' : '220px');
 </script>
 
 <div class="actions-row {variant}">
@@ -156,11 +162,6 @@
             <SwapIcon a="link" b="check" on={linkCopy.copied} />{linkCopy.copied ? 'Link copied' : linkCopy.failed ? 'Couldn’t copy' : 'Copy link'}
           </button>
         </li>
-        <li>
-          <button type="button" class="item" onclick={() => nameCopy.copy(name)}>
-            <SwapIcon a="copy" b="check" on={nameCopy.copied} />{nameCopy.copied ? 'Name copied' : nameCopy.failed ? 'Couldn’t copy' : 'Copy name'}
-          </button>
-        </li>
         {#if signedIn}
           <li>
             {#if hidden}
@@ -189,6 +190,9 @@
         {#if reportable}
           <li><button type="button" class="item" onclick={() => (mode = 'report')}><Icon name="flag" />Report…</button></li>
         {/if}
+        {#if canMerge}
+          <li><button type="button" class="item" onclick={openMerge}><Icon name="arrow-right" /><span class="lbl">Merge into another emote…</span></button></li>
+        {/if}
       </ul>
     {:else if mode === 'download' && picture}
       <button type="button" class="back" onclick={() => (mode = 'menu')}><Icon name="chevron-left" size={16} />Download</button>
@@ -197,6 +201,7 @@
       <ReportForm {viewer} {name} oncancel={() => (moreOpen = false)} />
     {/if}
   </Popover>
+  {#if canMerge}<MergeEmoteDialog bind:this={mergeDialog} {emoteId} {name} />{/if}
 </div>
 
 <style>

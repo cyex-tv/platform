@@ -451,6 +451,20 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'merging-emotes',
+    title: 'Merging emotes',
+    search: 'merge merged mergedInto mergeEmote emoteMergePreview emotes.merge redirect 301 duplicate retired alias cache removedIds emote.merged',
+    blocks: [
+      p('Staff with `emotes.merge` fold a duplicate into the emote it copies. Look first with [emoteMergePreview](#gql-query-emoteMergePreview) (what moves, which sets already have the target, nothing changes), then do it with [mergeEmote](#gql-mutation-mergeEmote). Every set entry of the old emote, in channel sets, personal sets and any other set, moves to the target and keeps its name there. A set that already holds the target keeps the target’s entry, and `collapsed` lists those sets with both names. The target’s name, tags and files stay. It can’t be undone.'),
+      fmt(
+        ['Refusals', '`merge_into_self` (400), `merge_target_unavailable` (409: the target is deleted, pending, rejected or taken down), `already_merged` (409), `not_found`, and `forbidden` without the permission. A target that was merged itself is followed to the final one, and the preview says so with `followed`.'],
+        ['Told', 'Both owners get `emote.merged` (its `role` is `source`, `target` or `both`). The audit log records `emote.merged` on both emotes.'],
+      ),
+      p('**For clients.** The old ID keeps working. `emote(id)` and `emotes(ids)` answer the final target’s data with `id` set to the ID you asked for and `mergedInto` set to the target’s ID; `GET /v1/emotes/{id}` answers `301` to `/v1/emotes/{target}`, so follow redirects. When `mergedInto` is set, replace the old ID with it in your caches and stored lists.'),
+      p('In [delta sync](#delta-sync) every set that held the old emote lists it in `removed_ids` and the target in `added`, in the same delta. The old emote also leaves search and browse at once.'),
+    ],
+  },
+  {
     id: 'sets-and-channels',
     title: 'Sets and channels',
     search: 'set channel personal global active capacity',

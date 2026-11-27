@@ -137,3 +137,43 @@ export const EMOTE_REVIEW_APPROVALS = graphql(`
     }
   }
 `);
+
+// Merge an emote into another (ADR 0040): what it would do, then doing it. `emotes.merge`.
+export const EMOTE_MERGE_PREVIEW = graphql(`
+  query EmoteMergePreview($id: String!, $intoId: String!) {
+    emoteMergePreview(id: $id, intoId: $intoId) {
+      source {
+        ...EmoteFields
+      }
+      target {
+        ...EmoteFields
+      }
+      followed
+      moves
+      collapses {
+        setId
+        setName
+        keptName
+        droppedName
+      }
+    }
+  }
+`);
+
+export const MERGE_EMOTE = graphql(`
+  mutation MergeEmote($id: String!, $intoId: String!) {
+    mergeEmote(id: $id, intoId: $intoId) {
+      sourceId
+      target {
+        ...EmoteFields
+      }
+      moved
+      collapsed {
+        setId
+        setName
+        keptName
+        droppedName
+      }
+    }
+  }
+`);

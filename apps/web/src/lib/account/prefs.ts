@@ -17,6 +17,7 @@ export const KIND_GROUPS: KindGroup[] = [
       k('emote.failed', 'Failed', 'An emote you uploaded couldn’t be processed.'),
       k('emote.rejected', 'Rejected', 'An emote you uploaded didn’t pass review, with the reason.'),
       k('emote.taken_down', 'Taken down', 'Staff removed one of your emotes everywhere. Always on.'),
+      k('emote.merged', 'Merged', 'Your emote was merged into another, or another was merged into yours.'),
     ],
   },
   {

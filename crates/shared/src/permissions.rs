@@ -55,6 +55,9 @@ pub const EMOTES_REVIEW_PERSONAL: &str = "emotes.review_personal";
 /// Give any emote to another account directly (ADR 0039). Nobody else can move an emote, its
 /// owner included. Audited; the old and the new owner are told.
 pub const EMOTES_TRANSFER: &str = "emotes.transfer";
+/// Merge one emote into another (ADR 0040): every set membership of the source moves to the
+/// target and the source is retired, its ID answering the target. Audited; both owners are told.
+pub const EMOTES_MERGE: &str = "emotes.merge";
 /// Add, change and remove any account's editors on its behalf, as its owner can. Audited.
 pub const EDITORS_MANAGE_ANY: &str = "editors.manage_any";
 /// Change the review queue's ready reject reasons. Audited.
@@ -105,6 +108,7 @@ pub const ALL: &[&str] = &[
     REPORTS_FILE,
     EMOTES_REVIEW_PERSONAL,
     EMOTES_TRANSFER,
+    EMOTES_MERGE,
 ];
 
 /// What anyone with `roles.manage` may add to the built-in User role, which every account holds

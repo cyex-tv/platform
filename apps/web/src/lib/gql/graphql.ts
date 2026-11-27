@@ -892,6 +892,12 @@ export type Emote = {
   host: Scalars['String']['output'];
   /** The emote's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
   id: Scalars['String']['output'];
+  /**
+   * Set only on an answer for an emote that was merged into another (ADR 0040): the ID of
+   * the emote that took its place (the final one), whose name, files and the rest this answer
+   * carries. Go to that ID. REST answers a merged ID with `301` to the target instead.
+   */
+  mergedInto?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
   owner?: Maybe<AccountSummary>;
   /** `READY`, `PROCESSING` or `FAILED`: whether the image is made (or could not be). */
@@ -988,6 +994,35 @@ export type EmoteFlagsInput = {
   /** `UNLISTED` takes a public emote off search, browse and its creator's page. */
   visibility?: InputMaybe<EmoteVisibility>;
   zeroWidth?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** What `mergeEmote` would do (`emoteMergePreview`, ADR 0040). */
+export type EmoteMergePreview = {
+  __typename?: 'EmoteMergePreview';
+  /** Sets that already hold the target: the source's membership is dropped there. */
+  collapses: Array<MergeCollapse>;
+  /** True when the emote asked for had been merged, and `target` is where it went. */
+  followed: Scalars['Boolean']['output'];
+  /** Set memberships of the source that will name the target, each with its name kept. */
+  moves: Scalars['Int']['output'];
+  source: Emote;
+  /**
+   * The emote that takes the source's place: the one asked for, or, when that was merged
+   * itself, the final one it went to (`followed`).
+   */
+  target: Emote;
+};
+
+/** What `mergeEmote` did (ADR 0040). */
+export type EmoteMergeResult = {
+  __typename?: 'EmoteMergeResult';
+  /** Sets that held both: the source's membership was dropped, the target's kept. */
+  collapsed: Array<MergeCollapse>;
+  /** Set memberships that now name the target, each with its name kept. */
+  moved: Scalars['Int']['output'];
+  /** The retired emote: its ID now answers the target (`mergedInto`). */
+  sourceId: Scalars['String']['output'];
+  target: Emote;
 };
 
 /** A note reviewers keep on one emote (`emotes.review`). The uploader never sees it. */
@@ -1372,6 +1407,23 @@ export type MediaLimits = {
   minSide?: Maybe<Scalars['Int']['output']>;
 };
 
+/**
+ * A set that held both emotes of a merge (ADR 0040): the source's membership is dropped and the
+ * target's kept, with its own name.
+ */
+export type MergeCollapse = {
+  __typename?: 'MergeCollapse';
+  /**
+   * The source's name in the set: dropped. When it differs from `keptName`, chat in that
+   * set now types the target's name.
+   */
+  droppedName: Scalars['String']['output'];
+  /** The target's name in the set: kept. */
+  keptName: Scalars['String']['output'];
+  setId: Scalars['String']['output'];
+  setName: Scalars['String']['output'];
+};
+
 export type Mutation = {
   __typename?: 'Mutation';
   /**
@@ -1570,6 +1622,18 @@ export type Mutation = {
    * of them without `ids`. Returns how many were unread.
    */
   markNotificationsRead: Scalars['Int']['output'];
+  /**
+   * Merge emote `id` into `intoId` (ADR 0040). Needs `emotes.merge`. Every set membership of
+   * `id` names `intoId` instead, keeping its name in the set; a set that holds both keeps
+   * the target's membership (listed in `collapsed`). Name, tags and files are the target's.
+   * `id` is retired: gone from search and sets, and its ID answers the target (REST `301`,
+   * GraphQL `mergedInto`). A target that was merged itself is followed to the final one.
+   * Refused: into itself (`merge_into_self`), into an emote that isn't approved or is
+   * deleted (`merge_target_unavailable`), an emote merged already (`already_merged`).
+   * One transaction; every affected set's version moves once, its delta listing `id` as
+   * removed and `intoId` as added. Audited (`emote.merged`); both owners are notified.
+   */
+  mergeEmote: EmoteMergeResult;
   /**
    * Restrict an account with a reason, for good or `until` a time: no uploads
    * (`users.restrict_uploads`), no reports or tickets (`users.restrict_tickets`), or a full
@@ -2025,6 +2089,12 @@ export type MutationLiftRestrictionArgs = {
 
 export type MutationMarkNotificationsReadArgs = {
   ids?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+
+export type MutationMergeEmoteArgs = {
+  id: Scalars['String']['input'];
+  intoId: Scalars['String']['input'];
 };
 
 
@@ -2823,7 +2893,11 @@ export type Query = {
   editorOf: Array<EditedAccount>;
   /** The sets of the accounts you edit. Each set names its owner. */
   editorSets: Array<EmoteSet>;
-  /** An emote. Pending ones are visible to their owner and to moderators only. */
+  /**
+   * An emote. Pending ones are visible to their owner and to moderators only. The ID of an
+   * emote that was merged into another (ADR 0040) answers that emote, with `mergedInto` set
+   * to its ID: go there.
+   */
   emote?: Maybe<Emote>;
   /**
    * An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
@@ -2857,6 +2931,13 @@ export type Query = {
    * (upload, edits, reviews, notes, takedowns). Needs `emotes.review`.
    */
   emoteHistory: Array<AuditEntry>;
+  /**
+   * What merging emote `id` into `intoId` would do (ADR 0040), without doing it: both emotes
+   * as they read now (a target that was merged itself is followed to the final one,
+   * `followed`), how many set memberships move, and the sets that hold both. Needs
+   * `emotes.merge`; refused as `mergeEmote` would be.
+   */
+  emoteMergePreview: EmoteMergePreview;
   /** Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`. */
   emoteNotes: Array<EmoteNote>;
   /**
@@ -3382,6 +3463,12 @@ export type QueryEmoteDuplicatesArgs = {
 
 export type QueryEmoteHistoryArgs = {
   emoteId: Scalars['String']['input'];
+};
+
+
+export type QueryEmoteMergePreviewArgs = {
+  id: Scalars['String']['input'];
+  intoId: Scalars['String']['input'];
 };
 
 
@@ -4837,6 +4924,22 @@ export type EmoteReviewApprovalsMutationVariables = Exact<{
 
 export type EmoteReviewApprovalsMutation = { __typename?: 'Mutation', reviewApprovals: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
 
+export type EmoteMergePreviewQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+  intoId: Scalars['String']['input'];
+}>;
+
+
+export type EmoteMergePreviewQuery = { __typename?: 'Query', emoteMergePreview: { __typename?: 'EmoteMergePreview', followed: boolean, moves: number, source: { __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, approvals: { __typename?: 'EmoteApprovals', publicListing: ApprovalState, personalUse: ApprovalState }, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }, target: { __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, approvals: { __typename?: 'EmoteApprovals', publicListing: ApprovalState, personalUse: ApprovalState }, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }, collapses: Array<{ __typename?: 'MergeCollapse', setId: string, setName: string, keptName: string, droppedName: string }> } };
+
+export type MergeEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  intoId: Scalars['String']['input'];
+}>;
+
+
+export type MergeEmoteMutation = { __typename?: 'Mutation', mergeEmote: { __typename?: 'EmoteMergeResult', sourceId: string, moved: number, target: { __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, approvals: { __typename?: 'EmoteApprovals', publicListing: ApprovalState, personalUse: ApprovalState }, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }, collapsed: Array<{ __typename?: 'MergeCollapse', setId: string, setName: string, keptName: string, droppedName: string }> } };
+
 export type EmoteFieldsFragment = { __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, approvals: { __typename?: 'EmoteApprovals', publicListing: ApprovalState, personalUse: ApprovalState }, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> };
 
 export type SearchQueryVariables = Exact<{
@@ -4870,7 +4973,7 @@ export type EmoteQueryVariables = Exact<{
 }>;
 
 
-export type EmoteQuery = { __typename?: 'Query', emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, approvals: { __typename?: 'EmoteApprovals', publicListing: ApprovalState, personalUse: ApprovalState }, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null };
+export type EmoteQuery = { __typename?: 'Query', emote?: { __typename?: 'Emote', mergedInto?: string | null, id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, approvals: { __typename?: 'EmoteApprovals', publicListing: ApprovalState, personalUse: ApprovalState }, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null };
 
 export type EmoteTrendingQueryVariables = Exact<{
   id: Scalars['String']['input'];
@@ -7606,6 +7709,111 @@ export const EmoteReviewApprovalsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<EmoteReviewApprovalsMutation, EmoteReviewApprovalsMutationVariables>;
+export const EmoteMergePreviewDocument = new TypedDocumentString(`
+    query EmoteMergePreview($id: String!, $intoId: String!) {
+  emoteMergePreview(id: $id, intoId: $intoId) {
+    source {
+      ...EmoteFields
+    }
+    target {
+      ...EmoteFields
+    }
+    followed
+    moves
+    collapses {
+      setId
+      setName
+      keptName
+      droppedName
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  processing
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  approvals {
+    publicListing
+    personalUse
+  }
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<EmoteMergePreviewQuery, EmoteMergePreviewQueryVariables>;
+export const MergeEmoteDocument = new TypedDocumentString(`
+    mutation MergeEmote($id: String!, $intoId: String!) {
+  mergeEmote(id: $id, intoId: $intoId) {
+    sourceId
+    target {
+      ...EmoteFields
+    }
+    moved
+    collapsed {
+      setId
+      setName
+      keptName
+      droppedName
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  processing
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  approvals {
+    publicListing
+    personalUse
+  }
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<MergeEmoteMutation, MergeEmoteMutationVariables>;
 export const SearchDocument = new TypedDocumentString(`
     query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort, $flags: [EmoteFlag!], $tags: [String!], $exact: Boolean, $window: TrendingWindow, $after: String) {
   searchEmotes(
@@ -7690,6 +7898,7 @@ export const EmoteDocument = new TypedDocumentString(`
     query Emote($id: String!) {
   emote(id: $id) {
     ...EmoteFields
+    mergedInto
   }
 }
     fragment EmoteFields on Emote {

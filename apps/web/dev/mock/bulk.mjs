@@ -6,6 +6,7 @@
 import { ALL } from './emotes.mjs';
 import { CHANNELS } from './account.mjs';
 import { err, findSet, mayView, setOut } from './sets.mjs';
+import { emoteAs } from './merge.mjs';
 
 export const SETS_LOOKUP = 25;
 export const EMOTES_LOOKUP = 100;
@@ -32,7 +33,7 @@ export function bulkAnswer(q, v, session) {
   }
   if (/\bemotes\s*\(\s*ids\s*:/.test(q)) {
     if ((v.ids ?? []).length > EMOTES_LOOKUP) return err('Look up at most 100 emotes at once.', 'too_many');
-    return { data: { emotes: distinct(v.ids).map((id) => ALL.find((e) => e.id === id)).filter(Boolean) } };
+    return { data: { emotes: distinct(v.ids).map((id) => emoteAs(id, (x) => ALL.find((e) => e.id === x))).filter(Boolean) } };
   }
   if (/\bchannels\s*\(\s*platform\s*:/.test(q)) {
     if ((v.ids ?? []).length > CHANNELS_LOOKUP) return err('Look up at most 100 channels at once.', 'too_many');

@@ -2038,6 +2038,11 @@ async fn every_reference_to_an_account_is_handled_by_erase() {
             "personal_reviewed_by",
             "who decided an upload's personal use (ADR 0039)",
         ),
+        (
+            "emotes",
+            "merged_by",
+            "who merged an emote into another (ADR 0040)",
+        ),
         ("blocked_images", "created_by", "who blocked an image"),
         ("reports", "resolved_by", "who resolved a report"),
         (

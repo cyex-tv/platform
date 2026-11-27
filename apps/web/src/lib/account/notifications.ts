@@ -138,6 +138,20 @@ export function describe(kind: string, payload: string | null | undefined): Line
             : `${what} was moved to ${who('to_name')}.`;
       return { icon: 'arrow-right', text, href: emote && role !== 'from' ? `/emotes/${emote}` : null };
     }
+    case 'emote.merged': {
+      const src = str(d, 'source_name', 100);
+      const tgt = str(d, 'target_name', 100);
+      const s = src ? iso(src) : 'An emote';
+      const t = tgt ? iso(tgt) : 'another emote';
+      const role = str(d, 'role', 10);
+      const text =
+        role === 'source'
+          ? `${s} was merged into ${t}. Its page and links now go there.`
+          : role === 'target'
+            ? `${s} was merged into your emote ${t}. Its set entries now use yours.`
+            : `${s} was merged into ${t}.`;
+      return { icon: 'arrow-right', text, href: emote ? `/emotes/${emote}` : null };
+    }
     case 'emote.transfer_declined':
       return {
         icon: 'x',

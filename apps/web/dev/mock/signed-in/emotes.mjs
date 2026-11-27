@@ -7,6 +7,7 @@ import { NOTES } from '../account.mjs';
 import { publicAccount } from '../directory.mjs';
 import { anyEmote, emoteGrant, err, findEmote, managed } from '../sets.mjs';
 import { badCursor, pageOf } from '../cursor.mjs';
+import { emoteAs, mergeAnswer } from '../merge.mjs';
 
 // The signed-in operations of this area, by operation name: null when the operation is not here.
 const STAFF_ONLY = 'Only cyex.tv staff can change who owns an emote. Ownership can’t be requested or given away; contact support if an emote should move.';
@@ -64,7 +65,10 @@ export function signedInEmotes(op, body, v, ADMIN) {
       return { data: { reportEmote: { id: 'R' + Date.now() } } };
     // setEditors: the owner, its editors and staff; anyone else is refused (as the API).
     case 'Emote':
-      return { data: { emote: findEmote(v.id) ?? PENDING.find((e) => e.id === v.id) ?? RESOLVED.find((e) => e.id === v.id) ?? null } };
+      return { data: { emote: emoteAs(v.id, (id) => findEmote(id) ?? PENDING.find((e) => e.id === id) ?? RESOLVED.find((e) => e.id === id)) } };
+    case 'EmoteMergePreview':
+    case 'MergeEmote':
+      return mergeAnswer(op, v, ADMIN);
     case 'EmoteHistory': {
       const e = PENDING.find((x) => x.id === v.emoteId) ?? RESOLVED.find((x) => x.id === v.emoteId);
       const tagged = e?.tags.length ? [{ id: 'ELOGTG' + e.id.slice(-4), actorId: e.owner?.id ?? null, action: 'emote.updated', before: JSON.stringify({ tags: [] }), after: JSON.stringify({ tags: e.tags }), createdAt: new Date(Date.parse(e.createdAt) + 90_000).toISOString() }] : [];

@@ -118,6 +118,7 @@ fn emote(
         files,
         created_at: time(row.created_at),
         channel_count: counts.get(&row.id).copied().unwrap_or(0),
+        merged_into: None,
     }
 }
 

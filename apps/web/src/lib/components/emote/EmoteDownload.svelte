@@ -1,13 +1,15 @@
 <script lang="ts">
   // Download an emote's picture: a popover (a bottom sheet on phones) with the choices the emote's
-  // file list has (still or moving for animated emotes, size 1x to 4x, WebP or AVIF) and one button.
-  // No sign-in. The chosen option is bold with an accent check, never a filled box. Files come from
+  // file list has (format, still or moving for animated emotes, size 1x to 4x) and one button.
+  // Format is GIF, WebP or AVIF; the CDN has no GIF, so a GIF is made in this browser from the
+  // WebP of the chosen size (see `makeGif`), with 1-bit transparency. No sign-in. The chosen option is bold with an accent check, never a filled box. Files come from
   // the CDN, so they are fetched and saved from a Blob (see `save`). `variant="bar"` is the phone's
   // action bar: just the icon. `bare` drops the popover and shows only the choices (inside another
   // menu, e.g. the emote page's More menu); `ondone` runs once the file is saved.
   import Icon from '$lib/components/Icon.svelte';
   import Popover from '$lib/components/Popover.svelte';
-  import { bytes, fileName, fileUrl, formatsAt, hasBoth, pick, save, settle, sizes, type Choice } from './download';
+  import { bytes, fileName, fileUrl, formatsAt, hasBoth, makeGif, pick, save, saveBlob, settle, sizes, type Choice } from './download';
+  import { onDestroy } from 'svelte';
   import type { PageEmote } from './emote-page';
 
   type Props = { emote: Pick<PageEmote, 'host' | 'animated' | 'files'> & { name: string }; variant?: 'head' | 'bar'; bare?: boolean; ondone?: () => void };
@@ -16,7 +18,9 @@
   const id = $props.id();
   const both = $derived(hasBoth(emote.files));
   let open = $state(false);
-  let saying = $state<'' | 'saving' | 'saved' | 'opened'>('');
+  let saying = $state<'' | 'saving' | 'making' | 'saved' | 'opened'>('');
+  let failed = $state(false);
+  let working: AbortController | null = null;
 
   // svelte-ignore state_referenced_locally
   let choice = $state<Choice>(settle(emote.files, { still: false, scale: 4, format: 'WEBP' }));
@@ -30,14 +34,20 @@
   const label = (f: string) => (f === 'WEBP' ? 'WebP' : f === 'AVIF' ? 'AVIF' : f);
 
   function set(next: Partial<Choice>) {
+    stop();
     choice = settle(emote.files, { ...choice, ...next });
     saying = '';
+    failed = false;
   }
 
-  async function go() {
-    if (!file || saying === 'saving') return;
-    saying = 'saving';
-    const ok = await save(fileUrl(emote.host, file), fileName(emote.name, file, emote.animated));
+  /** Stops a GIF still being made (the menu closed or the emote changed). */
+  function stop() {
+    working?.abort();
+    working = null;
+  }
+  onDestroy(stop);
+
+  function finish(ok: boolean) {
     saying = ok ? 'saved' : 'opened';
     if (ok)
       setTimeout(() => {
@@ -46,8 +56,37 @@
       }, 500);
   }
 
+  async function go() {
+    if (!file || saying === 'saving' || saying === 'making') return;
+    const name = fileName(emote.name, file, emote.animated, choice.format);
+    failed = false;
+    if (choice.format === 'GIF') {
+      saying = 'making';
+      const ctl = (working = new AbortController());
+      try {
+        const blob = await makeGif(fileUrl(emote.host, file), ctl.signal);
+        if (ctl.signal.aborted) return;
+        saveBlob(blob, name);
+        finish(true);
+      } catch {
+        if (ctl.signal.aborted) return;
+        saying = '';
+        failed = true;
+      } finally {
+        if (working === ctl) working = null;
+      }
+      return;
+    }
+    saying = 'saving';
+    finish(await save(fileUrl(emote.host, file), name));
+  }
+
   $effect(() => {
-    if (!open && !bare) saying = '';
+    if (!open && !bare) {
+      stop();
+      saying = '';
+      failed = false;
+    }
   });
 </script>
 
@@ -68,6 +107,20 @@
 
 {#snippet body()}
   <div class="dl">
+    {#if fmts.length > 1}
+      <fieldset>
+        <legend class="fine">Format</legend>
+        {#each fmts as f (f)}
+          <label class="opt" class:on={choice.format === f}>
+            <input type="radio" name="{id}-format" checked={choice.format === f} onchange={() => set({ format: f })} />
+            <span class="ck" aria-hidden="true">{#if choice.format === f}<Icon name="check" size={16} />{/if}</span>
+            <span class="t">{label(f)}</span>
+          </label>
+        {/each}
+        {#if choice.format === 'GIF'}<p class="fine note">Made in your browser from the WebP. GIF has no soft edges.</p>{/if}
+      </fieldset>
+    {/if}
+
     {#if both}
       <fieldset>
         <legend class="fine">Type</legend>
@@ -93,22 +146,12 @@
       {/each}
     </fieldset>
 
-    {#if fmts.length > 1}
-    <fieldset>
-      <legend class="fine">Format</legend>
-      {#each fmts as f (f)}
-        <label class="opt" class:on={choice.format === f}>
-          <input type="radio" name="{id}-format" checked={choice.format === f} onchange={() => set({ format: f })} />
-          <span class="ck" aria-hidden="true">{#if choice.format === f}<Icon name="check" size={16} />{/if}</span>
-          <span class="t">{label(f)}</span>
-        </label>
-      {/each}
-    </fieldset>
-    {/if}
-
-    <button class="btn btn-primary btn-s go" type="button" onclick={go} disabled={!file || saying === 'saving'}>
-      <Icon name="download" />{saying === 'saving' ? 'Saving…' : 'Download'}{#if file && saying !== 'saving' && bytes(file.size)}<span class="sz">{bytes(file.size)}</span>{/if}
+    <button class="btn btn-primary btn-s go" type="button" onclick={go} disabled={!file || saying === 'saving' || saying === 'making'}>
+      <Icon name="download" />{saying === 'making' ? 'Making GIF…' : saying === 'saving' ? 'Saving…' : 'Download'}{#if file && choice.format !== 'GIF' && saying !== 'saving' && bytes(file.size)}<span class="sz">{bytes(file.size)}</span>{/if}
     </button>
+    {#if failed}
+      <p class="fine say err" role="alert">Couldn’t make the GIF here. Try WebP.</p>
+    {/if}
     {#if saying === 'saved' || saying === 'opened'}
       <p class="fine say">{saying === 'saved' ? 'Saved.' : 'Opened in a new tab: save it from there.'}</p>
     {/if}
@@ -129,7 +172,10 @@
   .opt:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
   .go { width: 100%; }
   .sz { color: inherit; opacity: .75; font-weight: 400; margin-left: 4px; font-variant-numeric: tabular-nums; }
+  .note { margin: 0; padding: 2px 10px 0; color: var(--dim); }
+  .err { color: var(--text); }
   .say { margin: 0; text-align: center; color: var(--muted); }
   .icon-only { width: 44px; height: 44px; padding: 0; }
+  @media (pointer: fine) { .opt { min-height: 34px; } }
   @media (hover: hover) and (pointer: fine) { .opt:hover { background: var(--surface-2); } }
 </style>
