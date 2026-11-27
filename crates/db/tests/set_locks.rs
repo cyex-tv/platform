@@ -135,7 +135,9 @@ async fn add_member_and_remove_from_all_sets_never_deadlock() {
     let removed = within("the removal", removal).await.unwrap();
     assert!(!is_deadlock(&removed), "removal deadlocked: {removed:?}");
     assert_eq!(removed.unwrap(), vec![(set.id, "wave".to_owned())]);
-    db.close().await;
+    // Every connection back first: the pool's close waits for them.
+    drop((a, setup));
+    within("close", db.close()).await;
 }
 
 /// The same two writes raced many times over two connections, the member alternately there and
@@ -171,7 +173,8 @@ async fn racing_add_and_remove_many_times_never_deadlocks() {
         );
         removed.unwrap();
     }
-    db.close().await;
+    drop((a, b, setup));
+    within("close", db.close()).await;
 }
 
 /// One `UPDATE` of several emotes in the same set bumps the set once, logging each emote at that
@@ -225,5 +228,6 @@ async fn a_multi_row_emote_update_bumps_each_set_once() {
         .await
         .unwrap();
     assert_eq!(version(&mut c, one.id).await, one_before + 1);
-    db.close().await;
+    drop(c);
+    within("close", db.close()).await;
 }
