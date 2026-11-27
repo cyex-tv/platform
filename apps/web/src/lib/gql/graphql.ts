@@ -2967,7 +2967,9 @@ export type Query = {
   myNotificationPrefs: Array<NotificationPref>;
   /**
    * Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
-   * `emote.rejected`, `emote.taken_down`, `emote.visibility_changed` (staff changed its
+   * `emote.rejected`, `emote.approvals_changed` (a reviewer decided its public listing or
+   * personal use, ADR 0038: `public_listing`, `personal_use`, `reason`), `emote.transferred`,
+   * `emote.taken_down`, `emote.visibility_changed` (staff changed its
    * visibility, ADR 0024: `visibility` and `was`), `editor.added`, `editor.changed`, `editor.removed`,
    * `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
    * about (see the API reference). Cosmetics from the shop and from codes carry `source`

@@ -10,7 +10,7 @@ Until now one review decided everything: an approved emote was public (on search
 ## Decision
 
 **The model**
-- Two columns on `emotes` (migration `20261230000101_emote_approvals.sql`): `listing_review` and `personal_review`, each `pending`, `approved` or `denied` (CHECK), plus `personal_reviewed_by`, `personal_reviewed_at`, `personal_review_reason`. The listing keeps the existing `reviewed_by`, `reviewed_at` and `review_reason`.
+- Two columns on `emotes` (migration `20261231000101_emote_approvals.sql`): `listing_review` and `personal_review`, each `pending`, `approved` or `denied` (CHECK), plus `personal_reviewed_by`, `personal_reviewed_at`, `personal_review_reason`. The listing keeps the existing `reviewed_by`, `reviewed_at` and `review_reason`.
 - `state` keeps its meaning: whether the emote may be used at all (`pending` until the first listing verdict, `approved`, `rejected`, `taken_down`). `state = 'pending'` exactly when the listing is pending, so the main queue, the pending cap and the requeue keep reading `state`.
 - **`unlisted` follows the listing.** A trigger (`emotes_listing_follows_review`) sets `unlisted = NOT private AND listing_review <> 'approved'` on every insert and update, so no code path can list an emote that wasn't approved for listing, and the "never both private and unlisted" CHECK holds. Search and browse need no change: `search::LISTED_EMOTE` already leaves unlisted emotes out.
 - API (additive): `Emote.approvals { publicListing, personalUse }` (`ApprovalState`: `PENDING`, `APPROVED`, `DENIED`), in GraphQL and in every REST emote view (`approvals.public_listing`, `approvals.personal_use`). Anyone who may see the emote sees both.
