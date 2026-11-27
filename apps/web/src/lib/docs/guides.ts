@@ -435,7 +435,7 @@ export const guides: Guide[] = [
       fmt(
         ['CHANNEL', 'A channel\'s emotes. A channel can keep several and switch the active one.'],
         ['GLOBAL', 'The cyex.tv global set, shown in every channel.'],
-        ['PERSONAL', 'One per account: emotes its owner can use in any channel that allows them.'],
+        ['PERSONAL', 'One per account, made at sign-up: emotes its owner can use in any channel that allows them. 3 slots, or 10 with a subscriber role; `capacity` is the number it has now and `capacityOverride` is set when staff chose it by hand. After losing a role a set may hold more than `capacity`: it keeps them and takes no new one until it is under.'],
       ),
       p('So a chat line can use the channel\'s active set, the global set, and its sender\'s personal set where the channel has `allow_personal_emotes` on. Look personal sets up for up to 100 chatters at once with [Look up personal sets](#rest-lookup_personal_sets).'),
     ],

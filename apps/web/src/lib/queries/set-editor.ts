@@ -51,6 +51,7 @@ export const EDIT_SET = graphql(`
       kind
       visibility
       capacity
+      capacityOverride
       slotsUsed
       owner {
         id
@@ -139,6 +140,7 @@ export const UPDATE_SET = graphql(`
       name
       visibility
       capacity
+      capacityOverride
     }
   }
 `);

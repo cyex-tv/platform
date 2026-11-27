@@ -972,7 +972,15 @@ export type EmoteProcessing =
 
 export type EmoteSet = {
   __typename?: 'EmoteSet';
+  /**
+   * The slots the set has. A personal set's come from its owner's roles (3, or 10 for a
+   * subscriber) unless staff set `capacityOverride` (ADR 0038). A personal set may hold more
+   * than this after its owner lost a role: it keeps its emotes and takes no new one until it
+   * is under the limit.
+   */
   capacity: Scalars['Int']['output'];
+  /** Staff set this personal set's capacity by hand (`updateSet`). Null: the owner's roles decide. */
+  capacityOverride?: Maybe<Scalars['Int']['output']>;
   createdAt: Scalars['String']['output'];
   emotes: Array<SetEmote>;
   /** The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
@@ -1395,7 +1403,8 @@ export type Mutation = {
   /** Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited. */
   createRole: Role;
   /**
-   * Create a channel set, or your personal set (one per account). With `ownerId`, for an
+   * Create a channel set. Every account has its personal set from sign-up (one per account), so
+   * `PERSONAL` answers `personal_set_exists` unless it was deleted. With `ownerId`, for an
    * account you edit with `SETS`.
    */
   createSet: EmoteSet;
@@ -1725,7 +1734,9 @@ export type Mutation = {
    * is 1 to the owner's `set_capacity_max` role limit (1.000 by default; `capacity_over_limit`
    * above it), up to 1.000.000 with `sets.edit_any`, and never below the emotes the set holds
    * (`capacity_too_low`); see `setCapacityRange`. Every set is public: `visibility` other than
-   * what it is needs `sets.edit_any` (`bad_visibility`).
+   * what it is needs `sets.edit_any` (`bad_visibility`). A personal set's slots can't be changed by
+   * its owner (`forbidden`): staff with `sets.edit_any` set an override, or `resetCapacity` it
+   * away; both are audited as `set.capacity_changed`.
    */
   updateSet: EmoteSet;
   /** Rename an emote in a set, or change its zero-width flag there. */
@@ -3018,7 +3029,8 @@ export type Query = {
   /**
    * What you may set a set's capacity to (`updateSet`): from the emotes it holds (at least 1)
    * to the owner's `set_capacity_max` role limit (1.000 by default), or 1.000.000 with
-   * `sets.edit_any`. Null when you can't change its capacity. Signed in.
+   * `sets.edit_any`. Null when you can't change its capacity: always for the owner of a personal
+   * set, whose slots come from their roles (3, or 10 for a subscriber; ADR 0038). Signed in.
    */
   setCapacityRange?: Maybe<SetCapacityRange>;
   /**
@@ -3795,7 +3807,8 @@ export type SetCapacityRange = {
   min: Scalars['Int']['output'];
   /**
    * The most without a staff permission: the owner's `set_capacity_max` role limit (1.000 by
-   * default) for a channel set, 5 for a personal set, or the set's capacity if it is higher.
+   * default) for a channel set, or the set's capacity if it is higher. A personal set's owner
+   * can't change it: there `setCapacityRange` is null without `sets.edit_any`.
    */
   ownerMax: Scalars['Int']['output'];
   /**
@@ -4087,12 +4100,18 @@ export type UpdateSetEmoteInput = {
 
 export type UpdateSetInput = {
   /**
-   * 1 to the owner's `set_capacity_max` role limit (1.000 by default; 5 for a personal set),
-   * never below the emotes the set holds; up to 1.000.000 with `sets.edit_any`.
-   * `setCapacityRange` says what you may pick.
+   * 1 to the owner's `set_capacity_max` role limit (1.000 by default), never below the emotes
+   * the set holds; up to 1.000.000 with `sets.edit_any`. On a personal set this is the staff
+   * override and needs `sets.edit_any` (`forbidden` otherwise); audited. `setCapacityRange` says
+   * what you may pick.
    */
   capacity?: InputMaybe<Scalars['Int']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * Personal sets, `sets.edit_any`: drop the override, so the owner's roles decide the slots
+   * again.
+   */
+  resetCapacity?: InputMaybe<Scalars['Boolean']['input']>;
   /**
    * Every set is public: changing it needs `sets.edit_any` (staff hiding a set). Personal sets
    * can't be `PRIVATE`; the global set is always listed.
@@ -5124,7 +5143,7 @@ export type EditSetQueryVariables = Exact<{
 }>;
 
 
-export type EditSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, slotsUsed: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } | null, setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, account: { __typename?: 'AccountSummary', id: string } }>, myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }> };
+export type EditSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, capacityOverride?: number | null, slotsUsed: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } | null, setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, account: { __typename?: 'AccountSummary', id: string } }>, myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }> };
 
 export type SetEmotesQueryVariables = Exact<{
   id: Scalars['String']['input'];
@@ -5158,7 +5177,7 @@ export type UpdateSetMutationVariables = Exact<{
 }>;
 
 
-export type UpdateSetMutation = { __typename?: 'Mutation', updateSet: { __typename?: 'EmoteSet', id: string, name: string, visibility: SetVisibility, capacity: number } };
+export type UpdateSetMutation = { __typename?: 'Mutation', updateSet: { __typename?: 'EmoteSet', id: string, name: string, visibility: SetVisibility, capacity: number, capacityOverride?: number | null } };
 
 export type DeleteSetMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -8671,6 +8690,7 @@ export const EditSetDocument = new TypedDocumentString(`
     kind
     visibility
     capacity
+    capacityOverride
     slotsUsed
     owner {
       id
@@ -8783,6 +8803,7 @@ export const UpdateSetDocument = new TypedDocumentString(`
     name
     visibility
     capacity
+    capacityOverride
   }
 }
     `) as unknown as TypedDocumentString<UpdateSetMutation, UpdateSetMutationVariables>;

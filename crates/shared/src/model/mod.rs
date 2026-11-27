@@ -860,7 +860,14 @@ pub struct EmoteSet {
     pub name: String,
     pub kind: SetKind,
     pub owner: Option<AccountSummary>,
+    /// The slots the set has. A personal set's come from its owner's roles (3, or 10 for a
+    /// subscriber) unless staff set `capacityOverride` (ADR 0038). A personal set may hold more
+    /// than this after its owner lost a role: it keeps its emotes and takes no new one until it
+    /// is under the limit.
     pub capacity: u32,
+    /// Staff set this personal set's capacity by hand (`updateSet`). Null: the owner's roles decide.
+    #[serde(default)]
+    pub capacity_override: Option<u32>,
     pub emotes: Vec<SetEmote>,
     /// Who can find and open it.
     #[serde(default)]
@@ -919,7 +926,8 @@ pub struct SetCapacityRange {
     /// The most slots you may pick.
     pub max: u32,
     /// The most without a staff permission: the owner's `set_capacity_max` role limit (1.000 by
-    /// default) for a channel set, 5 for a personal set, or the set's capacity if it is higher.
+    /// default) for a channel set, or the set's capacity if it is higher. A personal set's owner
+    /// can't change it: there `setCapacityRange` is null without `sets.edit_any`.
     pub owner_max: u32,
     /// Emotes in the set now, pending ones included.
     pub used: u32,
@@ -995,10 +1003,15 @@ pub struct CreateSet {
 #[cfg_attr(feature = "graphql", graphql(name = "UpdateSetInput"))]
 pub struct UpdateSet {
     pub name: Option<String>,
-    /// 1 to the owner's `set_capacity_max` role limit (1.000 by default; 5 for a personal set),
-    /// never below the emotes the set holds; up to 1.000.000 with `sets.edit_any`.
-    /// `setCapacityRange` says what you may pick.
+    /// 1 to the owner's `set_capacity_max` role limit (1.000 by default), never below the emotes
+    /// the set holds; up to 1.000.000 with `sets.edit_any`. On a personal set this is the staff
+    /// override and needs `sets.edit_any` (`forbidden` otherwise); audited. `setCapacityRange` says
+    /// what you may pick.
     pub capacity: Option<u32>,
+    /// Personal sets, `sets.edit_any`: drop the override, so the owner's roles decide the slots
+    /// again.
+    #[serde(default)]
+    pub reset_capacity: Option<bool>,
     /// Every set is public: changing it needs `sets.edit_any` (staff hiding a set). Personal sets
     /// can't be `PRIVATE`; the global set is always listed.
     #[serde(default)]

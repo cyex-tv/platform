@@ -32,3 +32,28 @@ export function rangeHint(range: CapacityRange): string {
   const staff = range.staff && range.max > range.ownerMax ? ` Above ${count(range.ownerMax)} only as staff.` : '';
   return `${span}${held}.${staff}`;
 }
+
+// A personal set's slots (ADR 0038): 3, or 10 with a subscriber role, or what staff set by hand.
+
+/** Slots of a personal set without a subscriber role, and with one. */
+export const PERSONAL_SLOTS = 3;
+export const SUBSCRIBER_SLOTS = 10;
+
+/**
+ * Whether cyex.tv sells a subscription that gives the subscriber slots. It does not yet (the shop
+ * sells badges and paints only), so the upsell line stays hidden until it does.
+ */
+export const SUBSCRIPTION_OFFERED = false;
+
+/** "2 of 3 slots", or "10 of 3 slots" when the set holds more than it may now. */
+export function slotsLine(used: number, capacity: number): string {
+  return `${count(used)} of ${count(capacity)} slots`;
+}
+
+/** The sentence under it: staff override, over the limit, or the subscriber upsell; null when there is nothing to add. */
+export function slotsNote(p: { used: number; capacity: number; override: number | null; offered?: boolean }): string | null {
+  if (p.used > p.capacity) return `It holds ${count(p.used)}, more than it may now. Nothing is removed; remove emotes to add new ones.`;
+  if (p.override != null) return 'Staff set this number.';
+  if ((p.offered ?? SUBSCRIPTION_OFFERED) && p.capacity < SUBSCRIBER_SLOTS) return `Subscribers get ${count(SUBSCRIBER_SLOTS)} slots.`;
+  return null;
+}

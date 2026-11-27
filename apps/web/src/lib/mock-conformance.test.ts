@@ -200,7 +200,7 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   UpdateEmote: (c) => ({ id: c.myEmoteId, input: { name: 'MockRenamed', tags: ['cat'], zeroWidth: false } }),
   SetEmoteFlags: (c) => ({ id: c.emoteId, input: { visibility: 'PUBLIC', zeroWidth: false } }),
   DeleteEmote: (c) => ({ id: c.deletableEmoteId }),
-  CreateSet: () => ({ input: { name: 'Mock set', kind: 'PERSONAL', visibility: 'UNLISTED' } }),
+  CreateSet: () => ({ input: { name: 'Mock set', kind: 'CHANNEL', visibility: 'UNLISTED' } }),
   UpdateSet: (c) => ({ id: c.setId, input: { name: 'Mock set renamed' } }),
   DeleteSet: (c) => ({ id: c.deletableSetId }),
   AddSetEmote: (c) => ({ setId: c.setId, emoteId: c.emoteId, input: { name: 'MockAlias' } }),

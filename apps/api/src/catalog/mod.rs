@@ -365,14 +365,20 @@ fn default_capacity(kind: SetKind) -> i32 {
 /// The most slots staff with `sets.edit_any` may give any set (ADR 0017, amendment 2026/11/22).
 pub const STAFF_CAPACITY_MAX: u32 = 1_000_000;
 
+/// The most slots staff may give a personal set by hand: chat clients look personal sets up for
+/// 100 chatters at once, so one answer stays small (ADR 0038).
+pub const PERSONAL_OVERRIDE_MAX: u32 = 1000;
+
 /// The most slots the owner's side (the owner, their account editors and per-set editors) may give
 /// `set` without a staff permission: a channel set the owner's `set_capacity_max` role limit (1.000
-/// unless a role raises it), the personal set its default, and never less than it has now (staff
-/// may have raised it: lowering it again stays allowed). The global set is staff-only anyway.
-/// `set_full` with the set's capacity: it holds that many, and that is the most.
-pub(crate) fn set_full(capacity: i32) -> ApiError {
+/// unless a role raises it), and never less than it has now (staff may have raised it: lowering it
+/// again stays allowed). A personal set's owner may not change it at all. The global set is staff-only anyway.
+/// `set_full` with the set's capacity and what it holds. A personal set whose owner lost a role
+/// may hold more than its capacity: `current` then says so (ADR 0038).
+pub(crate) fn set_full(capacity: i32, held: i64) -> ApiError {
     let capacity = u64::try_from(capacity).unwrap_or(0);
-    ApiError::limit("set_full", "The set is full.", capacity, capacity)
+    let held = u64::try_from(held).unwrap_or(0).max(capacity);
+    ApiError::limit("set_full", "The set is full.", capacity, held)
 }
 
 pub(crate) async fn user_capacity_max(state: &AppState, set: &Set) -> u32 {
@@ -383,6 +389,9 @@ pub(crate) async fn user_capacity_max(state: &AppState, set: &Set) -> u32 {
             .load(&state.db, owner)
             .await
             .get(AccountLimit::SetCapacityMax),
+        // A personal set's number is read from its owner's roles or a staff override; its owner
+        // can't pick one (ADR 0038), so it is what the set has.
+        (SetKind::Personal, _) => current,
         (kind, _) => u32::try_from(default_capacity(kind)).unwrap_or(1),
     };
     limit.max(current)
@@ -413,7 +422,15 @@ pub async fn set_capacity_range(
     let owner_max = user_capacity_max(state, &set).await;
     let staff =
         set.kind == SetKind::Global || holds(&mut conn, caller, permissions::SETS_EDIT_ANY).await?;
-    let max = if staff { STAFF_CAPACITY_MAX } else { owner_max };
+    // A personal set's owner can't change its slots; only staff set an override (ADR 0038).
+    if set.kind == SetKind::Personal && !staff {
+        return Ok(None);
+    }
+    let max = match (staff, set.kind) {
+        (true, SetKind::Personal) => PERSONAL_OVERRIDE_MAX.max(owner_max),
+        (true, _) => STAFF_CAPACITY_MAX,
+        (false, _) => owner_max,
+    };
     Ok(Some(cyex_tv_shared::model::SetCapacityRange {
         min: used.max(1),
         max,
@@ -1466,6 +1483,22 @@ pub async fn update_set(
     if let Some(name) = &name {
         after = sets::rename(&mut tx, id, name).await.map_err(db_error)?;
     }
+    let personal = set.kind == SetKind::Personal;
+    if input.reset_capacity == Some(true) && (!personal || input.capacity.is_some()) {
+        return Err(bad(
+            "bad_capacity",
+            "Only a personal set has an override to take away, and not together with a capacity.",
+        ));
+    }
+    if input.capacity.is_some() || input.reset_capacity == Some(true) {
+        // A personal set's slots come from its owner's roles; only staff override them, audited
+        // (ADR 0038). Its owner and editors can't.
+        if personal && !holds(&mut tx, caller, permissions::SETS_EDIT_ANY).await? {
+            return Err(forbidden(
+                "A personal set's slots come from your plan. Only staff can change them.",
+            ));
+        }
+    }
     if let Some(capacity) = input.capacity {
         if capacity == 0 || capacity > STAFF_CAPACITY_MAX {
             return Err(bad(
@@ -1473,10 +1506,16 @@ pub async fn update_set(
                 "Capacity is a whole number from 1 to 1.000.000.",
             ));
         }
+        if personal && capacity > PERSONAL_OVERRIDE_MAX {
+            return Err(bad(
+                "bad_capacity",
+                "A personal set takes up to 1.000 slots.",
+            ));
+        }
         let staff = holds(&mut tx, caller, permissions::SETS_EDIT_ANY).await?;
         let mine = user_capacity_max(state, &set).await;
         let mut grant_used = grant;
-        if capacity > mine && set.kind != SetKind::Global {
+        if personal || (capacity > mine && set.kind != SetKind::Global) {
             if !staff {
                 return Err(ApiError::limit(
                     "capacity_over_limit",
@@ -1502,8 +1541,26 @@ pub async fn update_set(
             grant_used,
             "set.capacity_changed",
             &set,
-            Some(json!({ "capacity": set.capacity })),
-            Some(json!({ "capacity": after.capacity })),
+            Some(json!({ "capacity": set.capacity, "capacity_override": set.capacity_override })),
+            Some(
+                json!({ "capacity": after.capacity, "capacity_override": after.capacity_override }),
+            ),
+        )
+        .await?;
+    } else if input.reset_capacity == Some(true) {
+        after = sets::set_capacity_or_reset(&mut tx, id, None)
+            .await
+            .map_err(db_error)?;
+        audit_if_permission(
+            &mut tx,
+            caller,
+            Grant::Permission(permissions::SETS_EDIT_ANY),
+            "set.capacity_changed",
+            &set,
+            Some(json!({ "capacity": set.capacity, "capacity_override": set.capacity_override })),
+            Some(
+                json!({ "capacity": after.capacity, "capacity_override": after.capacity_override }),
+            ),
         )
         .await?;
     }
@@ -1648,7 +1705,7 @@ pub async fn add_set_emote(
             "Only its owner can add a private emote to sets.",
         ));
     }
-    let member = sets::add_member(
+    let added = sets::add_member(
         &mut tx,
         set_id,
         NewMember {
@@ -1658,11 +1715,16 @@ pub async fn add_set_emote(
             added_by: Some(caller.account_id),
         },
     )
-    .await
-    .map_err(|err| match err {
-        DbError::SetFull => set_full(set.capacity),
-        err => db_error(err),
-    })?;
+    .await;
+    let member = match added {
+        Ok(member) => member,
+        Err(DbError::SetFull) => {
+            // What it holds, which for a personal set that lost a role may be over its capacity.
+            let held = sets::count(&mut tx, set_id).await.map_err(db_error)?;
+            return Err(set_full(set.capacity, held));
+        }
+        Err(err) => return Err(db_error(err)),
+    };
     publish_member_event(
         &mut tx,
         &set,
@@ -2117,7 +2179,7 @@ mod tests {
     #[test]
     fn default_capacities_match_the_plan() {
         assert_eq!(default_capacity(SetKind::Channel), 1000);
-        assert_eq!(default_capacity(SetKind::Personal), 5);
+        assert_eq!(default_capacity(SetKind::Personal), 3);
     }
 
     #[test]
