@@ -13,7 +13,9 @@
 //!   (`merge_into_self`) or merged already (`already_merged`).
 //! - **One transaction**: both emotes locked in ID order (`FOR NO KEY UPDATE`), then the sets
 //!   holding the source in ID order (`FOR NO KEY UPDATE`, the set-version triggers' order and
-//!   lock, ADR 0035). A deadlock (`40P01`) is retried, at most three times in all.
+//!   lock, ADR 0035), then the member rows. The set part runs in `retrying!`'s savepoint like
+//!   every set write; a deadlock that still reaches here (`40P01`, `40001`) runs the whole
+//!   transaction again, at most three times in all.
 //! - Audited as `emote.merged` on both emotes; both owners get `emote.merged` (not the one who
 //!   merged); every affected set gets its events (`set.emote_removed` for the source,
 //!   `set.emote_added` for the target where it moved).
@@ -61,8 +63,9 @@ fn already_merged() -> ApiError {
     )
 }
 
+/// A deadlock (`40P01`) or serialization failure (`40001`): the whole merge runs again.
 fn is_deadlock(err: &DbError) -> bool {
-    matches!(err, DbError::Sqlx(sqlx::Error::Database(e)) if e.code().as_deref() == Some("40P01"))
+    cyex_tv_db::is_conflict(err)
 }
 
 /// One try of a merge: done, or a deadlock to retry (failures are errors).

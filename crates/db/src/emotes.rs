@@ -654,7 +654,7 @@ pub async fn merge_plan(
 /// [`lock_for_merge`] and the checks. In order:
 ///
 /// 1. Locks every set holding the source, in ID order `FOR NO KEY UPDATE`: the set-version
-///    triggers' order and lock (ADR 0035, as #203 makes them), taken up front so they find it
+///    triggers' order and lock (ADR 0035, `20261231000301_set_version_locks.sql`), taken up front so they find it
 ///    held. It doesn't wait for member inserts' `FOR KEY SHARE` on a set.
 /// 2. Sets holding both drop the source's membership (the target's stays, with its name):
 ///    logged as `removed` for the source.
@@ -665,72 +665,77 @@ pub async fn merge_plan(
 /// 5. Emotes merged into the source earlier now point at the target (chains stay one step).
 /// 6. The source is retired: deleted, `merged_into` the target.
 /// 7. Both emotes' channel counts are recounted.
+///
+/// Steps 1 to 7 run in a savepoint and are tried again on a deadlock or serialization failure
+/// (see `retrying!`), as every set write is; the emote locks taken before stay held.
 pub async fn merge(
     conn: &mut PgConnection,
     source: Uuid,
     target: Uuid,
     by: Option<Uuid>,
 ) -> DbResult<MergeOutcome> {
-    sqlx::query(
-        "SELECT s.id FROM emote_sets s
-         WHERE s.id IN (SELECT m.set_id FROM emote_set_members m WHERE m.emote_id = $1)
-         ORDER BY s.id FOR NO KEY UPDATE",
-    )
-    .bind(source)
-    .execute(&mut *conn)
-    .await?;
-    let mut collapsed: Vec<CollapsedMembership> = sqlx::query_as(
-        "DELETE FROM emote_set_members m
-         USING emote_set_members t
-         WHERE m.emote_id = $1 AND t.set_id = m.set_id AND t.emote_id = $2
-         RETURNING m.set_id, m.name AS dropped_name, t.name AS kept_name",
-    )
-    .bind(source)
-    .bind(target)
-    .fetch_all(&mut *conn)
-    .await?;
-    collapsed.sort_by_key(|c| c.set_id);
-    let mut moved: Vec<MovedMembership> = sqlx::query_as(
-        "UPDATE emote_set_members SET emote_id = $2 WHERE emote_id = $1 RETURNING set_id, name",
-    )
-    .bind(source)
-    .bind(target)
-    .fetch_all(&mut *conn)
-    .await?;
-    moved.sort_by_key(|m| m.set_id);
-    for table in ["favourite_emotes", "hidden_emotes"] {
-        sqlx::query(&format!(
-            "INSERT INTO {table} (account_id, emote_id, created_at)
-             SELECT account_id, $2, created_at FROM {table} WHERE emote_id = $1
-             ON CONFLICT DO NOTHING"
-        ))
+    retrying!(conn, |tx| {
+        sqlx::query(
+            "SELECT s.id FROM emote_sets s
+             WHERE s.id IN (SELECT m.set_id FROM emote_set_members m WHERE m.emote_id = $1)
+             ORDER BY s.id FOR NO KEY UPDATE",
+        )
+        .bind(source)
+        .execute(&mut *tx)
+        .await?;
+        let mut collapsed: Vec<CollapsedMembership> = sqlx::query_as(
+            "DELETE FROM emote_set_members m
+             USING emote_set_members t
+             WHERE m.emote_id = $1 AND t.set_id = m.set_id AND t.emote_id = $2
+             RETURNING m.set_id, m.name AS dropped_name, t.name AS kept_name",
+        )
         .bind(source)
         .bind(target)
-        .execute(&mut *conn)
+        .fetch_all(&mut *tx)
         .await?;
-        sqlx::query(&format!("DELETE FROM {table} WHERE emote_id = $1"))
+        collapsed.sort_by_key(|c| c.set_id);
+        let mut moved: Vec<MovedMembership> = sqlx::query_as(
+            "UPDATE emote_set_members SET emote_id = $2 WHERE emote_id = $1 RETURNING set_id, name",
+        )
+        .bind(source)
+        .bind(target)
+        .fetch_all(&mut *tx)
+        .await?;
+        moved.sort_by_key(|m| m.set_id);
+        for table in ["favourite_emotes", "hidden_emotes"] {
+            sqlx::query(&format!(
+                "INSERT INTO {table} (account_id, emote_id, created_at)
+                 SELECT account_id, $2, created_at FROM {table} WHERE emote_id = $1
+                 ON CONFLICT DO NOTHING"
+            ))
             .bind(source)
-            .execute(&mut *conn)
+            .bind(target)
+            .execute(&mut *tx)
             .await?;
-    }
-    sqlx::query("UPDATE emotes SET merged_into = $2 WHERE merged_into = $1")
+            sqlx::query(&format!("DELETE FROM {table} WHERE emote_id = $1"))
+                .bind(source)
+                .execute(&mut *tx)
+                .await?;
+        }
+        sqlx::query("UPDATE emotes SET merged_into = $2 WHERE merged_into = $1")
+            .bind(source)
+            .bind(target)
+            .execute(&mut *tx)
+            .await?;
+        let retired = sqlx::query(
+            "UPDATE emotes SET deleted_at = now(), updated_at = now(), merged_into = $2,
+                               merged_at = now(), merged_by = $3
+             WHERE id = $1 AND deleted_at IS NULL",
+        )
         .bind(source)
         .bind(target)
-        .execute(&mut *conn)
+        .bind(by)
+        .execute(&mut *tx)
         .await?;
-    let retired = sqlx::query(
-        "UPDATE emotes SET deleted_at = now(), updated_at = now(), merged_into = $2,
-                           merged_at = now(), merged_by = $3
-         WHERE id = $1 AND deleted_at IS NULL",
-    )
-    .bind(source)
-    .bind(target)
-    .bind(by)
-    .execute(&mut *conn)
-    .await?;
-    if retired.rows_affected() != 1 {
-        return Err(DbError::NotFound);
-    }
-    crate::channel_counts::recount(&mut *conn, &[source, target]).await?;
-    Ok(MergeOutcome { moved, collapsed })
+        if retired.rows_affected() != 1 {
+            return Err(DbError::NotFound);
+        }
+        crate::channel_counts::recount(&mut *tx, &[source, target]).await?;
+        Ok(MergeOutcome { moved, collapsed })
+    })
 }

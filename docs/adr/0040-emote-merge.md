@@ -25,8 +25,8 @@ The same picture often exists as several emotes (re-uploads, an old and a better
 
 **Locks** (matching ADR 0035's triggers)
 - Both emotes are locked first, in ID order, `FOR NO KEY UPDATE`: that waits for any other change of either emote but not for a member insert, which takes `FOR KEY SHARE` on its emote while it holds its set's lock.
-- Then every set holding the source, in ID order, `FOR NO KEY UPDATE`: the order and lock the set-version triggers take once #203 (review fixes) lands, taken up front so the triggers find them held. Until then main's triggers ask `FOR UPDATE` on those rows, a stronger lock than held; the rare deadlock that upgrade can meet is retried (below).
-- Postgres can still pick a merge as a deadlock victim against some other ordering; `40P01` is retried, at most three tries in all, and a target merged between the lookup and the lock is followed on the next try.
+- Then every set holding the source, in ID order, `FOR NO KEY UPDATE`, and only then the member rows: the lock and order of the set-version triggers and of every set write (`20261231000301_set_version_locks.sql`), taken up front so the triggers find them held.
+- The set part runs in `retrying!` (a savepoint, three tries on `40P01` or `40001`), as every set write does. A conflict that still reaches the API (on the emote locks, or at commit) runs the whole merge transaction again, at most three tries in all, and a target merged between the lookup and the lock is followed on the next try.
 
 **Delta sync**
 - Moving memberships is one `UPDATE emote_set_members SET emote_id = target`: the existing statement trigger logs it as the source `removed` and the target `added` in each set, one version per set. A collapse is a `DELETE`: the source `removed`. Retiring the source bumps nothing more (it is in no set by then).
