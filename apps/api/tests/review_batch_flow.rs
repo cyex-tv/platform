@@ -168,7 +168,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, emote.id, state).await.unwrap();
         }
-        // ADR 0038: a trigger derives `unlisted` from the listing review, so an approved emote
+        // ADR 0039: a trigger derives `unlisted` from the listing review, so an approved emote
         // that should be unlisted gets its listing denied (pending ones are unlisted anyway).
         if unlisted && state == EmoteState::Approved {
             sqlx::query("UPDATE emotes SET listing_review = 'denied' WHERE id = $1")

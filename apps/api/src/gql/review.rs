@@ -22,7 +22,7 @@ impl ReviewQuery {
 
     /// Pending emotes, oldest first. Needs `emotes.review` (the `PERSONAL` tab also takes
     /// `emotes.review_personal`). `perPage` is 1 to 100, default 50. With `filter`: one tab (not
-    /// private, private, resolved, or the personal queue, ADR 0038), a search by name or
+    /// private, private, resolved, or the personal queue, ADR 0039), a search by name or
     /// uploader, a personal-use state, and an order. A cursor only works for the same filter (`bad_cursor`).
     /// Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
     /// ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
@@ -116,7 +116,7 @@ pub struct ReviewMutation;
 
 #[Object]
 impl ReviewMutation {
-    /// Approve a pending emote's public listing (ADR 0038; personal use waits in its own queue, or
+    /// Approve a pending emote's public listing (ADR 0039; personal use waits in its own queue, or
     /// use `reviewApprovals`). Needs `emotes.review`. Audited. With `visibility`: `UNLISTED`
     /// denies the listing instead (the emote can still be used), `PRIVATE` / `PUBLIC` also set
     /// the private flag. `idempotencyKey` (optional UUID): a retry with it within 24 hours answers what the
@@ -218,7 +218,7 @@ impl ReviewMutation {
         .map_err(api_error)
     }
 
-    /// Decide the public listing, personal use or both of up to 100 emotes (ADR 0038): the main
+    /// Decide the public listing, personal use or both of up to 100 emotes (ADR 0039): the main
     /// queue's Approve both, each part on its own, the personal queue and the edit dialog. The
     /// listing needs `emotes.review`, personal use `emotes.review_personal`; a `DENY` needs a
     /// `reason` (`bad_approvals`). With `onlyPending` (default true) a part that was already

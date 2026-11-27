@@ -137,7 +137,7 @@ group('describe (moderator flags and requeue, ADR 0024)', () => {
   });
 });
 
-group('approvals history lines (ADR 0038)', () => {
+group('approvals history lines (ADR 0039)', () => {
   const e = (action: string, before: object | null, after: object | null) => ({
     id: 'h', action, actorId: 'a', createdAt: '2026-11-27T10:00:00Z',
     before: before && JSON.stringify(before), after: after && JSON.stringify(after),
@@ -162,7 +162,7 @@ group('approvals history lines (ADR 0038)', () => {
   });
 });
 
-group('review actions (ADR 0038)', () => {
+group('review actions (ADR 0039)', () => {
   const both = { listing: true, personal: true };
   const listingOnly = { listing: true, personal: false };
   const personalOnly = { listing: false, personal: true };

@@ -5,7 +5,7 @@
   // the uploader with their painted name and their history here (earlier uploads, how many were
   // approved, rejected or still wait), flags and tags, the facts, possible duplicates (the same
   // file, then close names), and Activity / Notes (and Approvals on resolved uploads). The
-  // verdicts sit at the panel's foot (ADR 0038): Reject, Skip, the single approvals and denials,
+  // verdicts sit at the panel's foot (ADR 0039): Reject, Skip, the single approvals and denials,
   // and Approve both. Which ones show follows the queue and the reviewer's permissions. Their keys
   // (A, L, P, D, N, R, S, Z) are the page's; the panel carries data-inspector so they reach it.
   // Phones and narrow windows keep ReviewDetail (the full-screen dialog).
@@ -56,7 +56,7 @@
   const idCopy = useCopied();
 
   let tab = $state<'activity' | 'notes' | 'approvals'>('activity');
-  // After the first verdict staff change either approval here (ADR 0038).
+  // After the first verdict staff change either approval here (ADR 0039).
   const approvalTab = $derived(resolved && (can('emotes.review') || can('emotes.review_personal')));
   $effect(() => {
     if (!approvalTab && tab === 'approvals') tab = 'activity';

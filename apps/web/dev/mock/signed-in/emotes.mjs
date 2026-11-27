@@ -29,7 +29,7 @@ export function signedInEmotes(op, body, v, ADMIN) {
       const priv = v.input.private;
       if (vis && priv !== undefined && priv !== null && priv !== (vis === 'PRIVATE'))
         return err('visibility and private say different things.', 'bad_visibility');
-      // PUBLIC (or private: false) now means "not private" (ADR 0038): listed only once its listing is approved.
+      // PUBLIC (or private: false) now means "not private" (ADR 0039): listed only once its listing is approved.
       const listed = e.approvals?.publicListing === 'APPROVED' ? 'PUBLIC' : 'UNLISTED';
       const notPrivate = e.visibility === 'PRIVATE' ? listed : e.visibility;
       let next = vis ?? (priv === true ? 'PRIVATE' : priv === false ? notPrivate : e.visibility);
@@ -88,7 +88,7 @@ export function signedInEmotes(op, body, v, ADMIN) {
       return { data: { deleteEmoteNote: false } };
     }
     case 'TransferEmote': {
-      // Staff only (ADR 0038): the mock admin holds emotes.transfer. Anyone else, the owner included,
+      // Staff only (ADR 0039): the mock admin holds emotes.transfer. Anyone else, the owner included,
       // gets transfer_staff_only; an emote they can't see is not found. No request, no accept step.
       const e = anyEmote(v.id);
       if (!e?.owner) return err('Not found.', 'not_found');
@@ -109,7 +109,7 @@ export function signedInEmotes(op, body, v, ADMIN) {
           payload: JSON.stringify({ role, emote_id: e.id, name: e.name, from_id: from.id, from_name: from.displayName, to_id: to.id, to_name: to.displayName, actor_id: ME_ID, actor_name: ME_SUMMARY.displayName }) });
       return { data: { transferEmote: e } };
     }
-    // Retired with transfer requests (ADR 0038): nothing is open, and every answer is 410.
+    // Retired with transfer requests (ADR 0039): nothing is open, and every answer is 410.
     case 'EmoteTransferRequests':
       return { data: { emoteTransferRequests: [] } };
     case 'AcceptEmoteTransfer':

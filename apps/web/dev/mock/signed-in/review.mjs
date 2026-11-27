@@ -6,7 +6,7 @@ import { NOTES } from '../account.mjs';
 import { noteOff } from '../site.mjs';
 import { anyEmote, err } from '../sets.mjs';
 
-// approveEmote and reviewEmotes decide the listing only (ADR 0038): no visibility or PUBLIC approves it,
+// approveEmote and reviewEmotes decide the listing only (ADR 0039): no visibility or PUBLIC approves it,
 // UNLISTED denies it, PRIVATE makes the emote private and approves it. Personal use waits in its own queue.
 function settle(e, visibility) {
   if (visibility === 'PRIVATE') Object.assign(e, { visibility: 'PRIVATE', flags: { ...e.flags, private: true } });
@@ -95,7 +95,7 @@ export function signedInReview(op, body, v, ADMIN) {
       if (v.input.zeroWidth !== undefined && v.input.zeroWidth !== null) e.flags.zeroWidth = v.input.zeroWidth;
       // Saving clears an old NSFW mark (the API's review of it).
       e.flags.nsfw = false;
-      // A visibility change moves the listing approval with it (ADR 0038): PUBLIC approves, UNLISTED denies.
+      // A visibility change moves the listing approval with it (ADR 0039): PUBLIC approves, UNLISTED denies.
       if (v.input.visibility) {
         e.visibility = v.input.visibility;
         if (e.visibility !== 'PRIVATE') decideListing(e, e.visibility === 'PUBLIC' ? 'APPROVED' : 'DENIED');

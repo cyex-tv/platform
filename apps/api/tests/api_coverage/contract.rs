@@ -558,7 +558,7 @@ async fn every_site_operation_runs_against_the_real_api() {
     .await;
 
     // Account editors, and the owner giving an emote to an account that trusts them with uploads
-    // (editors can't ask for a transfer: ADR 0014, amendment 2026/11/22). ADR 0038: the owner here
+    // (editors can't ask for a transfer: ADR 0014, amendment 2026/11/22). ADR 0039: the owner here
     // holds `emotes.transfer` (the site owner holds every permission), so the move still happens.
     c.op(
         os,
@@ -899,7 +899,7 @@ async fn every_site_operation_runs_against_the_real_api() {
     );
     c.op(os, "EmoteDuplicates", json!({ "emoteId": e_batch }))
         .await;
-    // ADR 0038: both approvals of a pending upload in one call (the queues), then a decision taken
+    // ADR 0039: both approvals of a pending upload in one call (the queues), then a decision taken
     // back on an approved one (`onlyPending: false`, the edit dialog).
     let e_approvals = emote(&w, &o, "covApprovals", EmoteState::Pending).await;
     let data = c

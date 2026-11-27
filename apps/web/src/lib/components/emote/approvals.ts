@@ -1,4 +1,4 @@
-// Pure helpers for the two approvals of an emote (ADR 0038): how they read, who may add what to a
+// Pure helpers for the two approvals of an emote (ADR 0039): how they read, who may add what to a
 // personal set, and the account a pasted profile link names.
 import type { ApprovalState } from '$lib/gql/graphql';
 

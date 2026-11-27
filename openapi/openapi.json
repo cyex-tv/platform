@@ -1813,7 +1813,7 @@
       },
       "ApprovalState": {
         "type": "string",
-        "description": "Where one of an emote's two approvals stands (ADR 0038): its public listing or its personal use.",
+        "description": "Where one of an emote's two approvals stands (ADR 0039): its public listing or its personal use.",
         "enum": [
           "pending",
           "approved",
@@ -2211,7 +2211,7 @@
           },
           "approvals": {
             "$ref": "#/components/schemas/EmoteApprovals",
-            "description": "Its public listing and personal use approvals (ADR 0038)."
+            "description": "Its public listing and personal use approvals (ADR 0039)."
           },
           "channel_count": {
             "type": "integer",
@@ -2273,7 +2273,7 @@
       },
       "EmoteApprovals": {
         "type": "object",
-        "description": "An emote's two approvals (ADR 0038). Each is decided on its own, in review.",
+        "description": "An emote's two approvals (ADR 0039). Each is decided on its own, in review.",
         "required": [
           "public_listing",
           "personal_use"
@@ -2397,6 +2397,16 @@
           "capacity": {
             "type": "integer",
             "format": "int32",
+            "description": "The slots the set has. A personal set's come from its owner's roles (3, or 10 for a\nsubscriber) unless staff set `capacityOverride` (ADR 0038). A personal set may hold more\nthan this after its owner lost a role: it keeps its emotes and takes no new one until it\nis under the limit.",
+            "minimum": 0
+          },
+          "capacity_override": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Staff set this personal set's capacity by hand (`updateSet`). Null: the owner's roles decide.",
             "minimum": 0
           },
           "created_at": {
@@ -3043,13 +3053,13 @@
             "code": "personal_use_not_approved",
             "group": "Emotes",
             "meaning": "The emote is not approved for personal use.",
-            "when": "Adding an emote to a personal set before its personal use is approved, or after it was denied (409, ADR 0038)."
+            "when": "Adding an emote to a personal set before its personal use is approved, or after it was denied (409, ADR 0039)."
           },
           {
             "code": "bad_approvals",
             "group": "Emotes",
             "meaning": "The review asks for nothing, or a denial has no reason.",
-            "when": "reviewApprovals without publicListing or personalUse, or with a DENY and no reason (ADR 0038)."
+            "when": "reviewApprovals without publicListing or personalUse, or with a DENY and no reason (ADR 0039)."
           },
           {
             "code": "already_taken_down",
@@ -3205,13 +3215,13 @@
             "code": "transfer_staff_only",
             "group": "Transfers",
             "meaning": "Only staff with emotes.transfer can change who owns an emote.",
-            "when": "transferEmote without the emotes.transfer permission, the emote's owner included (403, ADR 0038)."
+            "when": "transferEmote without the emotes.transfer permission, the emote's owner included (403, ADR 0039)."
           },
           {
             "code": "transfer_requests_retired",
             "group": "Transfers",
             "meaning": "Transfer requests are gone: ownership can't be requested.",
-            "when": "acceptEmoteTransfer, declineEmoteTransfer or cancelEmoteTransfer (410, ADR 0038)."
+            "when": "acceptEmoteTransfer, declineEmoteTransfer or cancelEmoteTransfer (410, ADR 0039)."
           },
           {
             "code": "same_owner",

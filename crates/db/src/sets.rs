@@ -21,8 +21,11 @@ use crate::ids::new_id;
 
 /// Default capacity of a channel set (D20).
 pub const CHANNEL_CAPACITY: i32 = 1000;
-/// Default capacity of a personal set (D21).
-pub const PERSONAL_CAPACITY: i32 = 5;
+/// Slots of a personal set without a role that gives more or a staff override (ADR 0038). The
+/// migration's `personal_set_capacity` repeats this number.
+pub const PERSONAL_CAPACITY: i32 = 3;
+/// What a subscriber role gives (its `personal_set_slots` role limit), for the website's wording.
+pub const SUBSCRIBER_PERSONAL_CAPACITY: i32 = 10;
 /// Capacity of the global set when it's first made.
 pub const GLOBAL_CAPACITY: i32 = 1000;
 
@@ -33,7 +36,12 @@ pub struct Set {
     pub owner_account_id: Option<Uuid>,
     pub name: String,
     pub kind: SetKind,
+    /// The slots the set has. For a personal set this is the effective number (ADR 0038): the staff
+    /// override, else its owner's `personal_set_slots` role limit, else 3. Read, never stored.
     pub capacity: i32,
+    /// A personal set's capacity set by staff; `None` when the roles decide. Always `None` for
+    /// other kinds.
+    pub capacity_override: Option<i32>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub visibility: SetVisibility,
@@ -79,7 +87,13 @@ pub struct NewMember<'a> {
     pub added_by: Option<Uuid>,
 }
 
-const SET: &str = "id, owner_account_id, name, kind, capacity, created_at, updated_at, visibility, \n                   version, change_floor";
+/// The columns of a [`Set`]. `capacity` of a personal set is read through `personal_set_capacity`
+/// (ADR 0038): the staff override, else the owner's `personal_set_slots` role limit, else 3.
+const SET: &str = "id, owner_account_id, name, kind,
+                   CASE WHEN kind = 'personal'
+                        THEN personal_set_capacity(owner_account_id, capacity_override)
+                        ELSE capacity END AS capacity,
+                   capacity_override, created_at, updated_at, visibility, version, change_floor";
 const MEMBER: &str = "set_id, emote_id, name, zero_width, added_by, added_at";
 const EDITOR: &str = "set_id, account_id, granted_by, granted_at";
 
@@ -144,6 +158,23 @@ pub async fn create_with(
         Some("emote_sets_one_personal") => DbError::PersonalSetExists,
         _ => err.into(),
     })
+}
+
+/// An account's personal set, made when it has none (new accounts at sign-up; the migration made
+/// one for the rest). Returns the set either way.
+pub async fn ensure_personal(conn: &mut PgConnection, owner: Uuid) -> DbResult<Set> {
+    // No error to catch and no aborted transaction: the unique index decides.
+    sqlx::query(
+        "INSERT INTO emote_sets (id, owner_account_id, name, kind, capacity, visibility)
+         VALUES ($1, $2, 'Personal', 'personal', $3, 'listed')
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(new_id())
+    .bind(owner)
+    .bind(PERSONAL_CAPACITY)
+    .execute(&mut *conn)
+    .await?;
+    personal_for(conn, owner).await?.ok_or(DbError::NotFound)
 }
 
 /// A new account's default set: a listed channel set named after the account (ADR 0017). The
@@ -233,7 +264,11 @@ pub async fn owned_ids(conn: &mut PgConnection, owner: Uuid, ids: &[Uuid]) -> Db
 /// The sets an account was made editor of.
 pub async fn list_editable(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Set>> {
     Ok(sqlx::query_as(
-        "SELECT s.id, s.owner_account_id, s.name, s.kind, s.capacity, s.created_at, s.updated_at,
+        "SELECT s.id, s.owner_account_id, s.name, s.kind,
+                CASE WHEN s.kind = 'personal'
+                     THEN personal_set_capacity(s.owner_account_id, s.capacity_override)
+                     ELSE s.capacity END AS capacity,
+                s.capacity_override, s.created_at, s.updated_at,
                 s.visibility, s.version, s.change_floor
          FROM emote_sets s
          JOIN set_editors e ON e.set_id = s.id
@@ -262,7 +297,11 @@ pub async fn personal_for_users(
 ) -> DbResult<Vec<PersonalSet>> {
     Ok(sqlx::query_as(
         "SELECT i.platform_user_id,
-                s.id, s.owner_account_id, s.name, s.kind, s.capacity, s.created_at, s.updated_at,
+                s.id, s.owner_account_id, s.name, s.kind,
+                CASE WHEN s.kind = 'personal'
+                     THEN personal_set_capacity(s.owner_account_id, s.capacity_override)
+                     ELSE s.capacity END AS capacity,
+                s.capacity_override, s.created_at, s.updated_at,
                 s.visibility, s.version, s.change_floor
          FROM identities i
          JOIN accounts a ON a.id = i.account_id AND a.deleted_at IS NULL
@@ -347,20 +386,43 @@ pub async fn active(conn: &mut PgConnection, set_ids: &[Uuid]) -> DbResult<HashS
 }
 
 /// Changes a set's capacity (raising it needs `sets.edit_any`; that's the api's check). It can't go
-/// below the number of emotes already in the set.
+/// below the number of emotes already in the set. On a personal set this is the staff override
+/// (ADR 0038); `None` there takes the override away, so the owner's roles decide again.
 pub async fn set_capacity(conn: &mut PgConnection, id: Uuid, capacity: i32) -> DbResult<Set> {
+    set_capacity_or_reset(conn, id, Some(capacity)).await
+}
+
+/// [`set_capacity`], and with `None` on a personal set, drops its override.
+pub async fn set_capacity_or_reset(
+    conn: &mut PgConnection,
+    id: Uuid,
+    capacity: Option<i32>,
+) -> DbResult<Set> {
     let mut tx = conn.begin().await?;
-    lock_set(&mut tx, id).await?;
-    if count(&mut tx, id).await? > i64::from(capacity) {
-        return Err(DbError::CapacityTooLow);
-    }
-    let set = sqlx::query_as(&format!(
-        "UPDATE emote_sets SET capacity = $2, updated_at = now() WHERE id = $1 RETURNING {SET}"
-    ))
-    .bind(id)
-    .bind(capacity)
-    .fetch_one(&mut *tx)
-    .await?;
+    let set = lock_set(&mut tx, id).await?;
+    let personal = set.kind == SetKind::Personal;
+    let capacity = match capacity {
+        Some(n) => {
+            if count(&mut tx, id).await? > i64::from(n) {
+                return Err(DbError::CapacityTooLow);
+            }
+            n
+        }
+        None if personal => 0,
+        None => return Err(DbError::InvalidSetKind),
+    };
+    let sql = if personal {
+        // `capacity` stays as it was: a personal set's number is read, not stored.
+        "UPDATE emote_sets SET capacity_override = NULLIF($2, 0), updated_at = now()
+         WHERE id = $1 RETURNING "
+    } else {
+        "UPDATE emote_sets SET capacity = $2, updated_at = now() WHERE id = $1 RETURNING "
+    };
+    let set = sqlx::query_as(&format!("{sql}{SET}"))
+        .bind(id)
+        .bind(capacity)
+        .fetch_one(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(set)
 }
@@ -409,6 +471,18 @@ pub async fn add_member(
     set_id: Uuid,
     new: NewMember<'_>,
 ) -> DbResult<Member> {
+    add_member_within(conn, set_id, new, None).await
+}
+
+/// [`add_member`] against `capacity` instead of the set's own, when the api holds a stricter or
+/// fresher number. A set over its capacity (a personal set whose owner lost a role) takes no
+/// new member until it is under: the check is "holds at least capacity", not "equals".
+pub async fn add_member_within(
+    conn: &mut PgConnection,
+    set_id: Uuid,
+    new: NewMember<'_>,
+    capacity: Option<i32>,
+) -> DbResult<Member> {
     let mut tx = conn.begin().await?;
     let set = lock_set(&mut tx, set_id).await?;
 
@@ -432,12 +506,12 @@ pub async fn add_member(
         EmoteState::Rejected | EmoteState::TakenDown => return Err(DbError::EmoteUnavailable),
     }
     // A personal set shows in chat everywhere its owner chats: it takes only emotes approved for
-    // personal use (ADR 0038). Members added before that rule stay.
+    // personal use (ADR 0039). Members added before that rule stay.
     if set.kind == SetKind::Personal && emote.personal_review != ApprovalState::Approved {
         return Err(DbError::PersonalUseNotApproved(emote.personal_review));
     }
 
-    if count(&mut tx, set_id).await? >= i64::from(set.capacity) {
+    if count(&mut tx, set_id).await? >= i64::from(capacity.unwrap_or(set.capacity)) {
         return Err(DbError::SetFull);
     }
 

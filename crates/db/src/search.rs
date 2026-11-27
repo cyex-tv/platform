@@ -198,7 +198,7 @@ fn net_adds(days: i32) -> String {
 /// The filters every emote search applies. `$1` text, `$2` animated, `$3` owner, `$4` nsfw
 /// (retired), `$5` the lowercase LIKE pattern, `$8` zero-width, `$9` wide, `$10` NSFW only
 /// (retired: finds nothing, since NSFW emotes are never listed), `$11` tags,
-/// `$12` exact, `$13` approved for personal use (ADR 0038). Each costly check comes after a cheap test that skips it when it isn't asked
+/// `$12` exact, `$13` approved for personal use (ADR 0039). Each costly check comes after a cheap test that skips it when it isn't asked
 /// for (Postgres stops an `OR` at the first true), and the name match finds its candidates
 /// through the name, word and tag indexes instead of testing every emote.
 #[doc(hidden)]

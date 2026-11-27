@@ -180,7 +180,7 @@ async fn unlisted_emotes_open_by_link_but_stay_out_of_listings() {
         .await;
     assert_eq!(code(&r), "bad_visibility", "{r}");
     // A moderator takes it off the listings (setEmoteFlags, mod_flags_flow); here, as stored.
-    // ADR 0038: `unlisted` follows the listing review, so the listing is denied.
+    // ADR 0039: `unlisted` follows the listing review, so the listing is denied.
     sqlx::query("UPDATE emotes SET listing_review = 'denied' WHERE name = 'AnnQuiet'")
         .execute(&mut *w.db.conn().await)
         .await
@@ -266,7 +266,7 @@ async fn unlisted_emotes_open_by_link_but_stay_out_of_listings() {
     assert!(text.contains(&shown), "{r}");
     assert!(!text.contains(&quiet), "{r}");
 
-    // ADR 0038: its owner may make it private (the old "A moderator took this emote off the
+    // ADR 0039: its owner may make it private (the old "A moderator took this emote off the
     // listings" error is gone), and "not private" again leaves the listing denied: still
     // unlisted. Only staff list it again.
     let r = w

@@ -52,7 +52,7 @@ pub struct EmoteRow {
     pub nsfw: bool,
     pub animated: bool,
     pub state: EmoteState,
-    /// The two approvals (ADR 0038).
+    /// The two approvals (ADR 0039).
     pub listing_review: ApprovalState,
     pub personal_review: ApprovalState,
     pub created_at: DateTime<Utc>,
@@ -114,7 +114,7 @@ pub enum QueueTab {
     Limited,
     /// Approved or rejected by a reviewer.
     Resolved,
-    /// The personal queue (ADR 0038): approved, personal use pending.
+    /// The personal queue (ADR 0039): approved, personal use pending.
     Personal,
 }
 
@@ -330,7 +330,7 @@ pub async fn queue_top_uploaders(
 }
 
 /// How many pending emotes are not private and how many private, and how many wait in the
-/// personal queue (ADR 0038).
+/// personal queue (ADR 0039).
 pub async fn queue_counts(conn: &mut PgConnection) -> DbResult<QueueCounts> {
     Ok(sqlx::query_as(
         "SELECT count(*) FILTER (WHERE state = 'pending' AND NOT private) AS public,

@@ -21,7 +21,7 @@ export type Browse = {
   kind: Kind;
   zeroWidth: boolean;
   wide: boolean;
-  /** Only emotes approved for personal use (ADR 0038). */
+  /** Only emotes approved for personal use (ADR 0039). */
   personal: boolean;
   /** Tags the emotes must all carry (lower case, no #), at most MAX_TAGS. */
   tags: string[];

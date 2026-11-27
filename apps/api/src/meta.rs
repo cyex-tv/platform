@@ -35,7 +35,7 @@ pub const ULID_ID_INPUT: &str = "ulid_id_input";
 /// Id of the deprecation of `scale` on badge and paint picture files (API review item 12).
 pub const FILE_SCALE_NON_EMOTE: &str = "file_scale_non_emote";
 
-/// Id of the deprecation of emote transfer requests (ADR 0038).
+/// Id of the deprecation of emote transfer requests (ADR 0039).
 pub const EMOTE_TRANSFER_REQUESTS: &str = "emote_transfer_requests";
 
 /// One deprecation: id, what, since, sunset, replacement.
@@ -68,7 +68,7 @@ const DEPRECATIONS: &[Entry] = &[
         "Emote transfer requests: the `emoteTransferRequests` query (always empty) and the `acceptEmoteTransfer`, `declineEmoteTransfer` and `cancelEmoteTransfer` mutations (always `410 transfer_requests_retired`). Ownership can't be requested any more.",
         "2026-11-27",
         "2027-06-01",
-        "None: staff with `emotes.transfer` move an emote directly with `transferEmote` (ADR 0038). Past transfers stay in the audit log.",
+        "None: staff with `emotes.transfer` move an emote directly with `transferEmote` (ADR 0039). Past transfers stay in the audit log.",
     ),
 ];
 

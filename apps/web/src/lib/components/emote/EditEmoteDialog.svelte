@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The Edit emote pop-up on the emote page (ADR 0038). Three parts, each only for who may use it:
+  // The Edit emote pop-up on the emote page (ADR 0039). Three parts, each only for who may use it:
   //   Details   the owner, account editors with Manage and staff with emotes.edit_any: name, tags,
   //             zero-width and private, saved with updateEmote;
   //   Approvals staff with emotes.review (public listing) and emotes.review_personal (personal

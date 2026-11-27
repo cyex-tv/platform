@@ -81,7 +81,7 @@ export const HELP: HelpGroup[] = [
     ['use-in-channel', 'How do I use a set in my channel?',
       'Make a set on [your profile](/me), add emotes from their pages or from search, then pick it as the active set under [Channels](/me/channels). Chat picks it up within seconds.'],
     ['personal-set', 'What is a personal set?',
-      'Emotes you take with you: they show in your own messages in every channel that allows personal emotes. Only emotes approved for personal use go in it; an emote waiting for that, or denied, can’t be added.'],
+      'Emotes you take with you: they show in your own messages in every channel that allows personal emotes. Only emotes approved for personal use go in it; an emote waiting for that, or denied, can’t be added. Every account has one from sign-up: 3 slots, or 10 for subscribers. You can give an emote a different name in it, and a channel can turn personal emotes off.'],
     ['global-set', 'Why do some emotes show everywhere?',
       'Those are in the global set, which every channel shows. The cyex.tv team keeps it small.'],
     ['set-full', 'My set is full. Can it hold more?',

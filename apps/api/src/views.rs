@@ -288,6 +288,7 @@ async fn build_sets(
             kind: set.kind,
             owner: summary(&summaries, set.owner_account_id),
             capacity: u32::try_from(set.capacity).unwrap_or(0),
+            capacity_override: set.capacity_override.and_then(|n| u32::try_from(n).ok()),
             emotes: by_set.remove(&set.id).unwrap_or_default(),
             visibility: set.visibility,
             listed: set.visibility == SetVisibility::Listed,

@@ -30,7 +30,7 @@
     rev?: number;
     /** The set changed here; `change` says how, so the page can follow without reading it all again. */
     onchange: (change?: MemberChange) => unknown;
-    /** A personal set: members not approved for personal use are flagged (ADR 0038; they stay). */
+    /** A personal set: members not approved for personal use are flagged (ADR 0039; they stay). */
     personal?: boolean;
   };
   let { setId, capacity, used, rev = 0, onchange, personal = false }: Props = $props();

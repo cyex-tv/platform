@@ -439,7 +439,7 @@ createServer(async (req, res) => {
     flags.nsfw = false;
     const visField = (field('visibility') ?? '').trim().toLowerCase();
     if (visField && !['public', 'unlisted', 'private'].includes(visField)) return json(res, 400, { error: 'bad_form', message: 'Visibility is public or private.' });
-    // Every upload starts unlisted and in review (ADR 0038): the owner only makes it private, `public`
+    // Every upload starts unlisted and in review (ADR 0039): the owner only makes it private, `public`
     // means "not private", and `unlisted` is for staff (the mock admin).
     if (visField === 'unlisted' && !admin) return json(res, 400, { error: 'bad_visibility', message: UNLISTED_REFUSAL });
     const visibility = visField === 'private' || (!visField && flags.private) ? 'PRIVATE' : 'UNLISTED';

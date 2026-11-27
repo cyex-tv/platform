@@ -637,7 +637,7 @@ async fn editors_cant_transfer_or_ask_for_a_transfer() {
     let hidden = w.emote(&alice, "hidden", EmoteState::Pending, false).await;
 
     for (who, emote, to, want) in [
-        // Only staff with emotes.transfer move emotes now (ADR 0038).
+        // Only staff with emotes.transfer move emotes now (ADR 0039).
         (&bob, &first, &gina, "transfer_staff_only"),
         (&bob, &first, &bob, "transfer_staff_only"),
         (&bob, &hidden, &gina, "transfer_staff_only"),
@@ -680,7 +680,7 @@ async fn editors_cant_transfer_or_ask_for_a_transfer() {
         let r = w.gql(who, REQUESTS, json!({ "e": first })).await;
         assert_eq!(r["data"]["emoteTransferRequests"], json!([]), "{r}");
     }
-    // Accepting is retired: the same answer for any ID, to anyone (ADR 0038).
+    // Accepting is retired: the same answer for any ID, to anyone (ADR 0039).
     for who in [&alice, &bob, &carol] {
         let r = w
             .gql(who, ACCEPT, json!({ "id": "01JD8XTRANSFER000000000001" }))
@@ -690,7 +690,7 @@ async fn editors_cant_transfer_or_ask_for_a_transfer() {
     w.db.close().await;
 }
 
-/// The owner can't give their emote away any more (ADR 0038): only staff with `emotes.transfer`
+/// The owner can't give their emote away any more (ADR 0039): only staff with `emotes.transfer`
 /// move emotes. Nothing moves, nothing is audited, nobody is told.
 #[tokio::test]
 async fn the_owner_cant_give_their_emote_away_any_more() {
@@ -799,7 +799,7 @@ async fn open_requests_from_before_are_withdrawn_and_both_sides_told() {
     assert_eq!(states, [&json!("CANCELLED"), &json!("CANCELLED")]);
     let r = w.gql(&alice, REQUESTS, json!({})).await;
     assert_eq!(r["data"]["emoteTransferRequests"], json!([]), "{r}");
-    // Declining or cancelling one now: the request flow is retired (ADR 0038).
+    // Declining or cancelling one now: the request flow is retired (ADR 0039).
     let old = ids::to_text(asked[0]);
     for (who, q) in [(&alice, DECLINE), (&bob, CANCEL)] {
         let r = w.gql(who, q, json!({ "id": old })).await;

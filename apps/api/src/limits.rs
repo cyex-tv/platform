@@ -217,6 +217,11 @@ impl Rates {
             }
             AccountLimit::PendingEmotes => (self.pending_emotes, None),
             AccountLimit::SetCapacityMax => (self.set_capacity_max, None),
+            // Fixed, not an environment setting: the database reads the same default (ADR 0038).
+            AccountLimit::PersonalSetSlots => (
+                u32::try_from(cyex_tv_db::sets::PERSONAL_CAPACITY).unwrap_or(3),
+                None,
+            ),
             AccountLimit::Editors => rate(self.editors),
             AccountLimit::Cosmetics => rate(self.cosmetics),
             AccountLimit::SetClones => rate(self.set_clones),
@@ -256,6 +261,7 @@ pub enum AccountLimit {
     Redeem,
     DataExport,
     SetCapacityMax,
+    PersonalSetSlots,
     BadgeMaxBytes,
     BadgeMaxSide,
     BadgeMaxFrames,
@@ -272,7 +278,7 @@ pub enum MediaField {
 }
 
 impl AccountLimit {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 22] = [
         Self::GqlAccount,
         Self::AccountSearch,
         Self::QuickSearch,
@@ -289,6 +295,7 @@ impl AccountLimit {
         Self::Redeem,
         Self::DataExport,
         Self::SetCapacityMax,
+        Self::PersonalSetSlots,
         Self::BadgeMaxBytes,
         Self::BadgeMaxSide,
         Self::BadgeMaxFrames,
@@ -314,6 +321,7 @@ impl AccountLimit {
             Self::Redeem => "redeem",
             Self::DataExport => "data_export",
             Self::SetCapacityMax => "set_capacity_max",
+            Self::PersonalSetSlots => "personal_set_slots",
             Self::BadgeMaxBytes => "badge_max_bytes",
             Self::BadgeMaxSide => "badge_max_side",
             Self::BadgeMaxFrames => "badge_max_frames",
@@ -583,7 +591,8 @@ impl Limits {
             AccountLimit::DataExport => &self.data_export,
             AccountLimit::UploadsPerHour
             | AccountLimit::PendingEmotes
-            | AccountLimit::SetCapacityMax => return None,
+            | AccountLimit::SetCapacityMax
+            | AccountLimit::PersonalSetSlots => return None,
             AccountLimit::BadgeMaxBytes
             | AccountLimit::BadgeMaxSide
             | AccountLimit::BadgeMaxFrames
@@ -1086,7 +1095,17 @@ mod tests {
         for l in AccountLimit::ALL {
             assert_eq!(AccountLimit::from_key(l.key()), Some(l));
         }
-        assert_eq!(AccountLimit::ALL.len(), 21);
+        assert_eq!(AccountLimit::ALL.len(), 22);
+        // A subscriber role gives a personal set 10 slots, else 3 (ADR 0038).
+        let sub = overrides(&[(AccountLimit::PersonalSetSlots, 10)]);
+        assert_eq!(
+            AccountLimits::resolve(&Rates::default(), &[]).get(AccountLimit::PersonalSetSlots),
+            3
+        );
+        assert_eq!(
+            AccountLimits::resolve(&Rates::default(), &[sub]).get(AccountLimit::PersonalSetSlots),
+            10
+        );
         // A role can raise the most slots a set may have (a subscriber role: 2.500).
         let rates = Rates::default();
         assert_eq!(

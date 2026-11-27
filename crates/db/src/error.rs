@@ -31,7 +31,7 @@ pub enum DbError {
     /// Pending emotes only go in their owner's own sets, and personal sets take approved ones only.
     #[error("the emote isn't approved")]
     NotApproved,
-    /// A personal set takes only emotes approved for personal use (ADR 0038); the emote's
+    /// A personal set takes only emotes approved for personal use (ADR 0039); the emote's
     /// personal-use state (pending or denied).
     #[error("the emote isn't approved for personal use")]
     PersonalUseNotApproved(cyex_tv_shared::model::ApprovalState),

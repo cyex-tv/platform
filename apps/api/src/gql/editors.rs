@@ -78,10 +78,10 @@ impl EditorQuery {
             .map_err(api_error)
     }
 
-    /// Retired with transfer requests (ADR 0038): always empty. Past requests and transfers are in
+    /// Retired with transfer requests (ADR 0039): always empty. Past requests and transfers are in
     /// the audit log.
     #[graphql(
-        deprecation = "Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
+        deprecation = "Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
     )]
     async fn emote_transfer_requests(
         &self,

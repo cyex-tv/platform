@@ -67,7 +67,7 @@ async fn seed(c: &mut PgConnection, s: &Scale) -> Uuid {
                 || f.n,
                 CASE WHEN f.n % 20 = 0 THEN 'pending' ELSE 'approved' END,
                 f.n % 50 = 1, f.n % 33 = 2 AND f.n % 50 <> 1, f.n % 50 = 3, f.n % 4 = 0, f.n % 40 = 5,
-                -- ADR 0038: a trigger derives `unlisted` from the listing review, so the
+                -- ADR 0039: a trigger derives `unlisted` from the listing review, so the
                 -- unlisted rows (n % 33 = 2) are the ones whose listing is denied.
                 CASE WHEN f.n % 20 = 0 THEN 'pending'
                      WHEN f.n % 33 = 2 AND f.n % 50 <> 1 THEN 'denied'

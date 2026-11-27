@@ -34,7 +34,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const VERDICT: Record<string, string> = { approved: 'approved', denied: 'denied', pending: 'back to pending' };
 
 /**
- * What an approvals audit row says (`emote.approved` and `emote.approvals_changed`, ADR 0038):
+ * What an approvals audit row says (`emote.approved` and `emote.approvals_changed`, ADR 0039):
  * "Public listing approved", "Personal use denied: Blurry". Only the parts that changed (a part
  * with no "before" counts as changed); both approved reads as one phrase. Empty when the row has
  * no approvals in it (an older row).
@@ -66,7 +66,7 @@ export function describe(e: HistoryEntry): { text: string; detail?: string } {
   const reason = typeof after.reason === 'string' ? after.reason : undefined;
   switch (e.action) {
     case 'emote.approved': {
-      // ADR 0038: the first listing verdict, with the personal-use state it was decided with.
+      // ADR 0039: the first listing verdict, with the personal-use state it was decided with.
       const text = approvalText(before, after);
       if (text) return { text };
       return { text: vis && vis !== 'public' ? `Approved as ${vis}` : 'Approved' };
@@ -170,7 +170,7 @@ export function approveFailure(err: unknown, name: string): string {
   return `${name} wasn’t approved. ${why}`;
 }
 
-// What a reviewer can decide, and what each button or key sends (ADR 0038). Two questions per
+// What a reviewer can decide, and what each button or key sends (ADR 0039). Two questions per
 // upload: may it be listed publicly, and may it be a personal emote. "Approve both" is the common
 // case; a reviewer who holds only one of the two permissions gets the one they can do.
 

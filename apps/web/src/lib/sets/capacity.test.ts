@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { capacityProblem, capacityValue, rangeHint, type CapacityRange } from './capacity';
+import { capacityProblem, capacityValue, rangeHint, slotsLine, slotsNote, SUBSCRIPTION_OFFERED, type CapacityRange } from './capacity';
 
 const user: CapacityRange = { min: 1, max: 1000, ownerMax: 1000, used: 0, staff: false };
 const holding: CapacityRange = { min: 24, max: 1000, ownerMax: 1000, used: 24, staff: false };
@@ -40,5 +40,24 @@ describe('set capacity', () => {
     expect(rangeHint(user)).toBe('1 to 1.000 slots.');
     expect(rangeHint(holding)).toBe('24 to 1.000 slots: it holds 24.');
     expect(rangeHint(staff)).toBe('1 to 1.000.000 slots. Above 1.000 only as staff.');
+  });
+});
+
+describe('personal set slots', () => {
+  it('reads "x of N slots"', () => {
+    expect(slotsLine(2, 3)).toBe('2 of 3 slots');
+    expect(slotsLine(5, 10)).toBe('5 of 10 slots');
+  });
+  it('says nothing more at the default while nothing is sold', () => {
+    expect(SUBSCRIPTION_OFFERED).toBe(false);
+    expect(slotsNote({ used: 1, capacity: 3, override: null })).toBeNull();
+  });
+  it('shows the subscriber upsell only when a subscription is offered, and not to subscribers', () => {
+    expect(slotsNote({ used: 1, capacity: 3, override: null, offered: true })).toBe('Subscribers get 10 slots.');
+    expect(slotsNote({ used: 1, capacity: 10, override: null, offered: true })).toBeNull();
+  });
+  it('says when staff set the number, and when the set is over its limit', () => {
+    expect(slotsNote({ used: 1, capacity: 7, override: 7 })).toBe('Staff set this number.');
+    expect(slotsNote({ used: 5, capacity: 3, override: null })).toContain('Nothing is removed');
   });
 });

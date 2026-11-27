@@ -393,7 +393,7 @@ pub async fn end(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Annou
 pub const NOTIFICATION_KINDS: &[(&str, bool)] = &[
     ("emote.approved", false),
     ("emote.rejected", false),
-    // A reviewer changed its public listing or personal-use approval (ADR 0038).
+    // A reviewer changed its public listing or personal-use approval (ADR 0039).
     ("emote.approvals_changed", false),
     ("emote.failed", false),
     ("emote.taken_down", true),

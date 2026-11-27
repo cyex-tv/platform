@@ -9,7 +9,7 @@ import { badCursor, pageOf } from './cursor.mjs';
 export const PENDING = Array.from({ length: Number(process.env.MOCK_PENDING ?? 60) }, (_, i) => {
   const e = emote(800 + i, OTHERS[i % OTHERS.length], 'PENDING');
   e.createdAt = new Date(NOW - (i + 1) * 7 * 60_000).toISOString();
-  // Every upload is unlisted until its listing is approved (ADR 0038); the owner only makes it private.
+  // Every upload is unlisted until its listing is approved (ADR 0039); the owner only makes it private.
   if (i % 7 === 3) Object.assign(e, { visibility: 'PRIVATE', flags: { ...e.flags, private: true } });
   else e.visibility = 'UNLISTED';
   // Every 6th is a re-upload of an approved sample (the same picture, a near name), so the detail
@@ -67,7 +67,7 @@ export function duplicatesOf(id) {
     .sort((a, b) => Number(b.sameFile) - Number(a.sameFile) || b.similarity - a.similarity)
     .slice(0, 12);
 }
-/** Approved emotes whose personal use waits for a reviewer (the personal queue, ADR 0038), upload order. */
+/** Approved emotes whose personal use waits for a reviewer (the personal queue, ADR 0039), upload order. */
 export const personalPending = () =>
   [...new Map([...MINE, ...ALL, ...RESOLVED, ...PENDING].map((e) => [e.id, e])).values()]
     .filter((e) => e.state === 'APPROVED' && e.approvals?.personalUse === 'PENDING')
@@ -76,11 +76,13 @@ export const batchIds = (ids) => [...new Set((ids ?? []).map((x) => String(x).tr
 // When an undone approval sent an upload to the end of the queue (requeueEmotes, ADR 0024): the
 // upload-time order reads this before createdAt, as the API reads requeued_at.
 export const REQUEUED = new Map();
+// When each emote was last reviewed, kept apart from the emote so no answer carries it.
+export const REVIEWED_AT = new Map();
 export function reviewQueueAnswer(v) {
   const f = v.filter ?? {};
   const tab = f.tab ?? 'PENDING';
   const q = (f.search ?? '').trim().toLowerCase();
-  // PUBLIC is pending and not private, LIMITED pending and private; PERSONAL (ADR 0038) lists approved
+  // PUBLIC is pending and not private, LIMITED pending and private; PERSONAL (ADR 0039) lists approved
   // emotes whose personal use is still pending.
   let rows = tab === 'RESOLVED' ? RESOLVED.slice()
     : tab === 'PERSONAL' ? personalPending()
@@ -91,7 +93,7 @@ export function reviewQueueAnswer(v) {
   const resolved = tab === 'RESOLVED';
   const sort = f.sort ?? (resolved ? 'REVIEWED' : 'UPLOADED');
   const desc = f.descending ?? resolved;
-  const key = (e) => (sort === 'NAME' ? e.name.toLowerCase() : sort === 'UPLOADER' ? (e.owner?.displayName ?? '').toLowerCase() : sort === 'REVIEWED' ? e.reviewedAt ?? '' : (REQUEUED.get(e.id) ?? e.createdAt));
+  const key = (e) => (sort === 'NAME' ? e.name.toLowerCase() : sort === 'UPLOADER' ? (e.owner?.displayName ?? '').toLowerCase() : sort === 'REVIEWED' ? REVIEWED_AT.get(e.id) ?? '' : (REQUEUED.get(e.id) ?? e.createdAt));
   rows.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : a.createdAt.localeCompare(b.createdAt)) * (desc && sort !== 'UPLOADER' && sort !== 'NAME' ? -1 : 1));
   if (desc && (sort === 'UPLOADER' || sort === 'NAME')) rows.reverse();
   const p = pageOf(rows, v);
@@ -110,7 +112,7 @@ export const CLOSED_REPORTS = [
   { id: 'R0', reason: 'Wrong tag.', reporterId: OTHERS[1].id, state: 'DISMISSED', resolution: 'Fine as is.', createdAt: '2026-11-14T10:00:00.000Z', resolvedAt: '2026-11-14T12:00:00.000Z', emote: ALL[5] },
 ];
 
-// ---- The two approvals (ADR 0038) -------------------------------------------------------------------
+// ---- The two approvals (ADR 0039) -------------------------------------------------------------------
 /** Every emote the mock knows, one entry per id. */
 export const knownEmote = (id) => PENDING.find((e) => e.id === id) ?? RESOLVED.find((e) => e.id === id) ?? findEmote(id);
 const keepVisibility = (e) => {
@@ -125,7 +127,7 @@ export function decideListing(e, to) {
     e.state = 'APPROVED';
     const at = PENDING.indexOf(e);
     if (at >= 0) PENDING.splice(at, 1);
-    e.reviewedAt = new Date().toISOString();
+    REVIEWED_AT.set(e.id, new Date().toISOString());
     if (!RESOLVED.includes(e)) RESOLVED.unshift(e);
   }
   keepVisibility(e);
@@ -140,7 +142,7 @@ export function rejectOutright(e) {
   e.state = 'REJECTED';
   e.approvals = { publicListing: 'DENIED', personalUse: 'DENIED' };
   keepVisibility(e);
-  e.reviewedAt = new Date().toISOString();
+  REVIEWED_AT.set(e.id, new Date().toISOString());
   if (!RESOLVED.includes(e)) RESOLVED.unshift(e);
 }
 export const APPROVALS_BAD = 'Pick at least one thing to decide: the public listing or personal use. A denial needs a reason of 1 to 500 characters.';

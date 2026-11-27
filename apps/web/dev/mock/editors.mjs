@@ -62,7 +62,7 @@ export const PUBLIC_SETS = [
     emotes: ALL.slice(30, 38).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-14T22:00:00.000Z' },
   { id: '01JD8XSET000000000000NORA3', name: 'drafts', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
     emotes: ALL.slice(80, 84).map((e) => member(e)), editors: [], visibility: 'PRIVATE', createdAt: '2026-11-16T08:00:00.000Z' },
-  { id: '01JD8XSET000000000000NORA4', name: 'nora personal', kind: 'PERSONAL', capacity: 5, owner: OTHERS[1],
+  { id: '01JD8XSET000000000000NORA4', name: 'nora personal', kind: 'PERSONAL', capacity: 3, owner: OTHERS[1],
     emotes: ALL.slice(90, 93).map((e) => member(e)), editors: [], visibility: 'UNLISTED', createdAt: '2026-11-11T11:00:00.000Z' },
   // Edge cases for /sets/<id>: a listed set with no emotes, and an unlisted one with a very long
   // name and a very long owner name.

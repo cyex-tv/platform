@@ -154,7 +154,7 @@ impl EmoteMutation {
             .map_err(api_error)
     }
 
-    /// Move an emote to another account at once (ADR 0038, `emote.transferred`). Needs
+    /// Move an emote to another account at once (ADR 0039, `emote.transferred`). Needs
     /// `emotes.transfer`: anyone else, the owner included, gets `403 transfer_staff_only`.
     /// The receiver must be a live account (not deleted, blocked or restricted). Both the old and
     /// the new owner are notified. 60 an hour.
@@ -170,18 +170,18 @@ impl EmoteMutation {
             .map_err(api_error)
     }
 
-    /// Retired with transfer requests (ADR 0038): always `410 transfer_requests_retired`.
+    /// Retired with transfer requests (ADR 0039): always `410 transfer_requests_retired`.
     #[graphql(
-        deprecation = "Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
+        deprecation = "Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
     )]
     async fn accept_emote_transfer(&self, ctx: &Context<'_>, id: String) -> Result<Emote> {
         let caller = caller(ctx)?;
         transfers::retired_request(state(ctx), caller, &id).map_err(api_error)
     }
 
-    /// Retired with transfer requests (ADR 0038): always `410 transfer_requests_retired`.
+    /// Retired with transfer requests (ADR 0039): always `410 transfer_requests_retired`.
     #[graphql(
-        deprecation = "Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
+        deprecation = "Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
     )]
     async fn decline_emote_transfer(
         &self,
@@ -192,9 +192,9 @@ impl EmoteMutation {
         transfers::retired_request(state(ctx), caller, &id).map_err(api_error)
     }
 
-    /// Retired with transfer requests (ADR 0038): always `410 transfer_requests_retired`.
+    /// Retired with transfer requests (ADR 0039): always `410 transfer_requests_retired`.
     #[graphql(
-        deprecation = "Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
+        deprecation = "Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
     )]
     async fn cancel_emote_transfer(
         &self,

@@ -427,7 +427,7 @@ async fn owners_edit_and_delete_their_emotes() {
 }
 
 /// Unlisted is a moderator's call (ADR 0020, amendment 2026/11/22): owners choose private or
-/// not only, and can't list an emote themselves; staff approve or deny its listing (ADR 0038).
+/// not only, and can't list an emote themselves; staff approve or deny its listing (ADR 0039).
 #[tokio::test]
 async fn only_staff_take_an_emote_off_the_listings() {
     let Some(w) = World::new().await else { return };
@@ -436,7 +436,7 @@ async fn only_staff_take_an_emote_off_the_listings() {
     let id = w.pending(&owner, "listMe").await;
     let set = "mutation($id: String!, $v: EmoteVisibility, $z: Boolean) { updateEmote(id: $id, input: { visibility: $v, zeroWidth: $z }) { visibility flags { private zeroWidth } } }";
 
-    // The owner: private and back are fine, unlisted is not. ADR 0038: PUBLIC means "not
+    // The owner: private and back are fine, unlisted is not. ADR 0039: PUBLIC means "not
     // private"; the emote is still pending, so it reads UNLISTED until its listing is approved.
     let r = w
         .gql(Some(&owner), set, json!({ "id": id, "v": "PRIVATE" }))
@@ -463,7 +463,7 @@ async fn only_staff_take_an_emote_off_the_listings() {
     let flags = "mutation($id: String!) { setEmoteFlags(id: $id, input: { visibility: UNLISTED }) { visibility } }";
     let r = w.gql(Some(&staff), flags, json!({ "id": id })).await;
     assert_eq!(r["data"]["setEmoteFlags"]["visibility"], "UNLISTED", "{r}");
-    // ADR 0038: PUBLIC from the owner is "not private"; the listing stays denied.
+    // ADR 0039: PUBLIC from the owner is "not private"; the listing stays denied.
     let r = w
         .gql(Some(&owner), set, json!({ "id": id, "v": "PUBLIC" }))
         .await;

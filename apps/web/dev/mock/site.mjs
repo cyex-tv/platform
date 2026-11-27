@@ -87,7 +87,7 @@ export const META = {
     since: '2026-11-26', sunset: '2027-11-26', replacement: "Read the file's `width` (and `height`): it is the contract for every file. `scale` stays in v1 and is only dropped for badge and paint files in v2.",
   }, {
     id: 'emote_transfer_requests', what: 'Emote transfer requests: the `emoteTransferRequests` query (always empty) and the `acceptEmoteTransfer`, `declineEmoteTransfer` and `cancelEmoteTransfer` mutations (always `410 transfer_requests_retired`). Ownership can’t be requested any more.',
-    since: '2026-11-27', sunset: '2027-06-01', replacement: 'None: staff with `emotes.transfer` move an emote directly with `transferEmote` (ADR 0038). Past transfers stay in the audit log.',
+    since: '2026-11-27', sunset: '2027-06-01', replacement: 'None: staff with `emotes.transfer` move an emote directly with `transferEmote` (ADR 0039). Past transfers stay in the audit log.',
   }],
 };
 const metaAnswer = () => ({ apiVersion: META.api_version, build: META.build, limits: { rest: META.limits.rest, graphqlField: META.limits.graphql_field }, deprecations: META.deprecations });

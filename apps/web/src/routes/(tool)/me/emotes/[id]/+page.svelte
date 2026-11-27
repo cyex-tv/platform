@@ -2,7 +2,7 @@
   // An emote's editor, in the Inspector shape: the picture at its sizes and the details form on
   // the left; on the right its status, facts and id, adding it to a set and deleting it. The owner,
   // the account's editors with Manage, and staff with the matching permissions. Only zero-width and
-  // private are the owner's to set (listing is decided in review, ADR 0038), and nobody hands an
+  // private are the owner's to set (listing is decided in review, ADR 0039), and nobody hands an
   // emote over here: staff transfer it from the emote page's Edit emote pop-up.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';

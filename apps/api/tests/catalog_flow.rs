@@ -877,7 +877,7 @@ async fn personal_sets_and_the_chatter_lookup() {
         code(&w.add(&alice, &personal, &pending, None).await),
         "not_approved"
     );
-    for i in 0..5 {
+    for i in 0..3 {
         let e = w
             .emote(
                 &alice,
@@ -889,12 +889,12 @@ async fn personal_sets_and_the_chatter_lookup() {
         let r = w.add(&alice, &personal, &e, None).await;
         assert!(r["errors"].is_null(), "{r}");
     }
-    let sixth = w.emote(&alice, "mine6", EmoteState::Approved, false).await;
-    let full = w.add(&alice, &personal, &sixth, None).await;
+    let fourth = w.emote(&alice, "mine4", EmoteState::Approved, false).await;
+    let full = w.add(&alice, &personal, &fourth, None).await;
     assert_eq!(code(&full), "set_full");
-    // The numbers a client can show: the set holds 5 of 5.
-    assert_eq!(full["errors"][0]["extensions"]["limit"], 5, "{full}");
-    assert_eq!(full["errors"][0]["extensions"]["current"], 5, "{full}");
+    // The numbers a client can show: the set holds 3 of 3.
+    assert_eq!(full["errors"][0]["extensions"]["limit"], 3, "{full}");
+    assert_eq!(full["errors"][0]["extensions"]["current"], 3, "{full}");
 
     // Events for a personal set reach its owner's user topic.
     let events = w.events().await;
@@ -919,7 +919,7 @@ async fn personal_sets_and_the_chatter_lookup() {
     let sets = r.body["sets"].as_array().unwrap();
     assert_eq!(sets.len(), 1, "{sets:?}");
     assert_eq!(sets[0]["platform_user_id"], "501");
-    assert_eq!(sets[0]["set"]["emotes"].as_array().unwrap().len(), 5);
+    assert_eq!(sets[0]["set"]["emotes"].as_array().unwrap().len(), 3);
 
     let too_many: Vec<String> = (0..101).map(|i| i.to_string()).collect();
     let r = w.send(lookup(json!(too_many))).await;

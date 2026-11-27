@@ -7,7 +7,7 @@
   // and on wide windows the picked upload in a large inspector on the right (ReviewInspector: every
   // size, chat, uploader and their history, duplicates, activity and notes, the verdicts at its
   // foot). Narrow windows open the same upload in the full-screen dialog (ReviewDetail).
-  // Two questions per upload (ADR 0038): may it be listed publicly, may it be a personal emote.
+  // Two questions per upload (ADR 0039): may it be listed publicly, may it be a personal emote.
   // "Approve both" is the main action; a reviewer holding one of emotes.review and
   // emotes.review_personal gets the one they can do. Keyboard first: the arrows move between cards,
   // Enter opens one, A approves (both), L the listing, P personal use, D and N deny the listing or

@@ -123,7 +123,7 @@ export const EMOTE_CHANNELS = graphql(`
   }
 `);
 
-// Decide an emote's public listing and/or personal use (ADR 0038). The edit dialog changes a
+// Decide an emote's public listing and/or personal use (ADR 0039). The edit dialog changes a
 // decision already made, so it sends onlyPending: false.
 export const EMOTE_REVIEW_APPROVALS = graphql(`
   mutation EmoteReviewApprovals($ids: [String!]!, $input: ApprovalsInput!, $idempotencyKey: String) {

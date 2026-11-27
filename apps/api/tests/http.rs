@@ -210,7 +210,7 @@ async fn graphql_permission_names_are_public() {
     let names = response["data"]["permissions"].as_array().unwrap();
     assert!(names.iter().any(|n| n == "emotes.review"));
     assert!(names.iter().any(|n| n == "roles.manage"));
-    // ADR 0038.
+    // ADR 0039.
     assert!(names.iter().any(|n| n == "emotes.review_personal"));
     assert!(names.iter().any(|n| n == "emotes.transfer"));
 }
@@ -685,7 +685,7 @@ async fn meta_lists_the_scale_deprecation_for_badge_and_paint_files() {
     assert!(line.contains("Emote files keep"), "{line}");
 }
 
-// ADR 0038: transfer requests are retired, and `/v1/meta` says so.
+// ADR 0039: transfer requests are retired, and `/v1/meta` says so.
 #[tokio::test]
 async fn meta_lists_the_retired_transfer_requests() {
     let response = cyex_tv_api::app(offline_state())

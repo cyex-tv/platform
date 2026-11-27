@@ -514,7 +514,7 @@ impl FromStr for EmoteState {
     }
 }
 
-/// Where one of an emote's two approvals stands (ADR 0038): its public listing or its personal use.
+/// Where one of an emote's two approvals stands (ADR 0039): its public listing or its personal use.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
 #[serde(rename_all = "snake_case")]
@@ -553,7 +553,7 @@ impl FromStr for ApprovalState {
     }
 }
 
-/// An emote's two approvals (ADR 0038). Each is decided on its own, in review.
+/// An emote's two approvals (ADR 0039). Each is decided on its own, in review.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct EmoteApprovals {
@@ -574,7 +574,7 @@ pub enum ApprovalDecision {
     Deny,
 }
 
-/// What `reviewApprovals` decides (ADR 0038). Leave a part out to keep it as it is.
+/// What `reviewApprovals` decides (ADR 0039). Leave a part out to keep it as it is.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
 #[cfg_attr(feature = "graphql", graphql(name = "ApprovalsInput"))]
@@ -763,7 +763,7 @@ pub struct Emote {
     #[serde(default)]
     #[schema(required = false)]
     pub visibility: EmoteVisibility,
-    /// Its public listing and personal use approvals (ADR 0038).
+    /// Its public listing and personal use approvals (ADR 0039).
     #[serde(default)]
     #[schema(required = false)]
     pub approvals: EmoteApprovals,
@@ -944,7 +944,14 @@ pub struct EmoteSet {
     pub name: String,
     pub kind: SetKind,
     pub owner: Option<AccountSummary>,
+    /// The slots the set has. A personal set's come from its owner's roles (3, or 10 for a
+    /// subscriber) unless staff set `capacityOverride` (ADR 0038). A personal set may hold more
+    /// than this after its owner lost a role: it keeps its emotes and takes no new one until it
+    /// is under the limit.
     pub capacity: u32,
+    /// Staff set this personal set's capacity by hand (`updateSet`). Null: the owner's roles decide.
+    #[serde(default)]
+    pub capacity_override: Option<u32>,
     pub emotes: Vec<SetEmote>,
     /// Who can find and open it.
     #[serde(default)]
@@ -1003,7 +1010,8 @@ pub struct SetCapacityRange {
     /// The most slots you may pick.
     pub max: u32,
     /// The most without a staff permission: the owner's `set_capacity_max` role limit (1.000 by
-    /// default) for a channel set, 5 for a personal set, or the set's capacity if it is higher.
+    /// default) for a channel set, or the set's capacity if it is higher. A personal set's owner
+    /// can't change it: there `setCapacityRange` is null without `sets.edit_any`.
     pub owner_max: u32,
     /// Emotes in the set now, pending ones included.
     pub used: u32,
@@ -1079,10 +1087,15 @@ pub struct CreateSet {
 #[cfg_attr(feature = "graphql", graphql(name = "UpdateSetInput"))]
 pub struct UpdateSet {
     pub name: Option<String>,
-    /// 1 to the owner's `set_capacity_max` role limit (1.000 by default; 5 for a personal set),
-    /// never below the emotes the set holds; up to 1.000.000 with `sets.edit_any`.
-    /// `setCapacityRange` says what you may pick.
+    /// 1 to the owner's `set_capacity_max` role limit (1.000 by default), never below the emotes
+    /// the set holds; up to 1.000.000 with `sets.edit_any`. On a personal set this is the staff
+    /// override and needs `sets.edit_any` (`forbidden` otherwise); audited. `setCapacityRange` says
+    /// what you may pick.
     pub capacity: Option<u32>,
+    /// Personal sets, `sets.edit_any`: drop the override, so the owner's roles decide the slots
+    /// again.
+    #[serde(default)]
+    pub reset_capacity: Option<bool>,
     /// Every set is public: changing it needs `sets.edit_any` (staff hiding a set). Personal sets
     /// can't be `PRIVATE`; the global set is always listed.
     #[serde(default)]
@@ -1248,7 +1261,7 @@ pub enum EmoteFlag {
         graphql(deprecation = "NSFW emotes aren't allowed on cyex.tv; this flag finds nothing.")
     )]
     Nsfw,
-    /// Approved for personal use (ADR 0038): it can go in a personal set.
+    /// Approved for personal use (ADR 0039): it can go in a personal set.
     PersonalUse,
 }
 
@@ -1383,9 +1396,9 @@ pub struct LoginMatch {
 pub struct ReviewCounts {
     /// Pending and not private: listed once its listing is approved.
     pub public: u64,
-    /// Pending and private (every upload is unlisted until its listing is approved, ADR 0038).
+    /// Pending and private (every upload is unlisted until its listing is approved, ADR 0039).
     pub limited: u64,
-    /// Personal use pending, emote usable: the personal queue (ADR 0038).
+    /// Personal use pending, emote usable: the personal queue (ADR 0039).
     #[serde(default)]
     pub personal: u64,
 }
@@ -1404,7 +1417,7 @@ pub enum ReviewTab {
     Limited,
     /// Approved or rejected by a reviewer.
     Resolved,
-    /// The personal queue (ADR 0038): personal use pending, and the emote may be used (pending
+    /// The personal queue (ADR 0039): personal use pending, and the emote may be used (pending
     /// or approved). Needs `emotes.review_personal` (or `emotes.review`).
     Personal,
 }
@@ -1439,7 +1452,7 @@ pub struct ReviewQueueFilter {
     /// Only this uploader's emotes (an account ID).
     #[serde(default)]
     pub uploader_id: Option<String>,
-    /// Only emotes whose personal use is in this state (ADR 0038), for example `APPROVED`.
+    /// Only emotes whose personal use is in this state (ADR 0039), for example `APPROVED`.
     #[serde(default)]
     pub personal_use: Option<ApprovalState>,
 }

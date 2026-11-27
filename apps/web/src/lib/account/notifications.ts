@@ -71,7 +71,7 @@ export function describe(kind: string, payload: string | null | undefined): Line
 
   switch (kind) {
     case 'emote.approved': {
-      // Since ADR 0038 the payload also says where the two approvals stand; older ones don't.
+      // Since ADR 0039 the payload also says where the two approvals stand; older ones don't.
       const listing = approval(d, 'public_listing');
       const personal = approval(d, 'personal_use');
       const states = approvalStates(listing, personal);
@@ -129,7 +129,7 @@ export function describe(kind: string, payload: string | null | undefined): Line
     case 'emote.transferred': {
       const what = name ? iso(name) : 'An emote';
       const role = str(d, 'role', 10);
-      // Staff move emotes now (ADR 0038); older ones were accepted requests (role 'editor').
+      // Staff move emotes now (ADR 0039); older ones were accepted requests (role 'editor').
       const text =
         role === 'to'
           ? `Staff moved ${what} to you.`

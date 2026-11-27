@@ -5,7 +5,7 @@
   //          edit, ADR 0014; `upload.for` picks one), Name (from the file name until typed), Tags
   //          (TagInput chips), the two flags a creator sets (Overlaying = zero-width, Private =
   //          only your own channel; there is no listing choice: every upload starts unlisted and in
-  //          review, moderators approve the public listing and personal use separately, ADR 0038;
+  //          review, moderators approve the public listing and personal use separately, ADR 0039;
   //          NSFW emotes aren't allowed), how many of yours wait for review, "I accept
   //          the rules and guidelines" (the link opens /guidelines in a new tab), Discard and
   //          Upload.

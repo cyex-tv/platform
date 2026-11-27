@@ -1,4 +1,4 @@
--- Two approvals per emote: public listing and personal use (ADR 0038). Additive: new columns with
+-- Two approvals per emote: public listing and personal use (ADR 0039). Additive: new columns with
 -- defaults, data filled in from what each emote was, two permissions, and a trigger that keeps
 -- `unlisted` following the listing approval.
 
@@ -49,7 +49,7 @@ WHERE unlisted <> (NOT private AND listing_review <> 'approved');
 CREATE INDEX emotes_personal_queue ON emotes (created_at, id)
     WHERE personal_review = 'pending' AND state = 'approved' AND deleted_at IS NULL;
 
--- Permissions (ADR 0038):
+-- Permissions (ADR 0039):
 -- - emotes.review_personal: every role that allows or denies emotes.review says the same for it,
 --   so no reviewer loses anything and no denied one gains anything;
 -- - emotes.transfer: the built-in Admin role.

@@ -463,14 +463,14 @@ export type ApprovalDecision =
   | 'APPROVE'
   | 'DENY';
 
-/** Where one of an emote's two approvals stands (ADR 0038): its public listing or its personal use. */
+/** Where one of an emote's two approvals stands (ADR 0039): its public listing or its personal use. */
 export type ApprovalState =
   | 'APPROVED'
   | 'DENIED'
   /** Waiting for a reviewer. Every upload starts here. */
   | 'PENDING';
 
-/** What `reviewApprovals` decides (ADR 0038). Leave a part out to keep it as it is. */
+/** What `reviewApprovals` decides (ADR 0039). Leave a part out to keep it as it is. */
 export type ApprovalsInput = {
   /**
    * Default `true` (what the queues send): a part that is no longer pending is skipped, and an
@@ -881,7 +881,7 @@ export type EffectiveLimit = {
 export type Emote = {
   __typename?: 'Emote';
   animated: Scalars['Boolean']['output'];
-  /** Its public listing and personal use approvals (ADR 0038). */
+  /** Its public listing and personal use approvals (ADR 0039). */
   approvals: EmoteApprovals;
   /** How many channels have this emote in their active set right now. */
   channelCount: Scalars['Int']['output'];
@@ -905,7 +905,7 @@ export type Emote = {
   visibility: EmoteVisibility;
 };
 
-/** An emote's two approvals (ADR 0038). Each is decided on its own, in review. */
+/** An emote's two approvals (ADR 0039). Each is decided on its own, in review. */
 export type EmoteApprovals = {
   __typename?: 'EmoteApprovals';
   /**
@@ -952,7 +952,7 @@ export type EmoteFile = {
 export type EmoteFlag =
   /** Retired: NSFW emotes aren't allowed, so this finds nothing. */
   | 'NSFW'
-  /** Approved for personal use (ADR 0038): it can go in a personal set. */
+  /** Approved for personal use (ADR 0039): it can go in a personal set. */
   | 'PERSONAL_USE'
   /** About twice as wide as tall or more. */
   | 'WIDE'
@@ -1027,7 +1027,15 @@ export type EmoteProcessing =
 
 export type EmoteSet = {
   __typename?: 'EmoteSet';
+  /**
+   * The slots the set has. A personal set's come from its owner's roles (3, or 10 for a
+   * subscriber) unless staff set `capacityOverride` (ADR 0038). A personal set may hold more
+   * than this after its owner lost a role: it keeps its emotes and takes no new one until it
+   * is under the limit.
+   */
   capacity: Scalars['Int']['output'];
+  /** Staff set this personal set's capacity by hand (`updateSet`). Null: the owner's roles decide. */
+  capacityOverride?: Maybe<Scalars['Int']['output']>;
   createdAt: Scalars['String']['output'];
   emotes: Array<SetEmote>;
   /** The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
@@ -1367,8 +1375,8 @@ export type MediaLimits = {
 export type Mutation = {
   __typename?: 'Mutation';
   /**
-   * Retired with transfer requests (ADR 0038): always `410 transfer_requests_retired`.
-   * @deprecated Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
+   * Retired with transfer requests (ADR 0039): always `410 transfer_requests_retired`.
+   * @deprecated Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
    */
   acceptEmoteTransfer: Emote;
   /**
@@ -1390,7 +1398,7 @@ export type Mutation = {
   /** Add a staff note to an account (1 to 2000 characters). Needs `users.notes`. Audited. */
   addStaffNote: StaffNote;
   /**
-   * Approve a pending emote's public listing (ADR 0038; personal use waits in its own queue, or
+   * Approve a pending emote's public listing (ADR 0039; personal use waits in its own queue, or
    * use `reviewApprovals`). Needs `emotes.review`. Audited. With `visibility`: `UNLISTED`
    * denies the listing instead (the emote can still be used), `PRIVATE` / `PUBLIC` also set
    * the private flag. `idempotencyKey` (optional UUID): a retry with it within 24 hours answers what the
@@ -1403,8 +1411,8 @@ export type Mutation = {
    */
   assignRole: Scalars['Boolean']['output'];
   /**
-   * Retired with transfer requests (ADR 0038): always `410 transfer_requests_retired`.
-   * @deprecated Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
+   * Retired with transfer requests (ADR 0039): always `410 transfer_requests_retired`.
+   * @deprecated Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
    */
   cancelEmoteTransfer: EmoteTransferRequest;
   /**
@@ -1451,7 +1459,8 @@ export type Mutation = {
   /** Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited. */
   createRole: Role;
   /**
-   * Create a channel set, or your personal set (one per account). With `ownerId`, for an
+   * Create a channel set. Every account has its personal set from sign-up (one per account), so
+   * `PERSONAL` answers `personal_set_exists` unless it was deleted. With `ownerId`, for an
    * account you edit with `SETS`.
    */
   createSet: EmoteSet;
@@ -1463,8 +1472,8 @@ export type Mutation = {
    */
   createWebhook: CreatedWebhook;
   /**
-   * Retired with transfer requests (ADR 0038): always `410 transfer_requests_retired`.
-   * @deprecated Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
+   * Retired with transfer requests (ADR 0039): always `410 transfer_requests_retired`.
+   * @deprecated Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
    */
   declineEmoteTransfer: EmoteTransferRequest;
   /**
@@ -1633,7 +1642,7 @@ export type Mutation = {
    */
   restrictAccount: AccountStatus;
   /**
-   * Decide the public listing, personal use or both of up to 100 emotes (ADR 0038): the main
+   * Decide the public listing, personal use or both of up to 100 emotes (ADR 0039): the main
    * queue's Approve both, each part on its own, the personal queue and the edit dialog. The
    * listing needs `emotes.review`, personal use `emotes.review_personal`; a `DENY` needs a
    * `reason` (`bad_approvals`). With `onlyPending` (default true) a part that was already
@@ -1736,7 +1745,7 @@ export type Mutation = {
   /** Send a `webhook.test` delivery now (once, no retries), even while the webhook is off. */
   testWebhook: WebhookDelivery;
   /**
-   * Move an emote to another account at once (ADR 0038, `emote.transferred`). Needs
+   * Move an emote to another account at once (ADR 0039, `emote.transferred`). Needs
    * `emotes.transfer`: anyone else, the owner included, gets `403 transfer_staff_only`.
    * The receiver must be a live account (not deleted, blocked or restricted). Both the old and
    * the new owner are notified. 60 an hour.
@@ -1791,7 +1800,9 @@ export type Mutation = {
    * is 1 to the owner's `set_capacity_max` role limit (1.000 by default; `capacity_over_limit`
    * above it), up to 1.000.000 with `sets.edit_any`, and never below the emotes the set holds
    * (`capacity_too_low`); see `setCapacityRange`. Every set is public: `visibility` other than
-   * what it is needs `sets.edit_any` (`bad_visibility`).
+   * what it is needs `sets.edit_any` (`bad_visibility`). A personal set's slots can't be changed by
+   * its owner (`forbidden`): staff with `sets.edit_any` set an override, or `resetCapacity` it
+   * away; both are audited as `set.capacity_changed`.
    */
   updateSet: EmoteSet;
   /** Rename an emote in a set, or change its zero-width flag there. */
@@ -2849,9 +2860,9 @@ export type Query = {
   /** Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`. */
   emoteNotes: Array<EmoteNote>;
   /**
-   * Retired with transfer requests (ADR 0038): always empty. Past requests and transfers are in
+   * Retired with transfer requests (ADR 0039): always empty. Past requests and transfers are in
    * the audit log.
-   * @deprecated Retired (ADR 0038): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
+   * @deprecated Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.
    */
   emoteTransferRequests: Array<EmoteTransferRequest>;
   /**
@@ -2968,7 +2979,7 @@ export type Query = {
   /**
    * Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
    * `emote.rejected`, `emote.approvals_changed` (a reviewer decided its public listing or
-   * personal use, ADR 0038: `public_listing`, `personal_use`, `reason`), `emote.transferred`,
+   * personal use, ADR 0039: `public_listing`, `personal_use`, `reason`), `emote.transferred`,
    * `emote.taken_down`, `emote.visibility_changed` (staff changed its
    * visibility, ADR 0024: `visibility` and `was`), `editor.added`, `editor.changed`, `editor.removed`,
    * `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
@@ -3033,7 +3044,7 @@ export type Query = {
   /**
    * Pending emotes, oldest first. Needs `emotes.review` (the `PERSONAL` tab also takes
    * `emotes.review_personal`). `perPage` is 1 to 100, default 50. With `filter`: one tab (not
-   * private, private, resolved, or the personal queue, ADR 0038), a search by name or
+   * private, private, resolved, or the personal queue, ADR 0039), a search by name or
    * uploader, a personal-use state, and an order. A cursor only works for the same filter (`bad_cursor`).
    * Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
    * ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
@@ -3098,7 +3109,8 @@ export type Query = {
   /**
    * What you may set a set's capacity to (`updateSet`): from the emotes it holds (at least 1)
    * to the owner's `set_capacity_max` role limit (1.000 by default), or 1.000.000 with
-   * `sets.edit_any`. Null when you can't change its capacity. Signed in.
+   * `sets.edit_any`. Null when you can't change its capacity: always for the owner of a personal
+   * set, whose slots come from their roles (3, or 10 for a subscriber; ADR 0038). Signed in.
    */
   setCapacityRange?: Maybe<SetCapacityRange>;
   /**
@@ -3700,9 +3712,9 @@ export type RestrictionKind =
 /** How many emotes wait for review, by tab. */
 export type ReviewCounts = {
   __typename?: 'ReviewCounts';
-  /** Pending and private (every upload is unlisted until its listing is approved, ADR 0038). */
+  /** Pending and private (every upload is unlisted until its listing is approved, ADR 0039). */
   limited: Scalars['Int']['output'];
-  /** Personal use pending, emote usable: the personal queue (ADR 0038). */
+  /** Personal use pending, emote usable: the personal queue (ADR 0039). */
   personal: Scalars['Int']['output'];
   /** Pending and not private: listed once its listing is approved. */
   public: Scalars['Int']['output'];
@@ -3726,7 +3738,7 @@ export type ReviewQueue = {
 export type ReviewQueueFilter = {
   /** Newest (or Z) first. Default: oldest first, except `RESOLVED`, latest review first. */
   descending?: InputMaybe<Scalars['Boolean']['input']>;
-  /** Only emotes whose personal use is in this state (ADR 0038), for example `APPROVED`. */
+  /** Only emotes whose personal use is in this state (ADR 0039), for example `APPROVED`. */
   personalUse?: InputMaybe<ApprovalState>;
   /** Part of the emote's name or of its uploader's login or display name, any case. */
   search?: InputMaybe<Scalars['String']['input']>;
@@ -3754,7 +3766,7 @@ export type ReviewTab =
   /** Every pending emote. The default. */
   | 'PENDING'
   /**
-   * The personal queue (ADR 0038): personal use pending, and the emote may be used (pending
+   * The personal queue (ADR 0039): personal use pending, and the emote may be used (pending
    * or approved). Needs `emotes.review_personal` (or `emotes.review`).
    */
   | 'PERSONAL'
@@ -3890,7 +3902,8 @@ export type SetCapacityRange = {
   min: Scalars['Int']['output'];
   /**
    * The most without a staff permission: the owner's `set_capacity_max` role limit (1.000 by
-   * default) for a channel set, 5 for a personal set, or the set's capacity if it is higher.
+   * default) for a channel set, or the set's capacity if it is higher. A personal set's owner
+   * can't change it: there `setCapacityRange` is null without `sets.edit_any`.
    */
   ownerMax: Scalars['Int']['output'];
   /**
@@ -4184,12 +4197,18 @@ export type UpdateSetEmoteInput = {
 
 export type UpdateSetInput = {
   /**
-   * 1 to the owner's `set_capacity_max` role limit (1.000 by default; 5 for a personal set),
-   * never below the emotes the set holds; up to 1.000.000 with `sets.edit_any`.
-   * `setCapacityRange` says what you may pick.
+   * 1 to the owner's `set_capacity_max` role limit (1.000 by default), never below the emotes
+   * the set holds; up to 1.000.000 with `sets.edit_any`. On a personal set this is the staff
+   * override and needs `sets.edit_any` (`forbidden` otherwise); audited. `setCapacityRange` says
+   * what you may pick.
    */
   capacity?: InputMaybe<Scalars['Int']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * Personal sets, `sets.edit_any`: drop the override, so the owner's roles decide the slots
+   * again.
+   */
+  resetCapacity?: InputMaybe<Scalars['Boolean']['input']>;
   /**
    * Every set is public: changing it needs `sets.edit_any` (staff hiding a set). Personal sets
    * can't be `PRIVATE`; the global set is always listed.
@@ -5239,7 +5258,7 @@ export type EditSetQueryVariables = Exact<{
 }>;
 
 
-export type EditSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, slotsUsed: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } | null, setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, account: { __typename?: 'AccountSummary', id: string } }>, myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }> };
+export type EditSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, capacityOverride?: number | null, slotsUsed: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } | null, setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, account: { __typename?: 'AccountSummary', id: string } }>, myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }> };
 
 export type SetEmotesQueryVariables = Exact<{
   id: Scalars['String']['input'];
@@ -5273,7 +5292,7 @@ export type UpdateSetMutationVariables = Exact<{
 }>;
 
 
-export type UpdateSetMutation = { __typename?: 'Mutation', updateSet: { __typename?: 'EmoteSet', id: string, name: string, visibility: SetVisibility, capacity: number } };
+export type UpdateSetMutation = { __typename?: 'Mutation', updateSet: { __typename?: 'EmoteSet', id: string, name: string, visibility: SetVisibility, capacity: number, capacityOverride?: number | null } };
 
 export type DeleteSetMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -8909,6 +8928,7 @@ export const EditSetDocument = new TypedDocumentString(`
     kind
     visibility
     capacity
+    capacityOverride
     slotsUsed
     owner {
       id
@@ -9025,6 +9045,7 @@ export const UpdateSetDocument = new TypedDocumentString(`
     name
     visibility
     capacity
+    capacityOverride
   }
 }
     `) as unknown as TypedDocumentString<UpdateSetMutation, UpdateSetMutationVariables>;

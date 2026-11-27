@@ -10,7 +10,7 @@
   //   right the name, the creator in their paint and the upload date, flags and tags, the
   //         actions (add to set, edit, more), a grid of facts (channels, trending, public listing and
   //         personal use), then the tabs (Channels using it, Activity, More by the creator; `?tab=`
-  //         in the address) with a pager in the tab bar. "Edit emote" opens a pop-up (ADR 0038).
+  //         in the address) with a pager in the tab bar. "Edit emote" opens a pop-up (ADR 0039).
   // Under 900px the columns stack; phones get the actions in a bar fixed to the bottom.
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';

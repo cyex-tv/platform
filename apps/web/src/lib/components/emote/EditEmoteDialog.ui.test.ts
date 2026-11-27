@@ -1,4 +1,4 @@
-// The Edit emote pop-up and the emote page around it (ADR 0038): owner fields for the owner,
+// The Edit emote pop-up and the emote page around it (ADR 0039): owner fields for the owner,
 // approvals and transfer only with their permissions, no Favourite, both approval cells in the facts
 // grid, and a personal set that stays disabled, with the reason, until personal use is approved.
 import { fireEvent, render, screen, within } from '@testing-library/svelte';

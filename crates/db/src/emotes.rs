@@ -21,7 +21,7 @@ pub struct Emote {
     pub nsfw: bool,
     pub animated: bool,
     pub state: EmoteState,
-    /// Public listing and personal use (ADR 0038). `unlisted` follows `listing_review` (a trigger).
+    /// Public listing and personal use (ADR 0039). `unlisted` follows `listing_review` (a trigger).
     pub listing_review: ApprovalState,
     pub personal_review: ApprovalState,
     pub created_at: DateTime<Utc>,
@@ -43,7 +43,7 @@ pub struct NewEmote<'a> {
 }
 
 /// Fields to change. `None` leaves a field as it is. `unlisted` is derived by a trigger from
-/// `private` and `listing_review` (ADR 0038): whatever is written to it is replaced.
+/// `private` and `listing_review` (ADR 0039): whatever is written to it is replaced.
 #[derive(Clone, Debug, Default)]
 pub struct EmotePatch<'a> {
     pub name: Option<&'a str>,
@@ -124,7 +124,7 @@ pub async fn update(conn: &mut PgConnection, id: Uuid, patch: &EmotePatch<'_>) -
     .ok_or(DbError::NotFound)
 }
 
-/// Sets an emote's state outright, with both approvals to match (ADR 0038): `approved` approves
+/// Sets an emote's state outright, with both approvals to match (ADR 0039): `approved` approves
 /// the listing and personal use, `rejected` and `taken_down` deny both, `pending` makes both
 /// pending. Takedowns use it; reviews go through [`review`], [`decide_listing`] and
 /// [`decide_personal`]. Audit and events are the caller's part.
@@ -235,7 +235,7 @@ pub async fn set_tags(conn: &mut PgConnection, id: Uuid, tags: &[String]) -> DbR
 
 /// Approves or rejects a pending emote. `None` if it isn't pending (or doesn't exist), so two
 /// moderators reviewing at once can't both win. Approving approves its public listing; rejecting
-/// denies both approvals (ADR 0038).
+/// denies both approvals (ADR 0039).
 pub async fn review(
     conn: &mut PgConnection,
     id: Uuid,
@@ -260,7 +260,7 @@ pub async fn review(
     .await?)
 }
 
-/// Decides an emote's public listing (ADR 0038): approved lists it (unless private), denied
+/// Decides an emote's public listing (ADR 0039): approved lists it (unless private), denied
 /// keeps it unlisted. Either way a pending emote becomes usable (`approved`): a denied listing
 /// still goes in channel sets by link. With `only_pending`, only while its listing is pending.
 /// `None` if nothing matched: rejected, taken down, deleted, or (with `only_pending`) decided.
@@ -290,7 +290,7 @@ pub async fn decide_listing(
     .await?)
 }
 
-/// Decides an emote's personal use (ADR 0038). Its state stays as it is. With `only_pending`,
+/// Decides an emote's personal use (ADR 0039). Its state stays as it is. With `only_pending`,
 /// only while its personal use is pending. `None` if nothing matched.
 pub async fn decide_personal(
     conn: &mut PgConnection,

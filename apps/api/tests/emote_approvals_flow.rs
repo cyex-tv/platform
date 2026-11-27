@@ -1,4 +1,4 @@
-//! Two approvals per emote (ADR 0038): uploads land unlisted with both approvals pending, owners
+//! Two approvals per emote (ADR 0039): uploads land unlisted with both approvals pending, owners
 //! can't choose listed or unlisted, `reviewApprovals` (Approve both, each part, only-pending),
 //! the personal queue, personal sets taking approved-for-personal-use emotes only, the
 //! `PERSONAL_USE` search flag, staff-only transfers and the retired request flow. Through the real
@@ -260,12 +260,14 @@ impl World {
             .collect()
     }
 
+    /// The account's personal set (every account has one, ADR 0038).
     async fn personal_set(&self, user: &User) -> String {
-        self.ok(user, CREATE_SET, json!({ "n": "Mine", "k": "PERSONAL" }))
-            .await["createSet"]["id"]
-            .as_str()
-            .unwrap()
-            .to_owned()
+        let mut conn = self.db.conn().await;
+        let set = cyex_tv_db::sets::ensure_personal(&mut conn, user.id)
+            .await
+            .unwrap();
+        drop(conn);
+        self.db.public(set.id).await
     }
 }
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   // An account's emotes in every state, newest first (accountEmotes), 20 at a time, each with its
-  // two approvals (public listing, personal use; ADR 0038). A filter narrows the loaded rows to the
+  // two approvals (public listing, personal use; ADR 0039). A filter narrows the loaded rows to the
   // ones approved (or waiting, or denied) for personal use; staff who review change the approvals
   // of one upload at a time.
   import { gql } from '$lib/api';

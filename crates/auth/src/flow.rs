@@ -256,6 +256,8 @@ impl Auth {
                         name => name,
                     };
                     sets::create_default(&mut conn, signed_in.account.id, name).await?;
+                    // And a personal set, with its slots (ADR 0038).
+                    sets::ensure_personal(&mut conn, signed_in.account.id).await?;
                 }
                 (signed_in.account.id, signed_in.created, false)
             }

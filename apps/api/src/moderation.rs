@@ -371,7 +371,7 @@ pub async fn review_queue(
 }
 
 /// Who may read a part of the queue: `emotes.review`, and for the personal queue
-/// `emotes.review_personal` too (ADR 0038).
+/// `emotes.review_personal` too (ADR 0039).
 pub(crate) fn queue_permissions(tab: reads::QueueTab) -> &'static [&'static str] {
     if tab == reads::QueueTab::Personal {
         &[
@@ -656,7 +656,7 @@ async fn review_in(
             "Only pending emotes can be approved or rejected.",
         ));
     }
-    // Approving decides the public listing (ADR 0038): approved, unless `UNLISTED` was asked for
+    // Approving decides the public listing (ADR 0039): approved, unless `UNLISTED` was asked for
     // (the old "approve as unlisted"), which denies it; `PRIVATE` / `PUBLIC` set the private flag
     // in the same step.
     let was = EmoteVisibility::of(before.private, before.unlisted);
@@ -741,7 +741,7 @@ fn approval_of(d: ApprovalDecision) -> ApprovalState {
     }
 }
 
-/// `reviewApprovals` (ADR 0038): decides the public listing, personal use or both of up to
+/// `reviewApprovals` (ADR 0039): decides the public listing, personal use or both of up to
 /// [`BATCH_MAX`] emotes in one transaction. The listing needs `emotes.review`, personal use
 /// `emotes.review_personal`; a denial needs a reason. With `onlyPending` (the default) parts that
 /// are no longer pending are skipped and an emote with nothing pending left is listed in
@@ -1104,7 +1104,7 @@ pub async fn update(
                 "`visibility` and `private` say different things.",
             )
         })?;
-    // Owners and editors choose private or not (ADR 0038): the listing is decided in review, so
+    // Owners and editors choose private or not (ADR 0039): the listing is decided in review, so
     // `PUBLIC` means "not private" and asking for `UNLISTED` is refused. Staff with
     // `emotes.flags` or `emotes.edit_any` set the listing with it, as `setEmoteFlags` does.
     let staff_listing = edit_any || has(&held, permissions::EMOTES_FLAGS);
@@ -1191,7 +1191,7 @@ pub async fn update(
     build(state, &mut conn, &after).await
 }
 
-/// The listing approval a staff visibility change means (ADR 0038): `PUBLIC` approves the listing,
+/// The listing approval a staff visibility change means (ADR 0039): `PUBLIC` approves the listing,
 /// `UNLISTED` denies it, `PRIVATE` leaves it. A pending emote's listing waits for its review.
 fn listing_for(visibility: EmoteVisibility, before: &reads::EmoteRow) -> Option<ApprovalState> {
     if before.state != EmoteState::Approved {

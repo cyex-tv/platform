@@ -414,13 +414,13 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Emotes",
         "personal_use_not_approved",
         "The emote is not approved for personal use.",
-        "Adding an emote to a personal set before its personal use is approved, or after it was denied (409, ADR 0038).",
+        "Adding an emote to a personal set before its personal use is approved, or after it was denied (409, ADR 0039).",
     ),
     e(
         "Emotes",
         "bad_approvals",
         "The review asks for nothing, or a denial has no reason.",
-        "reviewApprovals without publicListing or personalUse, or with a DENY and no reason (ADR 0038).",
+        "reviewApprovals without publicListing or personalUse, or with a DENY and no reason (ADR 0039).",
     ),
     e(
         "Emotes",
@@ -576,13 +576,13 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Transfers",
         "transfer_staff_only",
         "Only staff with emotes.transfer can change who owns an emote.",
-        "transferEmote without the emotes.transfer permission, the emote's owner included (403, ADR 0038).",
+        "transferEmote without the emotes.transfer permission, the emote's owner included (403, ADR 0039).",
     ),
     e(
         "Transfers",
         "transfer_requests_retired",
         "Transfer requests are gone: ownership can't be requested.",
-        "acceptEmoteTransfer, declineEmoteTransfer or cancelEmoteTransfer (410, ADR 0038).",
+        "acceptEmoteTransfer, declineEmoteTransfer or cancelEmoteTransfer (410, ADR 0039).",
     ),
     e(
         "Transfers",

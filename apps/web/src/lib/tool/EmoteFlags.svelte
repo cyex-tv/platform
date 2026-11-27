@@ -1,5 +1,5 @@
 <script lang="ts">
-  // An emote's two creator flags (ADR 0038): Overlaying (zero-width) and Private (only their own
+  // An emote's two creator flags (ADR 0039): Overlaying (zero-width) and Private (only their own
   // channel). Nobody chooses listed or unlisted: every emote is unlisted until a moderator approves
   // its public listing, so `visibility` here is only PRIVATE or not (PUBLIC means "not private").
   // NSFW is no flag: NSFW emotes aren't allowed on cyex.tv.

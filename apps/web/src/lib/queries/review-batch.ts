@@ -17,7 +17,7 @@ export const REVIEW_EMOTES = graphql(`
   }
 `);
 
-// Both approvals of an upload (ADR 0038): the public listing and personal use, in one call for one
+// Both approvals of an upload (ADR 0039): the public listing and personal use, in one call for one
 // emote or many. Queues send `onlyPending` at its default; the account page's approvals change a
 // decision already made (`onlyPending: false`).
 export const REVIEW_APPROVALS = graphql(`

@@ -1,4 +1,4 @@
-// The mock's two approvals per emote (ADR 0038): uploads start unlisted and pending, reviewApprovals
+// The mock's two approvals per emote (ADR 0039): uploads start unlisted and pending, reviewApprovals
 // decides the listing and personal use apart, the personal queue and its count, the PERSONAL_USE
 // search flag, personal sets taking only approved emotes, and transfers by staff alone.
 import { spawn } from 'node:child_process';
@@ -120,8 +120,8 @@ describe('personal sets and transfers', () => {
     const queue = (await gql(QUEUE, { filter: { tab: 'PERSONAL' } })).data.reviewQueue;
     const waiting = queue.items[0]?.id;
     expect(waiting).toBeTruthy();
-    const made = await gql(`mutation CreateSet($input: CreateSetInput!) { createSet(input: $input) { id } }`, { input: { name: 'Personal', kind: 'PERSONAL', visibility: 'UNLISTED' } });
-    const setId = made.data?.createSet?.id;
+    // Every account has its personal set already (ADR 0038, personal set slots).
+    const setId = '01JD8XSET0000000000PERSONME';
     expect(setId).toBeTruthy();
     const add = await gql(`mutation AddSetEmote($setId: String!, $emoteId: String!) { addSetEmote(setId: $setId, emoteId: $emoteId) { name } }`, { setId, emoteId: waiting });
     expect(code(add)).toBe('personal_use_not_approved');

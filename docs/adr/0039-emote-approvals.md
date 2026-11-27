@@ -1,7 +1,8 @@
-# 0038: Two approvals per emote: public listing and personal use
+# 0039: Two approvals per emote: public listing and personal use
 
 - Status: accepted (owner decisions of 2026/11/27)
 - Date: 2026/11/27
+- Builds on: 0038 (personal set slots)
 - Amends: 0010 (two permissions), 0014 (transfers), 0020 (who decides the listing), 0022 (favourites on the emote page), 0024 (the queue and the flags panel)
 
 ## Context
@@ -33,6 +34,7 @@ Until now one review decided everything: an approved emote was public (on search
 
 **Personal sets**
 - A personal set takes only emotes approved for personal use (and approved): anything else is `409 personal_use_not_approved` ("This emote isn't approved for personal use yet." / "… was not approved for personal use."). The website disables Add to personal set with that reason.
+- The check sits in the same add-member step as the personal set's slot count (ADR 0038, personal set slots): an unapproved emote is refused before the slots are counted, so it never reads as `set_full`.
 - **Existing members that aren't approved are kept**, so nobody's chat changes overnight, and each is flagged (`approvals.personalUse` is pending or denied) on the set page. They sit in the personal queue, and staff decide them there.
 
 **Migration of existing emotes**

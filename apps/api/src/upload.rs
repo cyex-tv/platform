@@ -139,7 +139,7 @@ pub struct Flags {
     pub unlisted: bool,
 }
 
-/// `400 bad_visibility`: uploaders don't choose listed or unlisted (ADR 0038). Every emote is
+/// `400 bad_visibility`: uploaders don't choose listed or unlisted (ADR 0039). Every emote is
 /// unlisted until a moderator approves its public listing; its owner only makes it private.
 pub fn unlisted_staff_only() -> ApiError {
     ApiError::new(

@@ -203,7 +203,7 @@ async fn tabs_search_and_order() {
     let body = w.gql(Some(&mod_), QUEUE, json!({})).await;
     assert_eq!(
         body["data"]["reviewQueue"]["counts"],
-        // ADR 0038: every pending non-private emote is unlisted, so LinkOnly is "public" too.
+        // ADR 0039: every pending non-private emote is unlisted, so LinkOnly is "public" too.
         json!({ "public": 3, "limited": 1, "personal": 0 })
     );
 
@@ -304,7 +304,7 @@ async fn approve_as_unlisted_or_private() {
         .await;
     assert_eq!(r["data"]["approveEmote"]["visibility"], "PRIVATE");
     assert_eq!(r["data"]["approveEmote"]["flags"]["private"], true);
-    // No visibility: the listing is approved (ADR 0038), so it is public whatever was asked at upload.
+    // No visibility: the listing is approved (ADR 0039), so it is public whatever was asked at upload.
     let r = w.gql(Some(&mod_), APPROVE, json!({ "id": c })).await;
     assert_eq!(r["data"]["approveEmote"]["visibility"], "PUBLIC");
 

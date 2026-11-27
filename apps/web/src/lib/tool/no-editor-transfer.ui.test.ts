@@ -31,7 +31,7 @@ describe('no transfer for editors', () => {
   });
 
   it('nothing on the site asks for, accepts, declines or cancels a transfer request', () => {
-    // The developer docs name the retired operations to say they are gone (ADR 0038).
+    // The developer docs name the retired operations to say they are gone (ADR 0039).
     for (const [f, text] of source) {
       if (f.includes('/lib/docs/')) continue;
       expect(text, f).not.toMatch(/ACCEPT_EMOTE_TRANSFER|DECLINE_EMOTE_TRANSFER|CANCEL_EMOTE_TRANSFER|EMOTE_TRANSFER_REQUESTS|acceptEmoteTransfer|emoteTransferRequests/);

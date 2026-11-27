@@ -1,4 +1,4 @@
-//! Moving an emote to another account (ADR 0014; ADR 0038).
+//! Moving an emote to another account (ADR 0014; ADR 0039).
 //!
 //! - **Who may move it:** staff with `emotes.transfer`, directly, to any live account. Nobody can
 //!   ask for an emote, and its owner can't give it away either (`transfer_staff_only`).
@@ -26,9 +26,9 @@ use crate::moderation::{announce, build, restricted, row};
 use crate::state::AppState;
 use crate::views;
 
-/// What anyone without `emotes.transfer` hears from `transferEmote` (ADR 0038).
+/// What anyone without `emotes.transfer` hears from `transferEmote` (ADR 0039).
 pub const STAFF_ONLY: &str = "Only cyex.tv staff can change who owns an emote. Ownership can't be requested or given away; contact support if an emote should move.";
-/// What the retired request mutations answer (ADR 0038).
+/// What the retired request mutations answer (ADR 0039).
 pub const REQUESTS_RETIRED: &str = "Transfer requests are gone: ownership can't be requested. Only staff can move an emote to another account.";
 
 fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
@@ -184,12 +184,12 @@ async fn move_emote(
     Ok(())
 }
 
-/// `403 transfer_staff_only`: nobody but staff with `emotes.transfer` moves an emote (ADR 0038).
+/// `403 transfer_staff_only`: nobody but staff with `emotes.transfer` moves an emote (ADR 0039).
 pub fn staff_only() -> ApiError {
     ApiError::new(StatusCode::FORBIDDEN, "transfer_staff_only", STAFF_ONLY)
 }
 
-/// `410 transfer_requests_retired`: the request flow is gone (ADR 0038).
+/// `410 transfer_requests_retired`: the request flow is gone (ADR 0039).
 pub fn requests_retired() -> ApiError {
     crate::meta::note(crate::meta::EMOTE_TRANSFER_REQUESTS);
     ApiError::new(
@@ -200,7 +200,7 @@ pub fn requests_retired() -> ApiError {
 }
 
 /// `transferEmote`: staff with `emotes.transfer` give any emote to another account, at once
-/// (ADR 0038). Anyone else, the owner included, is refused (`transfer_staff_only`); an emote they
+/// (ADR 0039). Anyone else, the owner included, is refused (`transfer_staff_only`); an emote they
 /// can't see answers `not_found`.
 pub async fn transfer(
     state: &AppState,
@@ -282,7 +282,7 @@ pub async fn withdraw_open(state: &AppState) -> ApiResult<usize> {
     Ok(closed.len())
 }
 
-/// `emoteTransferRequests`: always empty. Transfer requests are retired (ADR 0038); the history
+/// `emoteTransferRequests`: always empty. Transfer requests are retired (ADR 0039); the history
 /// stays in the audit log.
 pub fn open_requests(
     _caller: &Caller,
@@ -297,7 +297,7 @@ pub fn open_requests(
     Ok(Vec::new())
 }
 
-/// `acceptEmoteTransfer`, `declineEmoteTransfer` and `cancelEmoteTransfer`: retired (ADR 0038).
+/// `acceptEmoteTransfer`, `declineEmoteTransfer` and `cancelEmoteTransfer`: retired (ADR 0039).
 /// The same `410 transfer_requests_retired` for every ID, so nothing can be probed.
 pub fn retired_request<T>(state: &AppState, caller: &Caller, id: &str) -> ApiResult<T> {
     parse_id(id)?;

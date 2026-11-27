@@ -3,7 +3,7 @@
   // keys), its kind, name, uploader, flags and tags, the picture at every size chat uses with its
   // dimensions and weight, and two tabs: Activity (what happened to it, with date and time) and
   // Notes (what reviewers tell each other). Reject and Approve both sit at the bottom with the
-  // single approvals and denials (public listing, personal use, ADR 0038) between them. A approves
+  // single approvals and denials (public listing, personal use, ADR 0039) between them. A approves
   // (both), L the listing, P personal use, D and N deny the listing or personal use, R rejects, S
   // skips to the next; after a verdict the page opens the next one. Under the facts, "Possible duplicates": other emotes from the very same
   // file, then ones with a close name (emoteDuplicates), each opening in a new tab.
@@ -52,7 +52,7 @@
 
   let dialog: HTMLDialogElement;
   let tab = $state<'activity' | 'notes' | 'approvals'>('activity');
-  // Staff change a reviewed upload's approvals here (ADR 0038).
+  // Staff change a reviewed upload's approvals here (ADR 0039).
   const approvalTab = $derived(resolved && (can('emotes.review') || can('emotes.review_personal')));
   $effect(() => {
     if (!approvalTab && tab === 'approvals') tab = 'activity';

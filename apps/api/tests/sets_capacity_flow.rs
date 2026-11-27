@@ -391,15 +391,13 @@ async fn capacity_is_one_to_the_owners_limit_and_never_below_what_it_holds() {
         "capacity_over_limit"
     );
 
-    // A personal set stays 1 to 5 for its owner.
+    // A personal set's owner can't change its slots at all (ADR 0038; `personal_set_slots_flow`).
     let r = w.set(&alice, "Mine", "PERSONAL", None).await;
     let personal = r["data"]["createSet"]["id"].as_str().unwrap().to_owned();
-    let r = w.capacity(&alice, &personal, 2).await;
-    assert_eq!(r["data"]["updateSet"]["capacity"], 2, "{r}");
-    assert_eq!(
-        code(&w.capacity(&alice, &personal, 6).await),
-        "capacity_over_limit"
-    );
+    assert_eq!(r["data"]["createSet"]["capacity"], 3, "{r}");
+    assert_eq!(code(&w.capacity(&alice, &personal, 2).await), "forbidden");
+    let r = w.gql(&alice, RANGE, json!({ "id": personal })).await;
+    assert!(r["data"]["setCapacityRange"].is_null(), "{r}");
     w.db.close().await;
 }
 

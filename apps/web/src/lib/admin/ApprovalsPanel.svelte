@@ -1,5 +1,5 @@
 <script lang="ts">
-  // An upload's two approvals (ADR 0038) for staff, after the first verdict: public listing and
+  // An upload's two approvals (ADR 0039) for staff, after the first verdict: public listing and
   // personal use, each with its state and an Approve / Deny that changes it (reviewApprovals with
   // onlyPending false, audited, the owner is told). A denial asks for a reason the owner sees. It
   // replaces the old Emote flags panel in the review detail and on the account page. A reviewer
