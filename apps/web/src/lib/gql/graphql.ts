@@ -3216,7 +3216,8 @@ export type Query = {
   /**
    * Several sets at once, in the order asked, each once (ADR 0035): who may see what is the
    * rule of `set`, and unknown or hidden sets are left out. At most 25 IDs (`too_many`); one
-   * call costs what that many `set` lookups would.
+   * call costs what that many `set` lookups would, in complexity and in the public reads
+   * limit (one read per ID, as `POST /v1/sets/lookup`; `rate_limited` past it).
    */
   sets: Array<EmoteSet>;
   /** One shop item: on sale for everyone; any, deleted ones too, with `shop.manage`. */

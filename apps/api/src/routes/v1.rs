@@ -32,6 +32,7 @@ use sha2::{Digest, Sha256};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::read_cache::{self, Body};
@@ -814,7 +815,9 @@ async fn get_set(
 }
 
 /// Several sets at once, in the order asked (ADR 0035): what `GET /v1/sets/{id}` answers for
-/// each, approved emotes only. Unknown and hidden sets are left out. Counts as one read.
+/// each, approved emotes only. Unknown and hidden sets are left out. Counts as one read per ID
+/// sent (the same as asking for each set on its own), and each set comes from the same
+/// per-instance cache as `GET /v1/sets/{id}`.
 #[utoipa::path(
     post,
     path = "/v1/sets/lookup",
@@ -827,8 +830,10 @@ async fn get_set(
 )]
 async fn lookup_sets(
     State(state): State<AppState>,
+    ip: Option<axum::Extension<crate::limits::ClientIp>>,
+    key: Option<axum::Extension<crate::developers::KeyUse>>,
     Json(lookup): Json<SetsLookup>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Response> {
     if lookup.ids.len() > catalog::SETS_LOOKUP_LIMIT {
         return Err(catalog::too_many_ids(
             "sets",
@@ -836,11 +841,70 @@ async fn lookup_sets(
             lookup.ids.len(),
         ));
     }
+    let ip = ip.map(|axum::Extension(ip)| ip.0).unwrap_or_default();
+    let key = key.map(|axum::Extension(k)| k);
+    // The request itself took one read; the other IDs take one each.
+    let quota = match crate::limits::take_reads(&state, &ip, key.as_ref(), lookup.ids.len(), 1) {
+        Ok(quota) => quota,
+        Err((wait, quota)) => return Ok(crate::limits::too_many_quota(wait, quota)),
+    };
     let ids = crate::public_ids::canonical_many(&state, &lookup.ids).await?;
-    let sets = catalog::sets_by_ids(&state, None, &ids).await?;
-    Ok(Json(
-        crate::public_ids::publish(&state, &SetsLookupResult { sets }).await?,
-    ))
+    let bodies = cached_sets(&state, &ids).await?;
+    let mut json = b"{\"sets\":[".to_vec();
+    for (i, body) in bodies.iter().enumerate() {
+        if i > 0 {
+            json.push(b',');
+        }
+        json.extend_from_slice(&body.json);
+    }
+    json.extend_from_slice(b"]}");
+    let mut response = ([(CONTENT_TYPE, "application/json")], json).into_response();
+    if let Some(quota) = quota {
+        crate::limits::set_quota(response.headers_mut(), quota);
+    }
+    Ok(response)
+}
+
+/// The sets `GET /v1/sets/{id}` would answer for `ids` (in order, each once, unknown and hidden
+/// ones left out), through the read cache: the ones cached already are served from it, the rest
+/// are loaded together (`catalog::sets_by_ids`, a fixed handful of queries) and kept there under
+/// the same keys, so a following `GET /v1/sets/{id}` is served from them too.
+async fn cached_sets(state: &AppState, ids: &[String]) -> ApiResult<Vec<Arc<Body>>> {
+    let wanted = catalog::distinct_ids(ids);
+    let mut found: Vec<Option<read_cache::Cached>> = wanted
+        .iter()
+        .map(|id| state.reads.peek(&read_cache::set_key(*id)))
+        .collect();
+    let missing: Vec<String> = wanted
+        .iter()
+        .zip(&found)
+        .filter(|(_, cached)| cached.is_none())
+        .map(|(id, _)| cyex_tv_db::ids::to_text(*id))
+        .collect();
+    if !missing.is_empty() {
+        let loaded = catalog::sets_by_ids(state, None, &missing).await?;
+        // Snowflake IDs (ADR 0027) for the whole batch at once, then each set's body as
+        // `shared_read` builds it.
+        let published = crate::public_ids::publish(state, &loaded).await?;
+        let published = published.as_array().cloned().unwrap_or_default();
+        let mut by_id: HashMap<String, serde_json::Value> = loaded
+            .iter()
+            .map(|set| set.id.clone())
+            .zip(published)
+            .collect();
+        for (id, slot) in wanted.iter().zip(found.iter_mut()) {
+            if slot.is_some() {
+                continue;
+            }
+            let body = match by_id.remove(&cyex_tv_db::ids::to_text(*id)) {
+                Some(value) => Some(built(&value)?),
+                None => None,
+            };
+            state.reads.put(&read_cache::set_key(*id), body.clone());
+            *slot = Some(body);
+        }
+    }
+    Ok(found.into_iter().flatten().flatten().collect())
 }
 
 /// Several channels of one platform at once, in the order asked (ADR 0035): what
