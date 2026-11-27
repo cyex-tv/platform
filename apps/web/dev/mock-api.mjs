@@ -18,6 +18,7 @@ import { inward, outward, inwardId, registerAll } from './snowflake.mjs';
 import { withFileUrls } from './mock/file-urls.mjs';
 import { ADMIN_ENV, BASE, ME_ID, ME_SUMMARY, OPEN_ENV, ORIGIN, OWNERS, PORT } from './mock/config.mjs';
 import { avatar, picture } from './mock/art.mjs';
+import { emoteAs } from './mock/merge.mjs';
 import { ALL, MINE, emote, nextUpload, trendAdds, trendPool, twitchUrl, wideOf } from './mock/emotes.mjs';
 import { CHANNELS, IDENTITIES, NOTES, PENDING_DELETION, RESTORE_COOKIE, accountHub, endConsoleToken, mintConsoleToken, setPendingDeletion, setRestoreCookie } from './mock/account.mjs';
 import { SETS } from './mock/set-data.mjs';
@@ -156,7 +157,7 @@ function baseAnswer(body, session, admin) {
     if (!p) return badCursor();
     return { data: { searchEmotes: { total: hits.length, ...p } } };
   }
-  if (q.includes('query Emote(')) return { data: { emote: ALL.find((e) => e.id === v.id) ?? null } };
+  if (q.includes('query Emote(')) return { data: { emote: emoteAs(v.id, (id) => ALL.find((e) => e.id === id)) } };
   if (q.includes('query Channel')) {
     const c = channelByLogin(v.platform, v.login);
     return { data: { channelByLogin: c } };

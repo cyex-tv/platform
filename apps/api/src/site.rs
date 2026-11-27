@@ -402,6 +402,8 @@ pub const NOTIFICATION_KINDS: &[(&str, bool)] = &[
     ("emote.transferred", false),
     ("emote.transfer_declined", false),
     ("emote.transfer_cancelled", false),
+    // Staff merged an emote of yours into another, or another into yours (ADR 0040).
+    ("emote.merged", false),
     ("editor.added", false),
     ("editor.changed", false),
     ("editor.removed", false),

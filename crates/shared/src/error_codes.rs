@@ -585,6 +585,24 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Give the editor's account ID, or a platform and a login.",
     ),
     e(
+        "Emotes",
+        "merge_into_self",
+        "An emote can't be merged into itself.",
+        "mergeEmote or emoteMergePreview where the target is the source, or was merged into it (400, ADR 0040).",
+    ),
+    e(
+        "Emotes",
+        "merge_target_unavailable",
+        "That emote can't take another's place: it is deleted, waiting for review, rejected or taken down.",
+        "mergeEmote or emoteMergePreview into an emote that isn't approved (409, ADR 0040).",
+    ),
+    e(
+        "Emotes",
+        "already_merged",
+        "This emote was merged into another already.",
+        "mergeEmote or emoteMergePreview on an emote that was merged (409, ADR 0040); its ID answers the target.",
+    ),
+    e(
         "Transfers",
         "transfer_staff_only",
         "Only staff with emotes.transfer can change who owns an emote.",

@@ -777,6 +777,12 @@ pub struct Emote {
     #[serde(default)]
     #[schema(required = false)]
     pub channel_count: u32,
+    /// Set only on an answer for an emote that was merged into another (ADR 0040): the ID of
+    /// the emote that took its place (the final one), whose name, files and the rest this answer
+    /// carries. Go to that ID. REST answers a merged ID with `301` to the target instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(required = false)]
+    pub merged_into: Option<String>,
 }
 
 /// Multipart upload (REST only): the image file, its name, and optionally its tags and flags.
@@ -1355,6 +1361,49 @@ pub enum ReviewVerdict {
 pub struct BatchOutcome {
     pub done: Vec<String>,
     pub failed: Vec<BatchFailure>,
+}
+
+/// A set that held both emotes of a merge (ADR 0040): the source's membership is dropped and the
+/// target's kept, with its own name.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct MergeCollapse {
+    pub set_id: String,
+    pub set_name: String,
+    /// The target's name in the set: kept.
+    pub kept_name: String,
+    /// The source's name in the set: dropped. When it differs from `keptName`, chat in that
+    /// set now types the target's name.
+    pub dropped_name: String,
+}
+
+/// What `mergeEmote` would do (`emoteMergePreview`, ADR 0040).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EmoteMergePreview {
+    pub source: Emote,
+    /// The emote that takes the source's place: the one asked for, or, when that was merged
+    /// itself, the final one it went to (`followed`).
+    pub target: Emote,
+    /// True when the emote asked for had been merged, and `target` is where it went.
+    pub followed: bool,
+    /// Set memberships of the source that will name the target, each with its name kept.
+    pub moves: u32,
+    /// Sets that already hold the target: the source's membership is dropped there.
+    pub collapses: Vec<MergeCollapse>,
+}
+
+/// What `mergeEmote` did (ADR 0040).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EmoteMergeResult {
+    /// The retired emote: its ID now answers the target (`mergedInto`).
+    pub source_id: String,
+    pub target: Emote,
+    /// Set memberships that now name the target, each with its name kept.
+    pub moved: u32,
+    /// Sets that held both: the source's membership was dropped, the target's kept.
+    pub collapsed: Vec<MergeCollapse>,
 }
 
 /// One item a batch left alone.

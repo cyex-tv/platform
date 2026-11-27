@@ -12,7 +12,7 @@ import { EDITOR_CHANNELS, EDITOR_OF, PUBLIC_SETS, SHARED_SETS, coversSet, flagsO
 export const STAFF_EDITORS = {};
 export const findEmote = (id) => MINE.find((e) => e.id === id) ?? ALL.find((e) => e.id === id);
 export const findSet = (id) => SETS.find((s) => s.id === id) ?? SHARED_SETS.find((s) => s.id === id) ?? PUBLIC_SETS.find((s) => s.id === id);
-const ALL_SETS = () => [...SETS, ...SHARED_SETS, ...PUBLIC_SETS];
+export const ALL_SETS = () => [...SETS, ...SHARED_SETS, ...PUBLIC_SETS];
 // Every set is public (ADR 0017, amendment 2026/11/22): the migration listed every unlisted and
 // private set. Only staff can take one off the listings now.
 for (const s of ALL_SETS()) s.visibility = 'LISTED';

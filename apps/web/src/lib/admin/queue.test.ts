@@ -156,6 +156,11 @@ group('approvals history lines (ADR 0039)', () => {
     expect(describe(e('emote.approved', {}, { state: 'approved', public_listing: 'denied', personal_use: 'pending', reason: 'Off topic' })).text).toBe('Public listing denied: Off topic');
     expect(describe(e('emote.approved', {}, { state: 'approved', visibility: 'unlisted' })).text).toBe('Approved as unlisted');
   });
+  it('says what a merge did', () => {
+    const after = { source_name: 'Pogg', target_name: 'Pog', moved: 12, collapsed: [{ set_id: 's', kept_name: 'Pog', dropped_name: 'Pogg' }] };
+    expect(describe(e('emote.merged', null, after)).text).toBe('Merged Pogg into Pog (12 moved, 1 already had it)');
+    expect(describe(e('emote.merged', null, null)).text).toBe('Merged into another emote');
+  });
   it('says staff transferred it', () => {
     expect(describe(e('emote.transferred', { owner: 'a' }, { owner: 'b', via: 'emotes.transfer' })).text).toBe('Transferred to another account by staff');
     expect(describe(e('emote.transferred', null, null)).text).toBe('Transferred to another account');

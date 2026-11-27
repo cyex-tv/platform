@@ -84,7 +84,7 @@ export const editorChannels = () => EDITOR_CHANNELS.filter((c) => EDITOR_OF.some
 export const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : withImplied(EDITOR_OF.find((g) => g.account.id === ownerId)?.permissions ?? []));
 export const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
-export const PERMISSIONS = ['emotes.review', 'emotes.review_personal', 'emotes.transfer', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
+export const PERMISSIONS = ['emotes.review', 'emotes.review_personal', 'emotes.transfer', 'emotes.merge', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
   'roles.assign', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block', 'users.sessions', 'users.notes', 'entitlements.view', 'billing.view', 'subscriptions.manage',
   'emotes.delete_any', 'editors.manage_any', 'site.announce', 'review.settings', 'emotes.flags', 'emotes.upload', 'reports.file'];
 

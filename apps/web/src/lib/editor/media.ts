@@ -295,3 +295,61 @@ export function encodeDoc(d: Doc, sources: readonly ImageBitmap[], opts: EncodeO
     })();
   });
 }
+
+/**
+ * Encodes already decoded frames (an import's `bitmaps` and `delays` in ms) as a GIF, in the
+ * worker. The bitmaps are copied, so the caller keeps (and closes) its own. GIF has 1-bit
+ * transparency and delays in hundredths of a second (never under 20 ms).
+ */
+export function encodeFrames(bitmaps: readonly ImageBitmap[], delays: readonly number[], width: number, height: number, format: 'gif', progress: (done: number, total: number) => void, signal: AbortSignal): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const id = nextId++;
+    const n = bitmaps.length;
+    const out = n === 1 ? [0] : gifDelays(delays).map((cs) => cs * 10);
+    let acked = 0;
+    let sent = 0;
+    let wake: (() => void) | null = null;
+    const stop = () => {
+      handlers.delete(id);
+      signal.removeEventListener('abort', abort);
+      wake?.();
+    };
+    const abort = () => {
+      stop();
+      worker?.postMessage({ type: 'cancel', id } satisfies WorkerIn);
+      reject(new Cancelled());
+    };
+    if (signal.aborted) return reject(new Cancelled());
+    signal.addEventListener('abort', abort, { once: true });
+    handlers.set(id, (m) => {
+      if (m.type === 'progress') {
+        acked = m.done;
+        progress(acked, n);
+        wake?.();
+      } else if (m.type === 'encoded') {
+        stop();
+        resolve(m.blob);
+      } else if (m.type === 'error') {
+        stop();
+        reject(new Error(m.message));
+      }
+    });
+    send({ type: 'encode-start', id, format, width, height, quality: 1, count: n });
+    void (async () => {
+      try {
+        for (let i = 0; i < n; i++) {
+          // At most 4 frames waiting in the worker.
+          while (sent - acked >= 4 && handlers.has(id)) await new Promise<void>((r) => (wake = r));
+          if (!handlers.has(id)) return;
+          const copy = await createImageBitmap(bitmaps[i]);
+          send({ type: 'encode-frame', id, bitmap: copy, delay: out[i] }, [copy]);
+          sent++;
+        }
+        send({ type: 'encode-end', id });
+      } catch (e) {
+        stop();
+        reject(e);
+      }
+    })();
+  });
+}

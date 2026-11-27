@@ -20,6 +20,7 @@ pub mod errors;
 pub mod gql;
 pub mod idempotency;
 pub mod limits;
+pub mod merge;
 pub mod meta;
 pub mod moderation;
 pub mod paddle;

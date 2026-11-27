@@ -75,6 +75,15 @@ export function describe(e: HistoryEntry): { text: string; detail?: string } {
       return { text: approvalText(before, after) || 'Changed the approvals' };
     case 'emote.transferred':
       return { text: after.via === 'emotes.transfer' ? 'Transferred to another account by staff' : 'Transferred to another account' };
+    case 'emote.merged': {
+      const src = typeof after.source_name === 'string' ? after.source_name : '';
+      const tgt = typeof after.target_name === 'string' ? after.target_name : '';
+      const moved = typeof after.moved === 'number' ? after.moved : null;
+      const dup = Array.isArray(after.collapsed) ? after.collapsed.length : 0;
+      const what = src && tgt ? `Merged ${src} into ${tgt}` : 'Merged into another emote';
+      const bits = [moved !== null ? `${moved} moved` : '', dup ? `${dup} already had it` : ''].filter(Boolean);
+      return { text: bits.length ? `${what} (${bits.join(', ')})` : what };
+    }
     case 'emote.rejected':
       return { text: 'Rejected', detail: reason };
     case 'emote.resubmitted':

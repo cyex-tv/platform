@@ -1291,6 +1291,9 @@
               }
             }
           },
+          "301": {
+            "description": "The emote was merged into another (ADR 0040): `Location` is `/v1/emotes/{id}` of the emote that took its place. Follow it."
+          },
           "304": {
             "description": "Not modified."
           },
@@ -2239,6 +2242,13 @@
             "type": "string",
             "description": "The emote's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input."
           },
+          "merged_into": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set only on an answer for an emote that was merged into another (ADR 0040): the ID of\nthe emote that took its place (the final one), whose name, files and the rest this answer\ncarries. Go to that ID. REST answers a merged ID with `301` to the target instead."
+          },
           "name": {
             "type": "string"
           },
@@ -2615,6 +2625,9 @@
           "no_permissions",
           "retired_permission",
           "bad_editor",
+          "merge_into_self",
+          "merge_target_unavailable",
+          "already_merged",
           "transfer_staff_only",
           "transfer_requests_retired",
           "same_owner",
@@ -3217,6 +3230,24 @@
             "group": "Editors",
             "meaning": "The editor is not identified properly.",
             "when": "Give the editor's account ID, or a platform and a login."
+          },
+          {
+            "code": "merge_into_self",
+            "group": "Emotes",
+            "meaning": "An emote can't be merged into itself.",
+            "when": "mergeEmote or emoteMergePreview where the target is the source, or was merged into it (400, ADR 0040)."
+          },
+          {
+            "code": "merge_target_unavailable",
+            "group": "Emotes",
+            "meaning": "That emote can't take another's place: it is deleted, waiting for review, rejected or taken down.",
+            "when": "mergeEmote or emoteMergePreview into an emote that isn't approved (409, ADR 0040)."
+          },
+          {
+            "code": "already_merged",
+            "group": "Emotes",
+            "meaning": "This emote was merged into another already.",
+            "when": "mergeEmote or emoteMergePreview on an emote that was merged (409, ADR 0040); its ID answers the target."
           },
           {
             "code": "transfer_staff_only",

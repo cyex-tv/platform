@@ -118,6 +118,7 @@ export const ADMIN_PERMISSIONS = [
   'emotes.flags',
   'emotes.review_personal',
   'emotes.transfer',
+  'emotes.merge',
 ];
 
 /** Whether the account may open any part of the admin pages. */

@@ -3,13 +3,14 @@ import { ApiError, gql } from '$lib/api';
 import { channelsUsing, moreBy, trendingOf } from '$lib/components/emote/data';
 import type { PageEmote } from '$lib/components/emote/emote-page';
 import { legacyRedirect } from '$lib/ids';
+import { mergedPath } from '$lib/components/emote/merge';
 import { EMOTE } from '$lib/queries';
 import { emoteMeta, missingMeta } from '$lib/meta';
 import { unreachableMessage } from '$lib/components/problem';
 import type { PageLoad } from './$types';
 
 export const load: PageLoad = async ({ fetch, params, url }) => {
-  let found: PageEmote | null;
+  let found: (PageEmote & { mergedInto?: string | null }) | null;
   try {
     found = (await gql(EMOTE, { id: params.id }, fetch)).emote ?? null;
   } catch (e) {
@@ -19,6 +20,8 @@ export const load: PageLoad = async ({ fetch, params, url }) => {
   // back as nothing to it; the page asks again from the browser before it says
   // the emote isn't there.
   if (!found) return { id: params.id, emote: null, more: [], channels: null, trending: null, meta: missingMeta(`/emotes/${encodeURIComponent(params.id)}`, 'No emote here') };
+  // A merged emote's address answers the emote it was merged into (ADR 0040): go there, query kept.
+  if (found.mergedInto) redirect(301, mergedPath(found.mergedInto, url.search));
   // An old link with the emote's ULID goes to its snowflake address (the query stays; the browser keeps the #hash).
   const moved = legacyRedirect('emotes', params.id, found.id, url.search);
   if (moved) redirect(308, moved);
