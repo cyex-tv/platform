@@ -217,19 +217,10 @@ impl World {
                 json!({}),
             )
             .await;
-        let Some(set) = made["data"]["createSet"]["id"].as_str() else {
-            // TEMP: the database's own answer
-            let mut conn = self.db.conn().await;
-            let probe = cyex_tv_db::sets::create(
-                &mut conn,
-                owner.id,
-                "Probe",
-                cyex_tv_shared::model::SetKind::Channel,
-            )
-            .await;
-            panic!("{made} {probe:?}");
-        };
-        let set = set.to_owned();
+        let set = made["data"]["createSet"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{made}"))
+            .to_owned();
         let r = self
             .gql(
                 owner,

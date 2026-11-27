@@ -87,7 +87,13 @@ pub struct NewMember<'a> {
     pub added_by: Option<Uuid>,
 }
 
-const SET: &str = "id, owner_account_id, name, kind, capacity, created_at, updated_at, visibility, \n                   version, change_floor";
+/// The columns of a [`Set`]. `capacity` of a personal set is read through `personal_set_capacity`
+/// (ADR 0038): the staff override, else the owner's `personal_set_slots` role limit, else 3.
+const SET: &str = "id, owner_account_id, name, kind,
+                   CASE WHEN kind = 'personal'
+                        THEN personal_set_capacity(owner_account_id, capacity_override)
+                        ELSE capacity END AS capacity,
+                   capacity_override, created_at, updated_at, visibility, version, change_floor";
 const MEMBER: &str = "set_id, emote_id, name, zero_width, added_by, added_at";
 const EDITOR: &str = "set_id, account_id, granted_by, granted_at";
 
