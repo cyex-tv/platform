@@ -401,6 +401,7 @@ export const guides: Guide[] = [
         ['1x_static.webp', 'Animated emotes: the first frame, for reduced motion or a paused chat.'],
       ),
       p('The host is the hash of the picture, so a file never changes once it exists. The CDN sends them with `Cache-Control: public, max-age=31536000, immutable`: cache files for good. The API’s own reads (sets, channels, emote objects) are the opposite: they change, so they carry an `ETag` and a short `max-age`, set per route; see [Caching](#caching).'),
+      p('**Any listed width, once enabled.** The CDN can also resize a picture file on request: add `?w=` (one of 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256, 320, 384, 448, 512, 640, 768 or 1024) and optionally `?format=` (`webp`, `avif`, or `auto` for AVIF when your `Accept` header takes it) to any emote, badge or paint file URL, for example `<url>?w=48&format=auto`. It is never wider than the file, keeps the animation, and is cached as immutably as the file itself. Other widths, other parameters or other paths answer `400`. This isn’t switched on yet: until it is, the parameters are ignored and the file comes back at its own size, so it is safe to send them now. The fixed files (`1x` … `4x`, `128`, `original`) stay as they are.'),
       note('A zero-width emote draws over the emote before it, not beside it.'),
     ],
   },
