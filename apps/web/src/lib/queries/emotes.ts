@@ -103,6 +103,7 @@ export const EMOTE = graphql(`
   query Emote($id: String!) {
     emote(id: $id) {
       ...EmoteFields
+      mergedInto
     }
   }
 `);

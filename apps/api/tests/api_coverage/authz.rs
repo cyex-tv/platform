@@ -117,6 +117,8 @@ const STAFF: &[&str] = &[
     "unassignRole",
     "reviewEmotes",
     "reviewApprovals",
+    "emoteMergePreview",
+    "mergeEmote",
     "requeueEmotes",
     "setEmoteFlags",
     "dismissReports",

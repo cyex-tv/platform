@@ -180,6 +180,9 @@ pub fn is_id_key(key: &str) -> bool {
         // Who did something: `addedBy`, `createdBy`, `grantedBy`, `requested_by`.
         || key.ends_with("By")
         || key.ends_with("_by")
+        // Where a merged emote went (ADR 0040).
+        || key == "mergedInto"
+        || key == "merged_into"
 }
 
 /// Fields whose text is JSON in its own right (audit `before` and `after`, event and

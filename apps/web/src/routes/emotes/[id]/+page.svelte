@@ -8,6 +8,7 @@
   import EmoteView from '$lib/components/emote/EmoteView.svelte';
   import { channelsUsing } from '$lib/components/emote/data';
   import { backTarget, channelCount, type EmoteChannel, type PageEmote } from '$lib/components/emote/emote-page';
+  import { mergedPath } from '$lib/components/emote/merge';
   import { clean } from '$lib/format';
   import { legacyRedirect } from '$lib/ids';
   import { EMOTE } from '$lib/queries';
@@ -22,11 +23,16 @@
     const id = data.id;
     let gone = false;
     (async () => {
-      let emote: PageEmote | null = null;
+      let emote: (PageEmote & { mergedInto?: string | null }) | null = null;
       try {
         emote = (await gql(EMOTE, { id })).emote ?? null;
       } catch {
         emote = null;
+      }
+      // A merged emote (ADR 0040), seen only now: its page is the target's.
+      if (emote?.mergedInto) {
+        if (!gone) void goto(mergedPath(emote.mergedInto, page.url.search), { replaceState: true });
+        return;
       }
       const channels = emote ? await channelsUsing(emote) : null;
       if (gone) return;

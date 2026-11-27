@@ -44,6 +44,13 @@ suite('describe', () => {
     expect(strip(l.text)).toBe('Pog was rejected. Reason: Too blurry.');
     expect(l.href).toBe('/me/emotes/E2');
   });
+  it('emote.merged reads per role and links to the target', () => {
+    const p = { source_id: 'S1', source_name: 'Pogg', target_id: 'T1', target_name: 'Pog', emote_id: 'T1', name: 'Pog' };
+    expect(strip(describe('emote.merged', j({ ...p, role: 'source' })).text)).toBe('Pogg was merged into Pog. Its page and links now go there.');
+    expect(strip(describe('emote.merged', j({ ...p, role: 'target' })).text)).toBe('Pogg was merged into your emote Pog. Its set entries now use yours.');
+    expect(strip(describe('emote.merged', j({ ...p, role: 'both' })).text)).toBe('Pogg was merged into Pog.');
+    expect(describe('emote.merged', j({ ...p, role: 'source' })).href).toBe('/emotes/T1');
+  });
   it('emote.taken_down is understood too', () => {
     expect(strip(describe('emote.taken_down', j({ name: 'X', reason: 'Copy' })).text)).toBe('X was taken down. Reason: Copy');
   });

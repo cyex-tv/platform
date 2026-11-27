@@ -270,6 +270,7 @@ async fn every_site_operation_runs_against_the_real_api() {
     let e_del = emote(&w, &o, "covGone", EmoteState::Approved).await;
     let e_reject = emote(&w, &o, "covNope", EmoteState::Pending).await;
     let e_report = emote(&w, &t, "covBad", EmoteState::Approved).await;
+    let e_merge = emote(&w, &o, "covMerge", EmoteState::Approved).await;
     let spare_session = w.session(o.id, SessionKind::Site).await;
 
     let mut c = Contract {
@@ -1190,6 +1191,26 @@ async fn every_site_operation_runs_against_the_real_api() {
         .await;
     c.op(os, "UnhideEmote", json!({ "id": e_report })).await;
     c.op(os, "UnfavouriteEmote", json!({ "id": e2 })).await;
+
+    // Merging (ADR 0040; the site owner holds emotes.merge): the preview, then the merge.
+    let data = c
+        .op(
+            os,
+            "EmoteMergePreview",
+            json!({ "id": e_merge, "intoId": e2 }),
+        )
+        .await;
+    c.check(
+        data["emoteMergePreview"]["target"]["id"] == e2.as_str(),
+        format!("EmoteMergePreview: the target as asked: {data}"),
+    );
+    let data = c
+        .op(os, "MergeEmote", json!({ "id": e_merge, "intoId": e2 }))
+        .await;
+    c.check(
+        data["mergeEmote"]["target"]["id"] == e2.as_str(),
+        format!("MergeEmote: merged into the target: {data}"),
+    );
 
     // Cleaning up, as the site does it.
     c.op(os, "DeleteEmote", json!({ "id": e_del })).await;

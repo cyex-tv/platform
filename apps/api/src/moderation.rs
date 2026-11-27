@@ -201,7 +201,8 @@ pub(crate) async fn owner_hidden(conn: &mut PgConnection, owner: Option<Uuid>) -
 }
 
 /// An emote as `caller` may see it. An emote of an account whose deletion is pending is hidden
-/// from everyone but moderators.
+/// from everyone but moderators. The ID of a merged emote (ADR 0040) answers the emote it was
+/// merged into, by that emote's rule, with `id` the one asked for and `merged_into` set.
 pub async fn emote(
     state: &AppState,
     caller: Option<&Caller>,
@@ -211,7 +212,68 @@ pub async fn emote(
         return Ok(None);
     };
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    let Some(found) = row(&mut conn, id).await? else {
+    if let Some(found) = visible(state, &mut conn, caller, id).await? {
+        return Ok(Some(found));
+    }
+    merged_alias(state, &mut conn, caller, id).await
+}
+
+/// [`emote`] without following merges: a merged ID is `None` (REST answers it with a `301`).
+pub async fn emote_live(
+    state: &AppState,
+    caller: Option<&Caller>,
+    id: &str,
+) -> ApiResult<Option<Emote>> {
+    let Some(id) = ids::from_text(id.trim()) else {
+        return Ok(None);
+    };
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    visible(state, &mut conn, caller, id).await
+}
+
+/// The answer for a merged emote's ID: the final target as `caller` may see it, with the asked
+/// ID kept and `merged_into` set; `None` when `id` wasn't merged or the target is hidden.
+pub(crate) async fn merged_alias(
+    state: &AppState,
+    conn: &mut PgConnection,
+    caller: Option<&Caller>,
+    id: Uuid,
+) -> ApiResult<Option<Emote>> {
+    let Some(target) = emotes::final_target(conn, id).await.map_err(db_error)? else {
+        return Ok(None);
+    };
+    Ok(visible(state, conn, caller, target).await?.map(|mut e| {
+        e.merged_into = Some(e.id.clone());
+        e.id = ids::to_text(id);
+        e
+    }))
+}
+
+/// The emote's final target, when it was merged and the target is approved (what a signed-out
+/// REST read is redirected to).
+pub async fn merged_target(state: &AppState, id: &str) -> ApiResult<Option<Uuid>> {
+    let Some(id) = ids::from_text(id.trim()) else {
+        return Ok(None);
+    };
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let Some(target) = emotes::final_target(&mut conn, id)
+        .await
+        .map_err(db_error)?
+    else {
+        return Ok(None);
+    };
+    Ok(visible(state, &mut conn, None, target)
+        .await?
+        .map(|_| target))
+}
+
+async fn visible(
+    state: &AppState,
+    conn: &mut PgConnection,
+    caller: Option<&Caller>,
+    id: Uuid,
+) -> ApiResult<Option<Emote>> {
+    let Some(found) = row(conn, id).await? else {
         return Ok(None);
     };
     if found.state != EmoteState::Approved {
@@ -219,25 +281,24 @@ pub async fn emote(
             None => false,
             Some(c) if found.owner == Some(c.account_id) => true,
             Some(c) => {
-                holds(&mut conn, c, permissions::EMOTES_REVIEW).await?
-                    || editor_of_owner(&mut conn, c, found.owner, EditorPermission::EmoteManage)
-                        .await?
+                holds(conn, c, permissions::EMOTES_REVIEW).await?
+                    || editor_of_owner(conn, c, found.owner, EditorPermission::EmoteManage).await?
             }
         };
         if !allowed {
             return Ok(None);
         }
     }
-    if owner_hidden(&mut conn, found.owner).await? {
+    if owner_hidden(conn, found.owner).await? {
         let staff = match caller {
-            Some(c) => holds(&mut conn, c, permissions::EMOTES_REVIEW).await?,
+            Some(c) => holds(conn, c, permissions::EMOTES_REVIEW).await?,
             None => false,
         };
         if !staff {
             return Ok(None);
         }
     }
-    build(state, &mut conn, &found).await.map(Some)
+    build(state, conn, &found).await.map(Some)
 }
 
 /// Several emotes at once (ADR 0035), in the order asked, each once, by the rule of [`emote`]:
@@ -310,9 +371,37 @@ pub async fn emotes_by_ids<S: AsRef<str>>(
             open.push(row);
         }
     }
-    views::emotes(&mut conn, &open, &state.cdn_url)
+    let mut built = views::emotes(&mut conn, &open, &state.cdn_url)
         .await
-        .map_err(db_error)
+        .map_err(db_error)?;
+    // Merged IDs (ADR 0040) answer their target, one lookup each (rare: old links and caches).
+    let found: HashSet<Uuid> = open.iter().map(|r| r.id).collect();
+    let missing: Vec<Uuid> = wanted
+        .iter()
+        .copied()
+        .filter(|id| !found.contains(id))
+        .collect();
+    if !missing.is_empty() {
+        let merged = emotes::final_targets(&mut conn, &missing)
+            .await
+            .map_err(db_error)?;
+        if !merged.is_empty() {
+            for id in &missing {
+                if merged.contains_key(id)
+                    && let Some(alias) = merged_alias(state, &mut conn, caller, *id).await?
+                {
+                    built.push(alias);
+                }
+            }
+            let at = |e: &Emote| {
+                ids::from_text(&e.id)
+                    .and_then(|id| order.get(&id).copied())
+                    .unwrap_or(usize::MAX)
+            };
+            built.sort_by_key(|e| at(e));
+        }
+    }
+    Ok(built)
 }
 
 /// The review queue: pending emotes (all, public or unlisted and private) or the resolved ones,

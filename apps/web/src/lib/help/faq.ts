@@ -64,6 +64,8 @@ export const HELP: HelpGroup[] = [
       'A personal emote shows in your messages in every channel that allows them, so it has its own check. Moderators approve it apart from the public listing: an emote can be listed but not approved for personal use, or the other way round. Only emotes approved for personal use go in a personal set; the emote’s page says where both stand, and the reason is in your notifications when one is denied.'],
     ['zero-width', 'What is a zero-width emote?',
       'One that sits on top of the emote before it instead of next to it: hats, rain, sparkles. Mark it when you upload, or later on the emote’s page.'],
+    ['merged-emotes', 'Why does an emote’s link go to a different emote?',
+      'Staff merge a duplicate into the emote it copies. The old emote’s sets now hold the other one under the same names, and its page and links lead there. Both owners get a notification.'],
     ['private-emotes', 'What do private and unlisted mean?',
       'You choose only one thing here: tick Private when you upload an emote (or later on its page). Only you (and editors you allow) can add a private emote to sets, so it is for your own channel, and search, browse and your profile leave it out. Everything else starts unlisted: it stays off the listings until a moderator approves its public listing, and then only people with its link find it. Both still show in chat wherever their sets are active.'],
     ['nsfw', 'Can I upload NSFW emotes?',

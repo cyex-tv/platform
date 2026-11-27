@@ -3,19 +3,21 @@
 use async_graphql::{Context, ID, Object, Result};
 use cyex_tv_shared::model::TrendingWindow;
 use cyex_tv_shared::model::{
-    Emote, EmoteFlag, EmoteFlagsInput, EmoteSort, EmoteTransferRequest, EmoteTrending,
-    SearchResults, UpdateEmote,
+    Emote, EmoteFlag, EmoteFlagsInput, EmoteMergePreview, EmoteMergeResult, EmoteSort,
+    EmoteTransferRequest, EmoteTrending, SearchResults, UpdateEmote,
 };
 
 use super::{api_error, caller, caller_opt, state};
-use crate::{moderation, search, transfers};
+use crate::{merge, moderation, search, transfers};
 
 #[derive(Default)]
 pub struct EmoteQuery;
 
 #[Object]
 impl EmoteQuery {
-    /// An emote. Pending ones are visible to their owner and to moderators only.
+    /// An emote. Pending ones are visible to their owner and to moderators only. The ID of an
+    /// emote that was merged into another (ADR 0040) answers that emote, with `mergedInto` set
+    /// to its ID: go there.
     #[graphql(complexity = "10 + child_complexity")]
     async fn emote(&self, ctx: &Context<'_>, id: String) -> Result<Option<Emote>> {
         moderation::emote(state(ctx), caller_opt(ctx), &id)
@@ -101,6 +103,23 @@ impl EmoteQuery {
         )
         .await
         .map_err(api_error)
+    }
+
+    /// What merging emote `id` into `intoId` would do (ADR 0040), without doing it: both emotes
+    /// as they read now (a target that was merged itself is followed to the final one,
+    /// `followed`), how many set memberships move, and the sets that hold both. Needs
+    /// `emotes.merge`; refused as `mergeEmote` would be.
+    #[graphql(complexity = "20 + child_complexity")]
+    async fn emote_merge_preview(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        into_id: String,
+    ) -> Result<EmoteMergePreview> {
+        let caller = caller(ctx)?;
+        merge::preview(state(ctx), caller, &id, &into_id)
+            .await
+            .map_err(api_error)
     }
 
     /// Where an emote stands among the 100 most added in `window` (`DAY`, `WEEK` by default or
@@ -203,6 +222,27 @@ impl EmoteMutation {
     ) -> Result<EmoteTransferRequest> {
         let caller = caller(ctx)?;
         transfers::retired_request(state(ctx), caller, &id).map_err(api_error)
+    }
+
+    /// Merge emote `id` into `intoId` (ADR 0040). Needs `emotes.merge`. Every set membership of
+    /// `id` names `intoId` instead, keeping its name in the set; a set that holds both keeps
+    /// the target's membership (listed in `collapsed`). Name, tags and files are the target's.
+    /// `id` is retired: gone from search and sets, and its ID answers the target (REST `301`,
+    /// GraphQL `mergedInto`). A target that was merged itself is followed to the final one.
+    /// Refused: into itself (`merge_into_self`), into an emote that isn't approved or is
+    /// deleted (`merge_target_unavailable`), an emote merged already (`already_merged`).
+    /// One transaction; every affected set's version moves once, its delta listing `id` as
+    /// removed and `intoId` as added. Audited (`emote.merged`); both owners are notified.
+    async fn merge_emote(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        into_id: String,
+    ) -> Result<EmoteMergeResult> {
+        let caller = caller(ctx)?;
+        merge::merge(state(ctx), caller, &id, &into_id)
+            .await
+            .map_err(api_error)
     }
 
     /// Delete your emote, an emote of an account you edit with `EMOTE_MANAGE`, or anyone's with

@@ -1278,6 +1278,12 @@ type Emote {
 	How many channels have this emote in their active set right now.
 	"""
 	channelCount: Int!
+	"""
+	Set only on an answer for an emote that was merged into another (ADR 0040): the ID of
+	the emote that took its place (the final one), whose name, files and the rest this answer
+	carries. Go to that ID. REST answers a merged ID with `301` to the target instead.
+	"""
+	mergedInto: String
 }
 
 """
@@ -1386,6 +1392,49 @@ input EmoteFlagsInput {
 	"""
 	nsfw: Boolean @deprecated(reason: "NSFW emotes aren't allowed on cyex.tv. true is refused (nsfw_not_allowed); saving flags clears an old NSFW flag.")
 	zeroWidth: Boolean
+}
+
+"""
+What `mergeEmote` would do (`emoteMergePreview`, ADR 0040).
+"""
+type EmoteMergePreview {
+	source: Emote!
+	"""
+	The emote that takes the source's place: the one asked for, or, when that was merged
+	itself, the final one it went to (`followed`).
+	"""
+	target: Emote!
+	"""
+	True when the emote asked for had been merged, and `target` is where it went.
+	"""
+	followed: Boolean!
+	"""
+	Set memberships of the source that will name the target, each with its name kept.
+	"""
+	moves: Int!
+	"""
+	Sets that already hold the target: the source's membership is dropped there.
+	"""
+	collapses: [MergeCollapse!]!
+}
+
+"""
+What `mergeEmote` did (ADR 0040).
+"""
+type EmoteMergeResult {
+	"""
+	The retired emote: its ID now answers the target (`mergedInto`).
+	"""
+	sourceId: String!
+	target: Emote!
+	"""
+	Set memberships that now name the target, each with its name kept.
+	"""
+	moved: Int!
+	"""
+	Sets that held both: the source's membership was dropped, the target's kept.
+	"""
+	collapsed: [MergeCollapse!]!
 }
 
 """
@@ -1911,6 +1960,24 @@ type MediaLimits {
 	maxServedSide: Int!
 }
 
+"""
+A set that held both emotes of a merge (ADR 0040): the source's membership is dropped and the
+target's kept, with its own name.
+"""
+type MergeCollapse {
+	setId: String!
+	setName: String!
+	"""
+	The target's name in the set: kept.
+	"""
+	keptName: String!
+	"""
+	The source's name in the set: dropped. When it differs from `keptName`, chat in that
+	set now types the target's name.
+	"""
+	droppedName: String!
+}
+
 type Mutation {
 	"""
 	Unlink a platform from your account. The last identity can't be removed, and a
@@ -2157,6 +2224,18 @@ type Mutation {
 	Retired with transfer requests (ADR 0039): always `410 transfer_requests_retired`.
 	"""
 	cancelEmoteTransfer(id: String!): EmoteTransferRequest! @deprecated(reason: "Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote.")
+	"""
+	Merge emote `id` into `intoId` (ADR 0040). Needs `emotes.merge`. Every set membership of
+	`id` names `intoId` instead, keeping its name in the set; a set that holds both keeps
+	the target's membership (listed in `collapsed`). Name, tags and files are the target's.
+	`id` is retired: gone from search and sets, and its ID answers the target (REST `301`,
+	GraphQL `mergedInto`). A target that was merged itself is followed to the final one.
+	Refused: into itself (`merge_into_self`), into an emote that isn't approved or is
+	deleted (`merge_target_unavailable`), an emote merged already (`already_merged`).
+	One transaction; every affected set's version moves once, its delta listing `id` as
+	removed and `intoId` as added. Audited (`emote.merged`); both owners are notified.
+	"""
+	mergeEmote(id: String!, intoId: String!): EmoteMergeResult!
 	"""
 	Delete your emote, an emote of an account you edit with `EMOTE_MANAGE`, or anyone's with
 	`emotes.delete_any` (audited). It is removed from every set.
@@ -2965,7 +3044,9 @@ type Query {
 	"""
 	globalSet: EmoteSet!
 	"""
-	An emote. Pending ones are visible to their owner and to moderators only.
+	An emote. Pending ones are visible to their owner and to moderators only. The ID of an
+	emote that was merged into another (ADR 0040) answers that emote, with `mergedInto` set
+	to its ID: go there.
 	"""
 	emote(id: String!): Emote
 	"""
@@ -2994,6 +3075,13 @@ type Query {
 	works with the same `query`, filters and `sort` (`bad_cursor` otherwise).
 	"""
 	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean @deprecated(reason: "NSFW emotes aren't allowed on cyex.tv; this changes nothing."), page: Int, perPage: Int, sort: EmoteSort, flags: [EmoteFlag!], tags: [String!], exact: Boolean, window: TrendingWindow, after: String): SearchResults!
+	"""
+	What merging emote `id` into `intoId` would do (ADR 0040), without doing it: both emotes
+	as they read now (a target that was merged itself is followed to the final one,
+	`followed`), how many set memberships move, and the sets that hold both. Needs
+	`emotes.merge`; refused as `mergeEmote` would be.
+	"""
+	emoteMergePreview(id: String!, intoId: String!): EmoteMergePreview!
 	"""
 	Where an emote stands among the 100 most added in `window` (`DAY`, `WEEK` by default or
 	`MONTH`): its rank and the channels that added it, net of removals. Null when `id` isn't

@@ -250,6 +250,8 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   Audit: () => ({ limit: 5 }),
   ReportEmote: (c) => ({ id: c.emoteId, reason: 'A mock reason' }),
   SearchByOwner: (c) => ({ owner: c.otherAccount, page: 1, perPage: 5, sort: 'NEW' }),
+  EmoteMergePreview: (c) => ({ id: c.mergeSourceId, intoId: c.emoteId }),
+  MergeEmote: (c) => ({ id: c.mergeSourceId, intoId: c.emoteId }),
   TransferEmote: (c) => ({ id: c.myEmoteId, toAccountId: c.editorAccount ?? c.meId }),
   EmoteTransferRequests: () => ({}),
   AcceptEmoteTransfer: (c) => ({ id: c.transferId }),
@@ -511,7 +513,7 @@ const SEEDS: { op: string; take: (d: any, c: Ctx) => void }[] = [
   },
   { op: 'EditorOf', take: (d, c) => (c.editorAccount = d.editorOf?.[0]?.account?.id) },
   { op: 'Me', take: (d, c) => (c.meId = d.me.id) },
-  { op: 'MyEmotes', take: (d, c) => { c.myEmoteId = d.myEmotes.items[0]?.id; c.deletableEmoteId = d.myEmotes.items.at(-1)?.id; } },
+  { op: 'MyEmotes', take: (d, c) => { c.myEmoteId = d.myEmotes.items[0]?.id; c.deletableEmoteId = d.myEmotes.items.at(-1)?.id; c.mergeSourceId = d.myEmotes.items[1]?.id; } },
   { op: 'MySets', take: (d, c) => { const s = pick(d, 'mySets') ?? pick(d, 'me.sets') ?? []; c.setId = s[0]?.id; c.deletableSetId = s.at(-1)?.id; } },
   { op: 'MyChannels', take: (d, c) => { const ch = pick(d, 'myChannels') ?? []; c.channelId = ch[0]?.platformChannelId; c.channelPlatform = ch[0]?.platform; } },
   { op: 'Cosmetics', take: (d, c) => { c.badgeId = d.cosmetics.badges[0]?.id; c.paintId = d.cosmetics.paints[0]?.id; } },
@@ -540,7 +542,7 @@ const CREATES: Record<string, (d: any, c: Ctx) => void> = {
 // Order matters for state: the ones that make things first, the destructive ones last.
 const FIRST = ['Me', 'EditorOf', 'Search', 'MyEmotes', 'MySets', 'MyChannels', 'Cosmetics', 'ShopItems', 'Roles', 'ReviewQueue', 'ReportQueue', 'MyNotifications', 'MySessions', 'MyOrders', 'CodeBatches'];
 const LAST = ['EndAnnouncement', 'DeleteEmote', 'DeleteSet', 'SignOutEverywhere', 'RevokeOtherSessions', 'Unlink', 'DeleteAccount', 'RestoreAccount'];
-const AFTER_CREATE = ['RedeemCode', 'TransferEmote', 'EmoteTransferRequests', 'DeclineEmoteTransfer', 'AcceptEmoteTransfer', 'CancelEmoteTransfer'];
+const AFTER_CREATE = ['RedeemCode', 'EmoteMergePreview', 'MergeEmote', 'TransferEmote', 'EmoteTransferRequests', 'DeclineEmoteTransfer', 'AcceptEmoteTransfer', 'CancelEmoteTransfer'];
 
 describe('mock-api conformance with the real schema', () => {
   it('every website operation is valid against schema/schema.graphql', () => {
