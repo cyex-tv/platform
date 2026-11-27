@@ -36,6 +36,8 @@ http-body-util = "0.1"
 # Decoding only here; encoders come with the transcoder.
 image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 ravif = { version = "0.13", default-features = false, features = ["threading"] }
+# Animated AVIF (ADR 0012, amended): the AV1 encoder ravif uses, driven directly for image sequences.
+rav1e = { version = "0.8", default-features = false, features = ["threading"] }
 reqwest = { version = "0.13", default-features = false, features = ["form", "http2", "json", "query", "rustls-no-provider"] }
 # The ring provider, not aws-lc: aws-lc-sys carries the OpenSSL licence, which ADR 0007 doesn't allow.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
@@ -69,3 +71,7 @@ todo = "warn"
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
+
+# rav1e (animated AVIF) is far too slow unoptimised for the tests that transcode animations.
+[profile.dev.package.rav1e]
+opt-level = 3

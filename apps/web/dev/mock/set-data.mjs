@@ -7,6 +7,9 @@ export const SETS = [
     emotes: [...MINE.slice(3, 7), ...ALL.slice(10, 30)].map((e) => member(e)), editors: [OTHERS[0]], visibility: 'LISTED', createdAt: '2026-11-10T12:05:00.000Z' },
   { id: '01JD8XSET000000000000ALTSS', name: 'Subathon', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
     emotes: ALL.slice(40, 46).map((e) => member(e)), editors: [], visibility: 'UNLISTED', createdAt: '2026-11-12T19:40:00.000Z' },
+  // Every account has a personal set from sign-up: 3 slots, or 10 for a subscriber role (ADR 0038).
+  { id: '01JD8XSET0000000000PERSONME', name: 'Personal', kind: 'PERSONAL', capacity: 3, capacityOverride: null, owner: ME_SUMMARY,
+    emotes: MINE.slice(0, 2).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-10T12:10:00.000Z' },
   { id: '01JD8XSET00000000000000OAK', name: 'quietoak main', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
     emotes: ALL.slice(60, 70).map((e) => member(e)), editors: [ME_SUMMARY], visibility: 'LISTED', createdAt: '2026-11-08T09:00:00.000Z' },
 ];

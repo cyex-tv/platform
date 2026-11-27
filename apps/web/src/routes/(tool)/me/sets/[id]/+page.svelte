@@ -25,7 +25,7 @@
   import type { EditSetQuery, EditorPermission } from '$lib/gql/graphql';
   import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, SET_CAPACITY_RANGE, SET_MEMBERS, UPDATE_CHANNEL, UPDATE_SET } from '$lib/queries';
   import CapacityForm from '$lib/sets/CapacityForm.svelte';
-  import type { CapacityRange } from '$lib/sets/capacity';
+  import { slotsLine, slotsNote, type CapacityRange } from '$lib/sets/capacity';
   import Icon from '$lib/components/Icon.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -171,9 +171,26 @@
   });
   const capRange = $derived(range && range.id === set?.id ? range.value : null);
   function capacitySaved(n: number) {
-    if (!set || n === set.capacity) return;
+    if (!set) return;
+    if (set.kind === 'PERSONAL') set.capacityOverride = n;
+    if (n === set.capacity) return;
     set.capacity = n;
     notify(`Capacity saved: ${count(n)} slots.`);
+  }
+  // Staff: take a personal set's override away, so its owner's roles decide the slots again.
+  async function resetSlots() {
+    if (!set || saving) return;
+    saving = true;
+    try {
+      const r = await gql(UPDATE_SET, { id: set.id, input: { resetCapacity: true } });
+      set.capacity = r.updateSet.capacity;
+      set.capacityOverride = r.updateSet.capacityOverride ?? null;
+      notify(`Back to the plan’s slots: ${count(set.capacity)}.`);
+    } catch (err) {
+      fail(err);
+    } finally {
+      saving = false;
+    }
   }
 
   async function remove() {
@@ -256,7 +273,20 @@
         </form>
       </PanelBlock>
     {/if}
-    {#if canRename && capRange}
+    {#if set.kind === 'PERSONAL'}
+      <PanelBlock title="Slots">
+        <p class="slots" data-testid="personal-slots">{slotsLine(set.slotsUsed, set.capacity)}</p>
+        {@const note = slotsNote({ used: set.slotsUsed, capacity: set.capacity, override: set.capacityOverride ?? null })}
+        {#if note}<p class="pb-hint">{note}</p>{/if}
+        {#if canRename && capRange}
+          <p class="pb-hint staff">Staff override</p>
+          <CapacityForm setId={set.id} capacity={set.capacity} range={capRange} onsaved={capacitySaved} />
+          {#if set.capacityOverride != null}
+            <div class="pb-actions"><button class="ui-btn secondary" type="button" disabled={saving} onclick={resetSlots}>Use the plan’s slots</button></div>
+          {/if}
+        {/if}
+      </PanelBlock>
+    {:else if canRename && capRange}
       <PanelBlock title="Capacity">
         <CapacityForm setId={set.id} capacity={set.capacity} range={capRange} onsaved={capacitySaved} />
       </PanelBlock>
@@ -345,7 +375,7 @@
         {/snippet}
       </PageHead>
     {/snippet}
-    <SetEmotes setId={set.id} capacity={set.capacity} used={set.slotsUsed} {rev} onchange={load} />
+    <SetEmotes setId={set.id} capacity={set.capacity} used={set.slotsUsed} {rev} onchange={load} personal={set.kind === 'PERSONAL'} />
     <AddEmotes setId={set.id} personal={set.kind === 'PERSONAL'} {taken} {names} {full} onadded={added} />
   </MeFrame>
 {/if}
@@ -355,6 +385,8 @@
 <style>
   .wait { padding-top: var(--rail-gap); }
   .row { display: flex; gap: 8px; }
+  .slots { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .staff { margin-top: 10px; font-weight: 600; }
   .row input { min-width: 0; }
   .chans { list-style: none; margin: 0; padding: 0; display: grid; }
   .chans > li { display: flex; align-items: center; gap: 10px; min-height: 48px; }

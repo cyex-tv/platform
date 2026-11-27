@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use cyex_tv_shared::model::{AccountSummary, EmoteState};
+use cyex_tv_shared::model::{AccountSummary, ApprovalState, EmoteState};
 use serde_json::Value;
 use sqlx::{FromRow, PgConnection};
 use uuid::Uuid;
@@ -31,6 +31,8 @@ pub struct MemberRow {
     pub nsfw: bool,
     pub animated: bool,
     pub state: EmoteState,
+    pub listing_review: ApprovalState,
+    pub personal_review: ApprovalState,
     pub emote_created_at: DateTime<Utc>,
     pub sha256: Option<Vec<u8>>,
     pub variants: Option<Value>,
@@ -50,6 +52,9 @@ pub struct EmoteRow {
     pub nsfw: bool,
     pub animated: bool,
     pub state: EmoteState,
+    /// The two approvals (ADR 0039).
+    pub listing_review: ApprovalState,
+    pub personal_review: ApprovalState,
     pub created_at: DateTime<Utc>,
     pub sha256: Option<Vec<u8>>,
     pub variants: Option<Value>,
@@ -70,6 +75,8 @@ impl MemberRow {
             nsfw: self.nsfw,
             animated: self.animated,
             state: self.state,
+            listing_review: self.listing_review,
+            personal_review: self.personal_review,
             created_at: self.emote_created_at,
             sha256: self.sha256.clone(),
             variants: self.variants.clone(),
@@ -79,7 +86,8 @@ impl MemberRow {
 }
 
 const EMOTE_ROW: &str = "SELECT e.id, e.owner_account_id AS owner, e.name, e.zero_width, e.private,
-            e.unlisted, e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants,
+            e.unlisted, e.nsfw, e.animated, e.state, e.listing_review, e.personal_review,
+            e.created_at, f.sha256, f.variants,
             (f.processing_failed_at IS NOT NULL) AS processing_failed
      FROM emotes e
      LEFT JOIN files f ON f.id = e.file_id";
@@ -100,12 +108,14 @@ pub enum QueueTab {
     /// Every pending emote.
     #[default]
     Pending,
-    /// Pending and public: it would show in search once approved.
+    /// Pending and not private: it would show in search once its listing is approved.
     Public,
-    /// Pending and unlisted or private: link-only or for its owner's own sets.
+    /// Pending and private: for its owner's own sets.
     Limited,
     /// Approved or rejected by a reviewer.
     Resolved,
+    /// The personal queue (ADR 0039): approved, personal use pending.
+    Personal,
 }
 
 /// How a review queue read is ordered. Ties go by upload time, then ID.
@@ -126,6 +136,8 @@ pub struct QueueQuery<'a> {
     pub search: Option<&'a str>,
     /// Only this uploader's emotes.
     pub uploader: Option<Uuid>,
+    /// Only emotes whose personal use is in this state.
+    pub personal_use: Option<ApprovalState>,
     pub sort: QueueSort,
     pub descending: bool,
 }
@@ -135,6 +147,7 @@ pub struct QueueQuery<'a> {
 pub struct QueueCounts {
     pub public: i64,
     pub limited: i64,
+    pub personal: i64,
 }
 
 /// The uploader's name the queue sorts and searches by: the Twitch identity first, as the API
@@ -230,7 +243,7 @@ pub async fn review_queue_page(
         .filter(|s| !s.is_empty())
         .map(|s| format!("%{}%", crate::search::like_escape(s)));
     let (position, fetch, order) = match after {
-        Some(_) => (keyset::after(&keys, 5), limit + 1, keyset::order(&keys)),
+        Some(_) => (keyset::after(&keys, 6), limit + 1, keyset::order(&keys)),
         None => ("TRUE".to_owned(), limit, order),
     };
     let sql = format!(
@@ -242,7 +255,8 @@ pub async fn review_queue_page(
         .bind(pattern.as_deref())
         .bind(fetch)
         .bind(if after.is_some() { 0 } else { offset })
-        .bind(q.uploader);
+        .bind(q.uploader)
+        .bind(q.personal_use);
     let rows = keyset::bind(query, after.unwrap_or_default())
         .fetch_all(&mut *conn)
         .await?;
@@ -254,6 +268,7 @@ pub async fn review_queue_page(
     .bind(None::<i64>)
     .bind(None::<i64>)
     .bind(q.uploader)
+    .bind(q.personal_use)
     .fetch_one(conn)
     .await?;
     let page = match after {
@@ -266,18 +281,20 @@ pub async fn review_queue_page(
     Ok((page, total))
 }
 
-/// The review queue's search (`$1`, a LIKE pattern) and uploader (`$4`).
+/// The review queue's search (`$1`, a LIKE pattern), uploader (`$4`) and personal-use state (`$5`).
 const QUEUE_MATCHES: &str = "($1::text IS NULL OR e.name ILIKE $1 OR EXISTS (
             SELECT 1 FROM identities i WHERE i.account_id = e.owner_account_id
               AND (i.login ILIKE $1 OR i.display_name ILIKE $1)))
-         AND ($4::uuid IS NULL OR e.owner_account_id = $4)";
+         AND ($4::uuid IS NULL OR e.owner_account_id = $4)
+         AND ($5::text IS NULL OR e.personal_review = $5)";
 
 fn queue_tab(tab: QueueTab) -> &'static str {
     match tab {
         QueueTab::Pending => "e.state = 'pending'",
-        QueueTab::Public => "e.state = 'pending' AND NOT e.private AND NOT e.unlisted",
-        QueueTab::Limited => "e.state = 'pending' AND (e.private OR e.unlisted)",
+        QueueTab::Public => "e.state = 'pending' AND NOT e.private",
+        QueueTab::Limited => "e.state = 'pending' AND e.private",
         QueueTab::Resolved => "e.state IN ('approved', 'rejected') AND e.reviewed_at IS NOT NULL",
+        QueueTab::Personal => "e.state = 'approved' AND e.personal_review = 'pending'",
     }
 }
 
@@ -307,16 +324,22 @@ pub async fn queue_top_uploaders(
     .bind(limit)
     .bind(None::<i64>)
     .bind(None::<Uuid>)
+    .bind(None::<ApprovalState>)
     .fetch_all(conn)
     .await?)
 }
 
-/// How many pending emotes are public, and how many unlisted or private.
+/// How many pending emotes are not private and how many private, and how many wait in the
+/// personal queue (ADR 0039).
 pub async fn queue_counts(conn: &mut PgConnection) -> DbResult<QueueCounts> {
     Ok(sqlx::query_as(
-        "SELECT count(*) FILTER (WHERE NOT private AND NOT unlisted) AS public,
-                count(*) FILTER (WHERE private OR unlisted) AS limited
-         FROM emotes WHERE state = 'pending' AND deleted_at IS NULL",
+        "SELECT count(*) FILTER (WHERE state = 'pending' AND NOT private) AS public,
+                count(*) FILTER (WHERE state = 'pending' AND private) AS limited,
+                count(*) FILTER (WHERE state = 'approved' AND personal_review = 'pending')
+                    AS personal
+         FROM emotes
+         WHERE deleted_at IS NULL
+           AND (state = 'pending' OR (state = 'approved' AND personal_review = 'pending'))",
     )
     .fetch_one(conn)
     .await?)
@@ -391,7 +414,8 @@ macro_rules! member_columns {
         "m.set_id, m.emote_id, m.name, m.zero_width, m.added_by, m.added_at,
                 e.owner_account_id AS emote_owner, e.name AS emote_name,
                 e.zero_width AS emote_zero_width, e.private, e.unlisted, e.nsfw,
-                e.animated, e.state, e.created_at AS emote_created_at,
+                e.animated, e.state, e.listing_review, e.personal_review,
+                e.created_at AS emote_created_at,
                 f.sha256, f.variants, (f.processing_failed_at IS NOT NULL) AS processing_failed"
     };
 }

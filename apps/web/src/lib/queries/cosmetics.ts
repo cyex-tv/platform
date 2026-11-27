@@ -113,7 +113,9 @@ export const ACCOUNT_PROFILE = graphql(`
       roles {
         id
         name
+        color
       }
+      roleColor
       activeSets {
         platform
         login

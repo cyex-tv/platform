@@ -2,6 +2,7 @@
   // One notification: an icon, one sentence and when (date and time, how long ago on hover). Unread ones are bold with an accent icon
   // (the cyex rule: no fills, no bars). A link when the notification leads somewhere; the
   // sentence is printed as text, never as HTML. Used by the bell's popover and your profile's Notifications tab.
+  import { tick } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { isoParts } from '$lib/format';
   import ActivityWhen from '$lib/profile/ActivityWhen.svelte';
@@ -12,9 +13,17 @@
   // that ellipsizes, mono time, an accent dot when unread) for lists; 'detail' the whole notification
   // (full sentence, time and link) for an inspector panel. Nothing here is answered: transfer
   // requests are retired (ADR 0014, amendment 2026/11/22).
-  type Props = { note: Note; onpick?: (n: Note) => void; variant?: 'card' | 'dense' | 'detail'; picked?: boolean };
-  let { note, onpick, variant = 'card', picked = false }: Props = $props();
+  // `onread` (card only): an unread notification gets its own "Mark as read" button beside it, a
+  // real button in the tab order; once it is read the button is gone and focus goes to the row.
+  type Props = { note: Note; onpick?: (n: Note) => void; onread?: (n: Note) => void | Promise<unknown>; variant?: 'card' | 'dense' | 'detail'; picked?: boolean };
+  let { note, onpick, onread, variant = 'card', picked = false }: Props = $props();
   const line = $derived(describe(note.kind, note.payload));
+  let main = $state<HTMLElement>();
+  async function markOne() {
+    await onread?.(note);
+    await tick();
+    main?.focus();
+  }
 </script>
 
 {#snippet inner()}
@@ -45,14 +54,31 @@
     <button class="drow" class:unread={!note.read} class:picked type="button" aria-current={picked ? 'true' : undefined} onclick={() => onpick?.(note)}>{@render dense()}</button>
   {/if}
 {:else}
-  {#if line.href}
-    <a class="note" class:unread={!note.read} href={line.href} onclick={() => onpick?.(note)}>{@render inner()}</a>
-  {:else}
-    <button class="note" class:unread={!note.read} type="button" onclick={() => onpick?.(note)}>{@render inner()}</button>
-  {/if}
+  <div class="item" class:withmark={onread && !note.read}>
+    {#if line.href}
+      <a class="note" class:unread={!note.read} href={line.href} bind:this={main} onclick={() => onpick?.(note)}>{@render inner()}</a>
+    {:else}
+      <button class="note" class:unread={!note.read} type="button" bind:this={main} onclick={() => onpick?.(note)}>{@render inner()}</button>
+    {/if}
+    {#if onread && !note.read}
+      <button class="mark" type="button" aria-label="Mark as read" title="Mark as read" onclick={markOne}><Icon name="check" size={15} /></button>
+    {/if}
+  </div>
 {/if}
 
 <style>
+  .item { position: relative; display: flex; align-items: flex-start; }
+  .item .note { flex: 1; min-width: 0; }
+  .withmark .note { padding-right: 44px; }
+  /* The mark button sits at the row's end, 32px to see and the row's height to hit; it is the
+     accent icon on hover and focus, never a fill. */
+  .mark { position: absolute; top: 6px; right: 6px; display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0;
+    border: 0; border-radius: var(--radius-btn); background: none; color: var(--dim); cursor: pointer;
+    transition: color var(--fast), background-color var(--fast), transform var(--dur-press) ease-out; }
+  .mark:focus-visible { outline-offset: -2px; color: var(--accent-text); }
+  .mark:active { transform: scale(var(--press)); }
+  @media (hover: hover) and (pointer: fine) { .mark:hover { color: var(--accent-text); background: var(--row-hover); } }
+  @media (pointer: coarse) { .mark { width: 44px; height: 44px; top: 2px; right: 2px; } .withmark .note { padding-right: 52px; } }
   .note { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 48px; padding: 10px 12px; border: 0;
     border-radius: var(--radius); background: none; color: var(--text); font: inherit; font-size: var(--t-nav); text-align: left;
     text-decoration: none; cursor: pointer; transition: background-color var(--fast); }

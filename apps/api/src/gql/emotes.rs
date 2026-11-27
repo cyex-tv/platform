@@ -154,10 +154,10 @@ impl EmoteMutation {
             .map_err(api_error)
     }
 
-    /// Give your emote to another account (ADR 0014), at once (`emote.transferred`). Only the
-    /// emote's owner may: anyone else, account editors included, gets `forbidden` (amendment
-    /// 2026/11/22; nobody can ask for someone else's emote). The receiver is you, or an account
-    /// you edit with `EMOTE_UPLOAD` on every set. 60 an hour.
+    /// Move an emote to another account at once (ADR 0039, `emote.transferred`). Needs
+    /// `emotes.transfer`: anyone else, the owner included, gets `403 transfer_staff_only`.
+    /// The receiver must be a live account (not deleted, blocked or restricted). Both the old and
+    /// the new owner are notified. 60 an hour.
     async fn transfer_emote(
         &self,
         ctx: &Context<'_>,
@@ -170,21 +170,18 @@ impl EmoteMutation {
             .map_err(api_error)
     }
 
-    /// Retired with editor transfer requests (amendment 2026/11/22): always `forbidden`.
+    /// Retired with transfer requests (ADR 0039): always `410 transfer_requests_retired`.
     #[graphql(
-        deprecation = "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away."
+        deprecation = "Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
     )]
     async fn accept_emote_transfer(&self, ctx: &Context<'_>, id: String) -> Result<Emote> {
         let caller = caller(ctx)?;
-        transfers::accept(state(ctx), caller, &id)
-            .await
-            .map_err(api_error)
+        transfers::retired_request(state(ctx), caller, &id).map_err(api_error)
     }
 
-    /// Decline an editor's transfer request of your emote. None are open any more
-    /// (`not_pending`).
+    /// Retired with transfer requests (ADR 0039): always `410 transfer_requests_retired`.
     #[graphql(
-        deprecation = "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away."
+        deprecation = "Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
     )]
     async fn decline_emote_transfer(
         &self,
@@ -192,14 +189,12 @@ impl EmoteMutation {
         id: String,
     ) -> Result<EmoteTransferRequest> {
         let caller = caller(ctx)?;
-        transfers::decline(state(ctx), caller, &id)
-            .await
-            .map_err(api_error)
+        transfers::retired_request(state(ctx), caller, &id).map_err(api_error)
     }
 
-    /// Withdraw a transfer request you made. None are open any more (`not_pending`).
+    /// Retired with transfer requests (ADR 0039): always `410 transfer_requests_retired`.
     #[graphql(
-        deprecation = "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away."
+        deprecation = "Retired (ADR 0039): ownership can't be requested. Always 410 transfer_requests_retired; staff move emotes with transferEmote."
     )]
     async fn cancel_emote_transfer(
         &self,
@@ -207,9 +202,7 @@ impl EmoteMutation {
         id: String,
     ) -> Result<EmoteTransferRequest> {
         let caller = caller(ctx)?;
-        transfers::cancel(state(ctx), caller, &id)
-            .await
-            .map_err(api_error)
+        transfers::retired_request(state(ctx), caller, &id).map_err(api_error)
     }
 
     /// Delete your emote, an emote of an account you edit with `EMOTE_MANAGE`, or anyone's with

@@ -1,8 +1,9 @@
 <script lang="ts">
   // An emote's editor, in the Inspector shape: the picture at its sizes and the details form on
-  // the left; on the right its status, facts and id, adding it to a set, giving it to another
-  // account (its owner only) and deleting it. The owner, the account's editors with Manage, and
-  // staff with the matching permissions.
+  // the left; on the right its status, facts and id, adding it to a set and deleting it. The owner,
+  // the account's editors with Manage, and staff with the matching permissions. Only zero-width and
+  // private are the owner's to set (listing is decided in review, ADR 0039), and nobody hands an
+  // emote over here: staff transfer it from the emote page's Edit emote pop-up.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql, type EmoteVisibility } from '$lib/api';
@@ -10,9 +11,9 @@
   import { ready, size } from '$lib/emote';
   import { clean, count, date, iso } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
-  import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, TRANSFER_EMOTE, UPDATE_EMOTE } from '$lib/queries';
-  import { editorOf, forgetProfile, type Grant } from '$lib/profile/data.svelte';
-  import { emoteCan, transferTargets } from '$lib/tool/editors';
+  import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, UPDATE_EMOTE } from '$lib/queries';
+  import { editorOf, type Grant } from '$lib/profile/data.svelte';
+  import { emoteCan } from '$lib/tool/editors';
   import { sectionHref } from '$lib/profile/rows';
   import { TAG_MAX, cleanTag, nameProblem, tagsProblem } from '$lib/rules';
   import RetryNote from '$lib/components/RetryNote.svelte';
@@ -35,7 +36,7 @@
   import { scaleFiles } from '$lib/components/emote/emote-page';
   import PageHead from '$lib/tool/PageHead.svelte';
   import EmoteFlags from '$lib/tool/EmoteFlags.svelte';
-  import { visibilityOf } from '$lib/tool/visibility';
+  import { personalBlock, PERSONAL_NOT_APPROVED } from '$lib/components/emote/approvals';
 
   let emote = $state<EmoteFieldsFragment | null>(null);
   let slow = $state(false);
@@ -50,24 +51,15 @@
   let deleting = $state(false);
   let adding = $state(false);
   let grants = $state<readonly Grant[] | null>(null);
-  let giveTo = $state('');
-  let giving = $state(false);
   const nameError = $derived(nameProblem(name));
   const tagError = $derived(tagsProblem(tags));
   const mine = $derived(emote?.owner?.id === session.me?.id);
   // Editors of the owner's account with Manage on every set edit and delete as the owner does
-  // (ADR 0014). Only the owner gives it away: nobody can ask for someone else's emote (amendment
-  // 2026/11/22). Staff edit and delete anyone's emote with emotes.edit_any / emotes.delete_any.
+  // (ADR 0014). Staff edit and delete anyone's emote with emotes.edit_any / emotes.delete_any.
   // The API checks and audits.
   const manages = $derived(!mine && emoteCan(grants, emote?.owner?.id, session.me?.id, 'EMOTE_MANAGE'));
   const canEdit = $derived(mine || manages || can('emotes.edit_any'));
   const canDelete = $derived(mine || manages || can('emotes.delete_any'));
-  const canGive = $derived(mine);
-  const me = $derived(session.me ? { id: session.me.id, displayName: session.me.identities[0]?.displayName ?? 'You' } : null);
-  const receivers = $derived(transferTargets(me, grants, emote?.owner?.id));
-  $effect(() => {
-    if (!receivers.some((r) => r.id === giveTo)) giveTo = receivers[0]?.id ?? '';
-  });
   let grantsFailed = $state(false);
   function loadGrants() {
     grantsFailed = false;
@@ -76,13 +68,15 @@
   $effect(() => {
     if (session.me) loadGrants();
   });
+  // Only private matters to the owner; unlisted just means the listing isn't approved yet.
+  const visibilityNow = (e: EmoteFieldsFragment): EmoteVisibility => (e.flags.private ? 'PRIVATE' : 'PUBLIC');
   const ownerHome = $derived(emote?.owner ? `/users/${encodeURIComponent(emote.owner.id)}` : '/me');
   const changed = $derived(
     emote !== null &&
       (name.trim() !== emote.name ||
         [...tags].sort().join(',') !== [...emote.tags].sort().join(',') ||
         zeroWidth !== emote.flags.zeroWidth ||
-        visibility !== visibilityOf(emote)),
+        visibility !== visibilityNow(emote)),
   );
 
   function fill(e: EmoteFieldsFragment) {
@@ -90,7 +84,7 @@
     name = e.name;
     tags = [...e.tags];
     zeroWidth = e.flags.zeroWidth;
-    visibility = visibilityOf(e);
+    visibility = visibilityNow(e);
   }
 
   const L = loader(async ({ fetch }) => {
@@ -149,7 +143,7 @@
     try {
       const r = await gql(UPDATE_EMOTE, {
         id: emote.id,
-        input: { name: name.trim(), tags, zeroWidth, visibility },
+        input: { name: name.trim(), tags, zeroWidth, private: visibility === 'PRIVATE' },
       });
       fill(r.updateEmote);
       notify('Saved.');
@@ -173,25 +167,10 @@
     }
   }
 
-  async function give() {
-    if (!emote || !giveTo || giving) return;
-    const to = receivers.find((r) => r.id === giveTo);
-    giving = true;
-    try {
-      const r = await gql(TRANSFER_EMOTE, { id: emote.id, toAccountId: giveTo });
-      forgetProfile('library');
-      notify(`${iso(emote.name)} now belongs to ${to ? (to.self ? 'you' : iso(clean(to.displayName))) : 'that account'}.`);
-      if (emoteCan(grants, r.transferEmote.owner?.id, session.me?.id, 'EMOTE_MANAGE')) fill(r.transferEmote);
-      else await goto(to?.self ? '/me' : `/users/${encodeURIComponent(giveTo)}`);
-    } catch (err) {
-      fail(err);
-    } finally {
-      giving = false;
-    }
-  }
-
+  // A personal set takes only emotes approved for personal use.
+  const blocked = (kind: string) => (kind === 'PERSONAL' ? personalBlock(emote?.approvals) : null);
   async function addTo() {
-    if (!emote || !target) return;
+    if (!emote || !target || blocked(sets.find((s) => s.id === target)?.kind ?? '')) return;
     adding = true;
     try {
       await gql(ADD_SET_EMOTE, { setId: target, emoteId: emote.id });
@@ -200,7 +179,8 @@
       sets = sets.filter((s) => s.id !== target);
       target = sets[0]?.id ?? '';
     } catch (err) {
-      fail(err);
+      if (err instanceof ApiError && err.code === 'personal_use_not_approved') notify(PERSONAL_NOT_APPROVED, true);
+      else fail(err);
     } finally {
       adding = false;
     }
@@ -237,9 +217,9 @@
         {#if sets.length}
           <div class="add">
             <select class="ui-input" bind:value={target} aria-label="Set">
-              {#each sets as s}<option value={s.id}>{iso(s.name)} ({s.kind === 'PERSONAL' ? 'personal' : 'channel'})</option>{/each}
+              {#each sets as s}<option value={s.id} disabled={!!blocked(s.kind)}>{iso(s.name)} ({s.kind === 'PERSONAL' ? 'personal' : 'channel'}){blocked(s.kind) ? `: ${blocked(s.kind)}` : ''}</option>{/each}
             </select>
-            <button class="ui-btn secondary" type="button" disabled={adding} onclick={addTo}>Add</button>
+            <button class="ui-btn secondary" type="button" disabled={adding || !!blocked(sets.find((s) => s.id === target)?.kind ?? '')} onclick={addTo}>Add</button>
           </div>
         {:else if setsFailed}
           <RetryNote onretry={loadSets}>Couldn’t load your sets.</RetryNote>
@@ -260,7 +240,7 @@
     </PanelBlock>
 
     {#if grantsFailed}
-      <RetryNote onretry={loadGrants}>Couldn’t load which accounts you edit, so some actions (like giving this emote away) may be missing.</RetryNote>
+      <RetryNote onretry={loadGrants}>Couldn’t load which accounts you edit, so some actions may be missing.</RetryNote>
     {/if}
   {/if}
 {/snippet}
@@ -332,23 +312,6 @@
         </form>
       {/if}
 
-      {#if canGive}
-        <Section title="Hand-over" lead="Give it to another account. It moves with its name, tags and sets.">
-          <div id="transfer">
-            {#if receivers.length}
-              <Row label="Give to" for="give-to" hint="Only accounts where you can upload can take it.">
-                <select id="give-to" class="ui-input give-in" bind:value={giveTo}>
-                  {#each receivers as r (r.id)}<option value={r.id}>{clean(r.displayName)}</option>{/each}
-                </select>
-                <Confirm small label="Give" confirm="Click again to give it" busy={giving} onconfirm={give} />
-              </Row>
-            {:else}
-              <Row label="Give to" hint="You can give it only to accounts where you can upload; there are none yet." />
-            {/if}
-          </div>
-        </Section>
-      {/if}
-
       {#if canDelete}
         <Section title="Danger" tone="danger">
           <Row label="Delete this emote" hint="It leaves every set it’s in. This can’t be undone.">
@@ -377,11 +340,10 @@
   .picture :global(.cs) { grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr)); }
   .name-in { width: min(220px, 100%); }
   .tags { flex: 1; min-width: min(280px, 100%); text-align: left; }
-  .give-in { width: min(240px, 100%); }
   .err { margin: 6px 0 0; }
   .flags { padding: 4px 0 0; }
   .save { margin-top: 12px; }
   .add { display: flex; gap: 8px; }
   .add select { flex: 1; min-width: 0; }
-  @media (max-width: 639.98px) { .name-in, .give-in { width: 100%; } }
+  @media (max-width: 639.98px) { .name-in { width: 100%; } }
 </style>

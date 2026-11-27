@@ -50,6 +50,12 @@ pub const LIMIT_ERRORS: &[LimitError] = &[
     l("too_many_pending", 409, "emotes waiting for review", ""),
     l("too_many_editors", 409, "editors an account can have", ""),
     l(
+        "too_many_uploads",
+        409,
+        "direct uploads open at once (neither finalized nor expired)",
+        "",
+    ),
+    l(
         "too_many_api_keys",
         409,
         "developer API keys an account can have",

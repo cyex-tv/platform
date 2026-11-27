@@ -8,9 +8,9 @@ import { PERMISSIONS } from './editors.mjs';
 // holds. The mock's signed-in admin is the owner: it holds the top role and sees it.
 export const ROLES = [
   { id: 'ROLEROOT', name: 'Owner', description: 'Every permission. Held by the owners only and shown to nobody else.', position: 1000000, permissions: [], public: false, denies: [], invisible: true, builtIn: 'ROOT' },
-  { id: 'ROLE1', name: 'Admin', description: 'Runs cyex.tv day to day.', position: 1000, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view', 'users.notes'], public: false, denies: [], invisible: false, builtIn: 'ADMIN' },
-  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets'], public: true, denies: [], invisible: false, builtIn: null },
-  { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, permissions: [], public: true, denies: [], invisible: false, builtIn: null },
+  { id: 'ROLE1', name: 'Admin', description: 'Runs cyex.tv day to day.', position: 1000, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view', 'users.notes', 'emotes.transfer'], public: false, denies: [], invisible: false, builtIn: 'ADMIN' },
+  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, color: '#3b82f6', permissions: ['emotes.review', 'emotes.review_personal', 'emotes.takedown', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets'], public: true, denies: [], invisible: false, builtIn: null },
+  { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, color: '#d6409f', permissions: [], public: true, denies: [], invisible: false, builtIn: null },
   { id: 'ROLE5', name: 'Muted', description: 'Can’t upload emotes or file reports. Sits above User, so its denies beat what everyone is allowed.', position: 5, permissions: [], denies: ['emotes.upload', 'reports.file'], public: false, invisible: true, builtIn: null },
   { id: 'ROLEUSER', name: 'User', description: 'Every account has this role. Its permissions are everyone’s.', position: 0, permissions: ['emotes.upload', 'reports.file'], public: false, denies: [], invisible: false, builtIn: 'USER' },
 ];
@@ -19,7 +19,7 @@ export const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id
 export const roleOut = (r) => {
   const root = r.builtIn === 'ROOT';
   const held = (ACCOUNT_ROLES[ME_ID] ?? []).includes(r.id);
-  return { ...r, builtIn: r.builtIn ?? null, permissions: root ? PERMISSIONS : r.permissions, denies: r.denies ?? [], invisible: !!r.invisible,
+  return { ...r, builtIn: r.builtIn ?? null, color: r.color ?? null, permissions: root ? PERMISSIONS : r.permissions, denies: r.denies ?? [], invisible: !!r.invisible,
     editable: !root && !held, assignable: !root && r.builtIn !== 'USER' };
 };
 // Effective permissions (the API's resolver): an account's roles from the highest position down,
@@ -54,6 +54,8 @@ export const LIMIT_DEFAULTS = [
   ['emote_transfers', 'ACCOUNT', 60, 3600], ['prefs', 'ACCOUNT', 120, 3600], ['checkout', 'ACCOUNT', 30, 3600], ['redeem', 'ACCOUNT', 30, 3600], ['data_export', 'ACCOUNT', 5, 3600],
   // The most slots an account may give one of its channel sets (a cap, not a rate; ADR 0017 amendment 2026/11/22).
   ['set_capacity_max', 'ACCOUNT', 1000, null],
+  // The slots of an account's personal set: 3, or what a role gives (a subscriber role: 10; ADR 0038).
+  ['personal_set_slots', 'ACCOUNT', 3, null],
   // The files an account uploads (crates/media config): the configured numbers and the most a role may set
   // (badges and paints may be raised, up to the ceiling; emote rules are fixed and not listed).
   ['badge_max_bytes', 'MEDIA', 8 * MB, null, 16 * MB], ['badge_max_side', 'MEDIA', 2048, null, 4096], ['badge_max_frames', 'MEDIA', 120, null, 240],

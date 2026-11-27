@@ -17,14 +17,18 @@ const ALL_SETS = () => [...SETS, ...SHARED_SETS, ...PUBLIC_SETS];
 // private set. Only staff can take one off the listings now.
 for (const s of ALL_SETS()) s.visibility = 'LISTED';
 export const PUBLIC_ONLY = () => err('Every set is public. Only staff can take a set off the listings.', 'bad_visibility');
+// A personal set's slots: the staff override, else its owner's personal_set_slots role limit
+// (3, or 10 for a subscriber role; ADR 0038).
+export const personalSlots = (s) => s.capacityOverride ?? limitOf(s.owner?.id ?? ME_ID, 'personal_set_slots');
 // setCapacityRange: from what the set holds (at least 1) to the owner's set_capacity_max role
-// limit (5 for a personal set, never below its capacity now), 1.000.000 for staff; null when you
-// can't change it.
+// limit (never below its capacity now), 1.000.000 for staff; null when you can't change it. A
+// personal set's owner can't change its slots: only staff, as an override.
 export const capRange = (s, admin) => {
   if (!s || !mayView(s, true) || !setRights(s, admin).rename) return null;
+  if (s.kind === 'PERSONAL' && !admin) return null;
   const used = s.emotes.length;
-  const ownerMax = Math.max(s.kind === 'PERSONAL' ? 5 : limitOf(s.owner?.id ?? ME_ID, 'set_capacity_max'), s.capacity);
-  return { min: Math.max(1, used), max: admin ? 1_000_000 : ownerMax, ownerMax, used, staff: !!admin };
+  const ownerMax = s.kind === 'PERSONAL' ? s.capacity : Math.max(limitOf(s.owner?.id ?? ME_ID, 'set_capacity_max'), s.capacity);
+  return { min: Math.max(1, used), max: admin ? (s.kind === 'PERSONAL' ? Math.max(1000, ownerMax) : 1_000_000) : ownerMax, ownerMax, used, staff: !!admin };
 };
 const ACTIVE_SET_IDS = () => new Set([...CHANNELS, ...EDITOR_CHANNELS].map((c) => c.activeSetId).filter(Boolean));
 // The API's rule: anyone opens listed and unlisted sets; a private one only its owner, editors and
@@ -51,7 +55,7 @@ export const emoteGrant = (ownerId, flag) => EDITOR_OF.some((g) => g.account.id 
 export const managed = (e) => !!e && !!e.owner && e.owner.id !== ME_ID && emoteGrant(e.owner.id, 'EMOTE_MANAGE');
 export const anyEmote = (id) => findEmote(id) ?? PENDING.find((e) => e.id === id);
 export const setOut = (s) => ({ ...s, editors: undefined, visibility: s.visibility ?? 'LISTED', listed: (s.visibility ?? 'LISTED') === 'LISTED',
-  slotsUsed: s.emotes.length, createdAt: s.createdAt ?? '2026-11-10T12:00:00.000Z', version: s.version ?? 0 });
+  slotsUsed: s.emotes.length, capacityOverride: s.capacityOverride ?? null, createdAt: s.createdAt ?? '2026-11-10T12:00:00.000Z', version: s.version ?? 0 });
 const setCard = (s, preview = 12) => {
   const o = setOut(s);
   return { id: o.id, name: o.name, kind: o.kind, owner: o.owner, visibility: o.visibility, listed: o.listed, capacity: o.capacity,

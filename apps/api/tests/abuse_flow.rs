@@ -210,15 +210,16 @@ impl World {
             )
             .await;
         assert_eq!(r["data"]["approveEmote"]["state"], "APPROVED", "{r}");
-        let set = self
+        let made = self
             .gql(
                 owner,
                 "mutation { createSet(input: { name: \"Main\", kind: CHANNEL }) { id } }",
                 json!({}),
             )
-            .await["data"]["createSet"]["id"]
+            .await;
+        let set = made["data"]["createSet"]["id"]
             .as_str()
-            .unwrap()
+            .unwrap_or_else(|| panic!("{made}"))
             .to_owned();
         let r = self
             .gql(

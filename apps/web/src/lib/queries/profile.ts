@@ -9,6 +9,7 @@ export const ACCOUNT_ROLES = graphql(`
       id
       name
       position
+      color
     }
   }
 `);

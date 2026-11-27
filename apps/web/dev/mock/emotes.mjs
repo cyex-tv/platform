@@ -6,6 +6,13 @@ import { NAME_OF, nameFor, rngFor, spec } from './art.mjs';
 export const NOW = Date.now();
 export const DAY = 86400_000;
 
+// The two approvals of an emote (ADR 0039), as its review state gives them: approved both, pending
+// both, rejected and taken down both denied. Seeds below change a few (personal use pending or denied).
+export const approvalsOf = (state) => {
+  const v = state === 'APPROVED' ? 'APPROVED' : state === 'PENDING' ? 'PENDING' : 'DENIED';
+  return { publicListing: v, personalUse: v };
+};
+
 export const emote = (i, owner = OTHERS[i % OTHERS.length], state = 'APPROVED') => {
   const s = spec(i);
   const w = s.wide ? 64 : 32;
@@ -14,6 +21,7 @@ export const emote = (i, owner = OTHERS[i % OTHERS.length], state = 'APPROVED') 
     id: `01JD8X${String(i).padStart(20, '0')}`,
     name: nameFor(i),
     state,
+    approvals: approvalsOf(state),
     processing: 'READY',
     animated: s.animated,
     tags: [...s.tags],
@@ -142,6 +150,7 @@ const twitchEmote = (n, owner = OTHERS[n % OTHERS.length]) => {
     id: `01JD8X${String(n).padStart(20, '0')}`,
     name,
     state: 'APPROVED',
+    approvals: approvalsOf('APPROVED'),
     processing: 'READY',
     animated,
     tags: tags.split(','),
@@ -171,10 +180,17 @@ export const ALL = FACES ? Array.from({ length: 300 }, (_, i) => emote(i)) : TWI
 ALL[11].flags.private = true;
 ALL[11].visibility = 'PRIVATE';
 ALL[12].visibility = 'UNLISTED';
+// The listing follows the review (ADR 0039): an unlisted emote's listing was denied, and staff look
+// at its personal use in the personal queue. A few more approved emotes wait there, one was denied.
+ALL[12].approvals = { publicListing: 'DENIED', personalUse: 'PENDING' };
+for (const i of [20, 21, 22]) ALL[i].approvals = { publicListing: 'APPROVED', personalUse: 'PENDING' };
+ALL[23].approvals = { publicListing: 'APPROVED', personalUse: 'DENIED' };
 // NSFW emotes aren't allowed (ADR 0020, amendment 2026/11/22): `flags.nsfw` is always false.
 export const MINE = Array.from({ length: 9 }, (_, i) =>
   emote(600 + i, ME_SUMMARY, i < 2 ? 'PENDING' : i === 2 ? 'REJECTED' : 'APPROVED'));
 MINE[4].visibility = 'UNLISTED';
+MINE[4].approvals = { publicListing: 'DENIED', personalUse: 'PENDING' };
+MINE[5].approvals = { publicListing: 'APPROVED', personalUse: 'PENDING' };
 // An upload whose transcode ran out of attempts: no files, shown as failed (notification
 // `emote.failed`, see account.mjs).
 export const FAILED = { ...emote(609, ME_SUMMARY, 'PENDING'), files: [], processing: 'FAILED' };

@@ -1,7 +1,7 @@
 // Mock API: account. See ../mock-api.mjs.
 import { randomBytes } from 'node:crypto';
 import { ME_ID, ME_SUMMARY, OTHERS } from './config.mjs';
-import { DAY, MINE } from './emotes.mjs';
+import { ALL, DAY, MINE } from './emotes.mjs';
 import { SETS } from './set-data.mjs';
 import { ACCOUNT_ROLES, ROLES } from './roles.mjs';
 import { ACCOUNT_EDITORS, EDITOR_OF } from './editors.mjs';
@@ -15,9 +15,9 @@ export const setPendingDeletion = (v) => { PENDING_DELETION = v; };
 export const setRestoreCookie = (v) => { RESTORE_COOKIE = v; };
 // As the API's me.roles: with every permission (the mock's owner) the top role comes first, hidden.
 export const MY_ROLES = (admin) => [
-  ...(admin ? [{ id: ROLES.find((r) => r.builtIn === 'ROOT')?.id ?? 'owner', name: 'Owner', public: false, invisible: true }] : []),
+  ...(admin ? [{ id: ROLES.find((r) => r.builtIn === 'ROOT')?.id ?? 'owner', name: 'Owner', public: false, invisible: true, color: null }] : []),
   ...(ACCOUNT_ROLES[ME_ID] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean)
-    .sort((a, b) => b.position - a.position).filter((r) => r.builtIn !== 'ROOT').map((r) => ({ id: r.id, name: r.name, public: r.public, invisible: !!r.invisible })),
+    .sort((a, b) => b.position - a.position).filter((r) => r.builtIn !== 'ROOT').map((r) => ({ id: r.id, name: r.name, public: r.public, invisible: !!r.invisible, color: r.color ?? null })),
 ];
 
 // Every account has a default set named after it (made at sign-up).
@@ -45,7 +45,9 @@ export const NOTES = [
   { id: '01JD8XNOTE0000000000000006', kind: 'cosmetic.granted', payload: JSON.stringify({ kind: 'paint', cosmetic_id: 'P1', name: 'Sample sunrise', reason: 'Thanks for testing' }), createdAt: '2026-11-17T09:30:00.000Z', read: false },
   { id: '01JD8XNOTE0000000000000005', kind: 'editor.added', payload: JSON.stringify({ role: 'editor', owner_id: OTHERS[4].id, owner_name: OTHERS[4].displayName, editor_id: ME_ID, editor_name: ME_SUMMARY.displayName, actor_id: OTHERS[4].id, actor_name: OTHERS[4].displayName, permissions: ['emotes', 'profile'] }), createdAt: '2026-11-15T20:00:00.000Z', read: false },
   { id: '01JD8XNOTE0000000000000004', kind: 'editor.changed', payload: JSON.stringify({ role: 'owner', owner_id: ME_ID, owner_name: ME_SUMMARY.displayName, editor_id: OTHERS[1].id, editor_name: OTHERS[1].displayName, actor_id: OTHERS[2].id, actor_name: OTHERS[2].displayName, permissions: ['emotes'] }), createdAt: '2026-11-14T19:00:00.000Z', read: true },
-  { id: '01JD8XNOTE0000000000000003', kind: 'emote.approved', payload: JSON.stringify({ emote_id: MINE[3].id, name: MINE[3].name }), createdAt: '2026-11-16T22:10:00.000Z', read: false },
+  { id: '01JD8XNOTE0000000000000003', kind: 'emote.approved', payload: JSON.stringify({ emote_id: MINE[3].id, name: MINE[3].name, visibility: 'public', public_listing: 'approved', personal_use: 'pending', reason: null }), createdAt: '2026-11-16T22:10:00.000Z', read: false },
+  { id: '01JD8XNOTE0000000000000011', kind: 'emote.approvals_changed', payload: JSON.stringify({ emote_id: MINE[4].id, name: MINE[4].name, visibility: 'unlisted', public_listing: 'denied', personal_use: 'approved', reason: 'Looks too much like another emote for the public listing.' }), createdAt: '2026-11-16T22:40:00.000Z', read: false },
+  { id: '01JD8XNOTE0000000000000012', kind: 'emote.transferred', payload: JSON.stringify({ role: 'to', emote_id: ALL[30].id, name: ALL[30].name, from_id: OTHERS[1].id, from_name: OTHERS[1].displayName, to_id: ME_ID, to_name: ME_SUMMARY.displayName, actor_id: OTHERS[2].id, actor_name: 'cyex staff' }), createdAt: '2026-11-16T20:00:00.000Z', read: true },
   { id: 'N2', kind: 'emote.failed', payload: JSON.stringify({ emote_id: MINE[9].id, name: MINE[9].name }), createdAt: '2026-11-16T21:30:00.000Z', read: false },
   { id: 'N1', kind: 'emote.rejected', payload: JSON.stringify({ emote_id: MINE[2].id, name: MINE[2].name, reason: 'Looks like a copy of a well-known emote.' }), createdAt: '2026-11-16T21:00:00.000Z', read: false },
 ];

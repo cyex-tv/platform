@@ -104,7 +104,8 @@
             {/each}
           </div>
           <div class="nav-group">
-            <div class="nav-group-title"><span class="group-name">After</span><span class="count" aria-hidden="true">1</span></div>
+            <div class="nav-group-title"><span class="group-name">After</span><span class="count" aria-hidden="true">2</span></div>
+            <a class="nav-item" href="#review"><span class="nav-label">How review works</span></a>
             <a class="nav-item" href="#after"><span class="nav-label">When something breaks these</span></a>
           </div>
         </nav>
@@ -117,7 +118,7 @@
       <header class="docs-title">
         <div>
           <h1>Emote guidelines</h1>
-          <p>What you can upload to cyex.tv. Every new emote is checked by a moderator before anyone else sees it; these are the things they look for.</p>
+          <p>What you can upload to cyex.tv. Every new emote is checked by a moderator before it is listed; these are the things they look for.</p>
         </div>
       </header>
 
@@ -128,6 +129,12 @@
           {#each r.body as p, j (j)}<p>{p}</p>{/each}
         </section>
       {/each}
+
+      <section class="guide rule" id="review" aria-labelledby="review-title">
+        <h2 id="review-title">How review works</h2>
+        <p>Every upload is unlisted and goes to review. A moderator decides two things on their own: whether the emote may be listed publicly (search, browse and your profile), and whether it may be used as a personal emote, shown in chat everywhere you talk. You can get one and not the other, and each decision comes with a reason when it is a no.</p>
+        <p>An emote that isn’t listed can still be opened by its link and used in channel sets. Only emotes approved for personal use can go in a personal set. Ownership can’t be requested, and you can’t give an emote away yourself; if one should move to another account, contact support and staff will move it.</p>
+      </section>
 
       <section class="guide rule after" id="after" aria-labelledby="after-title">
         <h2 id="after-title">When something breaks these</h2>
@@ -146,6 +153,7 @@
           <div class="dp-fact"><dt>Rules</dt><dd class="mono">{RULES.length}</dd></div>
           <div class="dp-fact"><dt>NSFW</dt><dd>Not allowed</dd></div>
           <div class="dp-fact"><dt>Checked by</dt><dd>A moderator</dd></div>
+          <div class="dp-fact"><dt>Starts as</dt><dd>Unlisted</dd></div>
           <div class="dp-fact"><dt>Takedowns</dt><dd><a href="mailto:abuse@cyex.tv">abuse@cyex.tv</a></dd></div>
         </dl>
       </section>

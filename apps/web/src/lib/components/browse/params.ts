@@ -1,4 +1,4 @@
-// The browse page's whole state lives in the URL: q, sort, t (the trending window), kind, zw, wide,
+// The browse page's whole state lives in the URL: q, sort, t (the trending window), kind, zw, wide, personal,
 // tag (repeated, one per tag), exact, select (multi-select on) and n (pages loaded). A reload
 // or a shared link gives the same view. Every filter is the API's, so the total is always the real
 // one. Pure, so it is unit tested. NSFW emotes aren't allowed, so there is no NSFW filter (an old
@@ -10,7 +10,7 @@ export type Sort = 'relevance' | 'trending' | 'top' | 'new';
 export type Kind = 'all' | 'animated' | 'still';
 /** How far back Trending counts the channels that added an emote. */
 export type Window = 'day' | 'week' | 'month';
-export type Flag = 'zeroWidth' | 'wide';
+export type Flag = 'zeroWidth' | 'wide' | 'personal';
 
 // Emotes only: people are found from the header search (an old ?tab=users address reads as this).
 export type Browse = {
@@ -21,6 +21,8 @@ export type Browse = {
   kind: Kind;
   zeroWidth: boolean;
   wide: boolean;
+  /** Only emotes approved for personal use (ADR 0039). */
+  personal: boolean;
   /** Tags the emotes must all carry (lower case, no #), at most MAX_TAGS. */
   tags: string[];
   /** The emote's name must equal the query (any case), not just contain it. */
@@ -71,6 +73,7 @@ export function parse(p: URLSearchParams): Browse {
     kind: k === 'animated' || k === 'still' ? k : 'all',
     zeroWidth: p.get('zw') === '1',
     wide: p.get('wide') === '1',
+    personal: p.get('personal') === '1',
     tags: cleanTags(p.getAll('tag')),
     exact: p.get('exact') === '1' && !!q,
     select: p.get('select') === '1',
@@ -87,6 +90,7 @@ export function toSearch(b: Browse): string {
   if (b.kind !== 'all') p.set('kind', b.kind);
   if (b.zeroWidth) p.set('zw', '1');
   if (b.wide) p.set('wide', '1');
+  if (b.personal) p.set('personal', '1');
   for (const t of b.tags) p.append('tag', t);
   if (b.exact && b.q) p.set('exact', '1');
   if (b.select) p.set('select', '1');
@@ -117,6 +121,7 @@ export function active(b: Browse): Active[] {
   if (b.kind !== 'all') out.push({ key: 'kind', label: b.kind === 'animated' ? 'Animated' : 'Still' });
   if (b.zeroWidth) out.push({ key: 'zeroWidth', label: 'Zero-width' });
   if (b.wide) out.push({ key: 'wide', label: 'Wide' });
+  if (b.personal) out.push({ key: 'personal', label: 'Personal use' });
   for (const t of b.tags) out.push({ key: `tag:${t}`, label: `#${t}` });
   if (b.exact && b.q) out.push({ key: 'exact', label: 'Exact name' });
   return out;
@@ -129,7 +134,7 @@ export function without(b: Browse, key: Active['key']): Partial<Browse> {
   return { [key]: false } as Partial<Browse>;
 }
 
-export const CLEARED: Partial<Browse> = { kind: 'all', zeroWidth: false, wide: false, tags: [], exact: false };
+export const CLEARED: Partial<Browse> = { kind: 'all', zeroWidth: false, wide: false, personal: false, tags: [], exact: false };
 
 /** A tag as the URL keeps it: the one rule uploads, edits and search share (lib/rules). */
 export { cleanTag };
@@ -141,7 +146,7 @@ export function cleanTags(tags: readonly string[]): string[] {
 
 /** The variables of the SEARCH query for a state and a page. */
 export function apiVars(b: Browse, page: number) {
-  const flags = [b.zeroWidth && 'ZERO_WIDTH', b.wide && 'WIDE'].filter(Boolean) as ('ZERO_WIDTH' | 'WIDE')[];
+  const flags = [b.zeroWidth && 'ZERO_WIDTH', b.wide && 'WIDE', b.personal && 'PERSONAL_USE'].filter(Boolean) as ('ZERO_WIDTH' | 'WIDE' | 'PERSONAL_USE')[];
   return {
     query: b.q,
     animated: b.kind === 'animated' ? true : b.kind === 'still' ? false : null,
@@ -153,17 +158,6 @@ export function apiVars(b: Browse, page: number) {
     page,
     perPage: PER_PAGE,
   };
-}
-
-/** The most common tags across `items`, most used first (ties by name), `n` at most, leaving out `skip`. */
-export function topTags(items: { tags?: string[] }[], n = 12, skip: readonly string[] = []): { tag: string; count: number }[] {
-  const seen = new Map<string, number>();
-  for (const e of items)
-    for (const t of new Set((e.tags ?? []).map(cleanTag).filter(Boolean))) if (!skip.includes(t)) seen.set(t, (seen.get(t) ?? 0) + 1);
-  return [...seen]
-    .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
-    .slice(0, n);
 }
 
 /** The columns the table can sort by, and the sort each one stands for (the API has no other). */

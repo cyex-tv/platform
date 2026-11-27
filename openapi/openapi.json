@@ -841,6 +841,251 @@
         }
       }
     },
+    "/v1/cosmetics/images/uploads": {
+      "post": {
+        "tags": [
+          "cosmetics"
+        ],
+        "summary": "Ask for a direct upload URL for a badge or paint picture.",
+        "description": "For large originals: the bytes go straight to storage instead of through the API. Send the\nfile with `PUT` to `url` with exactly `headers`, then call\n`POST /v1/cosmetics/images/uploads/{id}/finalize`. Needs `cosmetics.manage`, like\n`POST /v1/cosmetics/images`, and is checked the same way before the URL is given: the\ndeclared `size` against your byte cap for the kind (your roles' limits), the type, the\ncosmetics rate limit, and at most 10 uploads open at once. Where the server has no public\nstorage address the answer is `501 direct_upload_off`: use `POST /v1/cosmetics/images`.",
+        "operationId": "create_upload",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewDirectUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "The presigned upload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectUpload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bad_form` or `bad_kind`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`signed_out`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` (needs `cosmetics.manage`), `restricted`, `insufficient_scope` or `bad_origin`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`too_many_uploads`: 10 open uploads (`details`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: `size` is over your byte cap for the kind (`details`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_format`: not PNG, GIF, WebP or JPEG.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`direct_upload_off`: use `POST /v1/cosmetics/images`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: storage isn't configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cosmetics/images/uploads/{id}/finalize": {
+      "post": {
+        "tags": [
+          "cosmetics"
+        ],
+        "summary": "Finalize a direct upload: check the stored file and make the picture.",
+        "description": "The stored object is checked before anything is made: its size against the declared one\n(`size_mismatch`), then exactly what `POST /v1/cosmetics/images` checks (format, decoding,\nyour byte, side and frame caps, the shape, animated sizes). A refused file is deleted. The\nanswer is the one `POST /v1/cosmetics/images` gives (`UploadResult` fields): poll\n`cosmeticImage(id)` until `ready`.",
+        "operationId": "finalize_upload",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The upload's ID.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted; the files are being made, as for `POST /v1/cosmetics/images`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CosmeticImageUploaded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`signed_out`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`, `restricted`, `insufficient_scope` or `bad_origin`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: no such upload of yours.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`upload_missing` (nothing was PUT yet) or `already_finalized`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "`upload_expired`: ask for a new URL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`: over your byte, side or frame cap.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_format`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`size_mismatch`, `invalid_image` or `bad_dimensions`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/cosmetics/users": {
       "get": {
         "tags": [
@@ -1566,6 +1811,15 @@
           }
         }
       },
+      "ApprovalState": {
+        "type": "string",
+        "description": "Where one of an emote's two approvals stands (ADR 0039): its public listing or its personal use.",
+        "enum": [
+          "pending",
+          "approved",
+          "denied"
+        ]
+      },
       "Badge": {
         "type": "object",
         "description": "A chat badge, shown before a chatter's name.",
@@ -1861,6 +2115,50 @@
           "paint"
         ]
       },
+      "DirectUpload": {
+        "type": "object",
+        "description": "Where to send the bytes.",
+        "required": [
+          "id",
+          "kind",
+          "method",
+          "url",
+          "headers",
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "description": "Finalize before this (one hour); then the upload is deleted."
+          },
+          "headers": {
+            "type": "object",
+            "description": "Headers to send exactly as given (`content-type`, `content-length`).",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string",
+            "description": "The upload's ID, for `POST /v1/cosmetics/images/uploads/{id}/finalize`."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`badge` or `paint`."
+          },
+          "method": {
+            "type": "string",
+            "description": "Always `PUT`."
+          },
+          "url": {
+            "type": "string",
+            "description": "The presigned address. Valid for 15 minutes; send the file as the whole body."
+          }
+        }
+      },
       "EffectiveLimit": {
         "type": "object",
         "description": "One of the signed-in caller's per-account limits, with the default and what applies to them.",
@@ -1910,6 +2208,10 @@
         "properties": {
           "animated": {
             "type": "boolean"
+          },
+          "approvals": {
+            "$ref": "#/components/schemas/EmoteApprovals",
+            "description": "Its public listing and personal use approvals (ADR 0039)."
           },
           "channel_count": {
             "type": "integer",
@@ -1966,6 +2268,24 @@
           "visibility": {
             "$ref": "#/components/schemas/EmoteVisibility",
             "description": "`PUBLIC`, `UNLISTED` or `PRIVATE` (ADR 0020). `flags.private` says the same for\n`PRIVATE`, for clients from before `UNLISTED`."
+          }
+        }
+      },
+      "EmoteApprovals": {
+        "type": "object",
+        "description": "An emote's two approvals (ADR 0039). Each is decided on its own, in review.",
+        "required": [
+          "public_listing",
+          "personal_use"
+        ],
+        "properties": {
+          "personal_use": {
+            "$ref": "#/components/schemas/ApprovalState",
+            "description": "Whether it may go in a personal set (shown in chat everywhere its owner chats). A personal\nset takes only emotes whose personal use is `APPROVED`."
+          },
+          "public_listing": {
+            "$ref": "#/components/schemas/ApprovalState",
+            "description": "Whether it may be listed: found by search and browse and shown on its creator's page.\nUntil it is `APPROVED` the emote is unlisted (unless private)."
           }
         }
       },
@@ -2077,6 +2397,16 @@
           "capacity": {
             "type": "integer",
             "format": "int32",
+            "description": "The slots the set has. A personal set's come from its owner's roles (3, or 10 for a\nsubscriber) unless staff set `capacityOverride` (ADR 0038). A personal set may hold more\nthan this after its owner lost a role: it keeps its emotes and takes no new one until it\nis under the limit.",
+            "minimum": 0
+          },
+          "capacity_override": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Staff set this personal set's capacity by hand (`updateSet`). Null: the owner's roles decide.",
             "minimum": 0
           },
           "created_at": {
@@ -2258,6 +2588,8 @@
           "emote_unavailable",
           "emote_private",
           "not_approved",
+          "personal_use_not_approved",
+          "bad_approvals",
           "already_taken_down",
           "not_pending",
           "bad_emote",
@@ -2283,6 +2615,8 @@
           "no_permissions",
           "retired_permission",
           "bad_editor",
+          "transfer_staff_only",
+          "transfer_requests_retired",
           "same_owner",
           "expired",
           "recipient_not_found",
@@ -2292,6 +2626,12 @@
           "bad_shadows",
           "bad_tooltip",
           "bad_image",
+          "direct_upload_off",
+          "too_many_uploads",
+          "upload_missing",
+          "upload_expired",
+          "size_mismatch",
+          "already_finalized",
           "bad_dimensions",
           "image_not_ready",
           "original_missing",
@@ -2717,6 +3057,18 @@
             "when": "Until approval an emote only goes in its owner's channel sets."
           },
           {
+            "code": "personal_use_not_approved",
+            "group": "Emotes",
+            "meaning": "The emote is not approved for personal use.",
+            "when": "Adding an emote to a personal set before its personal use is approved, or after it was denied (409, ADR 0039)."
+          },
+          {
+            "code": "bad_approvals",
+            "group": "Emotes",
+            "meaning": "The review asks for nothing, or a denial has no reason.",
+            "when": "reviewApprovals without publicListing or personalUse, or with a DENY and no reason (ADR 0039)."
+          },
+          {
             "code": "already_taken_down",
             "group": "Emotes",
             "meaning": "The emote is taken down already.",
@@ -2867,6 +3219,18 @@
             "when": "Give the editor's account ID, or a platform and a login."
           },
           {
+            "code": "transfer_staff_only",
+            "group": "Transfers",
+            "meaning": "Only staff with emotes.transfer can change who owns an emote.",
+            "when": "transferEmote without the emotes.transfer permission, the emote's owner included (403, ADR 0039)."
+          },
+          {
+            "code": "transfer_requests_retired",
+            "group": "Transfers",
+            "meaning": "Transfer requests are gone: ownership can't be requested.",
+            "when": "acceptEmoteTransfer, declineEmoteTransfer or cancelEmoteTransfer (410, ADR 0039)."
+          },
+          {
             "code": "same_owner",
             "group": "Transfers",
             "meaning": "That account owns the emote already.",
@@ -2919,6 +3283,42 @@
             "group": "Cosmetics",
             "meaning": "The image does not fit this paint.",
             "when": "Only image paints take an image."
+          },
+          {
+            "code": "direct_upload_off",
+            "group": "Cosmetics",
+            "meaning": "Direct uploads aren't set up on this server.",
+            "when": "Asking for a direct upload URL where storage has no public upload address (501). Send the picture to POST /v1/cosmetics/images instead."
+          },
+          {
+            "code": "too_many_uploads",
+            "group": "Cosmetics",
+            "meaning": "You have as many direct uploads open as allowed.",
+            "when": "Asking for another direct upload URL while that many are neither finalized nor expired (409, with details)."
+          },
+          {
+            "code": "upload_missing",
+            "group": "Cosmetics",
+            "meaning": "Nothing was uploaded to that direct upload yet.",
+            "when": "Finalizing before the PUT to the upload URL finished (409). Upload, then finalize again."
+          },
+          {
+            "code": "upload_expired",
+            "group": "Cosmetics",
+            "meaning": "The direct upload has expired.",
+            "when": "Finalizing an upload past its expiry (410). Ask for a new upload URL."
+          },
+          {
+            "code": "size_mismatch",
+            "group": "Cosmetics",
+            "meaning": "The uploaded file isn't the size that was declared.",
+            "when": "Finalizing an upload whose stored object differs from the declared size (422). The upload is discarded."
+          },
+          {
+            "code": "already_finalized",
+            "group": "Cosmetics",
+            "meaning": "The direct upload was already finalized.",
+            "when": "Finalizing the same upload twice (409). The first answer's picture stands."
           },
           {
             "code": "bad_dimensions",
@@ -3466,6 +3866,31 @@
           "tooltip": {
             "$ref": "#/components/schemas/TextLimit",
             "description": "A badge's tooltip."
+          }
+        }
+      },
+      "NewDirectUpload": {
+        "type": "object",
+        "description": "What a direct upload is for.",
+        "required": [
+          "kind",
+          "size",
+          "content_type"
+        ],
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "description": "`image/png`, `image/gif`, `image/webp` or `image/jpeg`. Signed into the URL: send it as\nthe `Content-Type` of the `PUT`."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`badge` or `paint`."
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The file's exact length in bytes. Signed into the URL: storage takes no other length.",
+            "minimum": 0
           }
         }
       },

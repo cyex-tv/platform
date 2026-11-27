@@ -17,6 +17,7 @@
   import { STATE_LABEL } from './state';
   import { fail, notify } from './notices.svelte';
   import { nameProblem } from '$lib/rules';
+  import { PERSONAL_NOT_APPROVED, personalBlock } from '$lib/components/emote/approvals';
   import { RESULT_PAGE, appendResults, freeName, mergeResults, showingLine } from './add-emotes';
 
   let {
@@ -123,7 +124,7 @@
   }
 
   async function add(e: EmoteFieldsFragment, as?: string) {
-    if (busy) return;
+    if (busy || (personal && personalBlock(e.approvals))) return;
     busy = e.id;
     // The pressed button turns into "Added" (disabled): focus moves on to the next Add.
     const at = (results ?? []).findIndex((r) => r.id === e.id);
@@ -138,7 +139,8 @@
       const next = buttons.slice(at + 1).find((b) => !b.disabled) ?? buttons.slice(0, at).reverse().find((b) => !b.disabled);
       (next ?? findEl)?.focus();
     } catch (err) {
-      fail(err);
+      if (err instanceof ApiError && err.code === 'personal_use_not_approved') notify(PERSONAL_NOT_APPROVED, true);
+      else fail(err);
     } finally {
       busy = null;
     }
@@ -170,15 +172,18 @@
         {@const inSet = taken.has(e.id)}
         {@const clash = !inSet && names.has(e.name)}
         {@const mine = e.owner?.id === session.me?.id}
+        {@const block = personal ? personalBlock(e.approvals) : null}
         <li>
           <Thumb emote={e} name="" box={40} />
           <a class="who" href={mine ? `/me/emotes/${e.id}` : `/emotes/${e.id}`}>
             <span class="name"><bdi>{e.name}</bdi>{#if lists.favourites.has(e.id)}<span class="fav" title="Favourite"><Icon name="heart" size={12} /><span class="sr-only">, favourite</span></span>{/if}</span>
             <span class="ui-hint">
-              {#if mine}Yours{:else if e.owner}by <bdi>{clean(e.owner.displayName)}</bdi>{/if}{#if e.state !== 'APPROVED'} · {STATE_LABEL[e.state].toLowerCase()}{/if}
+              {#if mine}Yours{:else if e.owner}by <bdi>{clean(e.owner.displayName)}</bdi>{/if}{#if e.state !== 'APPROVED'} · {STATE_LABEL[e.state].toLowerCase()}{/if}{#if block} · {block}{/if}
             </span>
           </a>
-          {#if clash}
+          {#if block}
+            <button class="ui-btn small add ghost" type="button" disabled aria-label="Add {iso(e.name)}: {block}" title={block}>Add</button>
+          {:else if clash}
             <button class="ui-btn small add secondary" type="button" disabled={full || busy === e.id} aria-expanded={renaming === e.id}
               aria-label="Name taken: add {iso(e.name)} under another name" onclick={() => askName(e)}>Add as…</button>
           {:else}

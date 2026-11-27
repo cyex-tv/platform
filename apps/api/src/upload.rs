@@ -139,12 +139,13 @@ pub struct Flags {
     pub unlisted: bool,
 }
 
-/// `400 bad_visibility`: only staff take an emote off the listings (ADR 0020).
+/// `400 bad_visibility`: uploaders don't choose listed or unlisted (ADR 0039). Every emote is
+/// unlisted until a moderator approves its public listing; its owner only makes it private.
 pub fn unlisted_staff_only() -> ApiError {
     ApiError::new(
         StatusCode::BAD_REQUEST,
         "bad_visibility",
-        "Emotes are public unless you make them private. Only moderators can take an emote off the listings.",
+        "You can't choose listed or unlisted: every emote is unlisted until a moderator approves its public listing. You can make it private.",
     )
 }
 

@@ -275,7 +275,7 @@ async fn export_token(
 // Upload
 
 /// App sign-in sessions (ADR 0021) can't upload: no scope covers it.
-fn no_app_scope(caller: &cyex_tv_auth::Caller) -> ApiResult<()> {
+pub(crate) fn no_app_scope(caller: &cyex_tv_auth::Caller) -> ApiResult<()> {
     match caller.app_client {
         Some(_) => Err(ApiError::new(
             StatusCode::FORBIDDEN,
@@ -445,7 +445,7 @@ async fn upload_emote(
 }
 
 /// The limits an upload was checked under, as the answer reports them.
-fn limits_used(kind: &str, limits: &cyex_tv_media::Limits) -> LimitsUsed {
+pub(crate) fn limits_used(kind: &str, limits: &cyex_tv_media::Limits) -> LimitsUsed {
     LimitsUsed {
         kind: kind.to_owned(),
         max_bytes: cyex_tv_shared::limit_errors::n(limits.max_bytes),

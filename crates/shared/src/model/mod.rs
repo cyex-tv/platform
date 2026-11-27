@@ -123,6 +123,9 @@ pub struct OwnRole {
     #[serde(default)]
     #[schema(required = false)]
     pub invisible: bool,
+    /// The role's colour, `#rrggbb`, if it has one.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 /// How a session signed in.
@@ -511,6 +514,83 @@ impl FromStr for EmoteState {
     }
 }
 
+/// Where one of an emote's two approvals stands (ADR 0039): its public listing or its personal use.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalState {
+    /// Waiting for a reviewer. Every upload starts here.
+    #[default]
+    Pending,
+    Approved,
+    Denied,
+}
+
+impl ApprovalState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Approved => "approved",
+            Self::Denied => "denied",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("unknown approval state: {0}")]
+pub struct UnknownApprovalState(pub String);
+
+impl FromStr for ApprovalState {
+    type Err = UnknownApprovalState;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pending" => Ok(Self::Pending),
+            "approved" => Ok(Self::Approved),
+            "denied" => Ok(Self::Denied),
+            other => Err(UnknownApprovalState(other.to_owned())),
+        }
+    }
+}
+
+/// An emote's two approvals (ADR 0039). Each is decided on its own, in review.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EmoteApprovals {
+    /// Whether it may be listed: found by search and browse and shown on its creator's page.
+    /// Until it is `APPROVED` the emote is unlisted (unless private).
+    pub public_listing: ApprovalState,
+    /// Whether it may go in a personal set (shown in chat everywhere its owner chats). A personal
+    /// set takes only emotes whose personal use is `APPROVED`.
+    pub personal_use: ApprovalState,
+}
+
+/// A reviewer's answer to one of the two approvals.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalDecision {
+    Approve,
+    Deny,
+}
+
+/// What `reviewApprovals` decides (ADR 0039). Leave a part out to keep it as it is.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "ApprovalsInput"))]
+pub struct ApprovalsInput {
+    /// Approve or deny the public listing. Needs `emotes.review`.
+    pub public_listing: Option<ApprovalDecision>,
+    /// Approve or deny personal use. Needs `emotes.review_personal`.
+    pub personal_use: Option<ApprovalDecision>,
+    /// Why, 1 to 500 characters; the owner sees it. Needed with any `DENY`.
+    pub reason: Option<String>,
+    /// Default `true` (what the queues send): a part that is no longer pending is skipped, and an
+    /// emote with nothing pending left is listed in `failed` as `not_pending`. `false` changes a
+    /// decision already made (the edit dialog).
+    pub only_pending: Option<bool>,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct EmoteFlags {
@@ -683,6 +763,10 @@ pub struct Emote {
     #[serde(default)]
     #[schema(required = false)]
     pub visibility: EmoteVisibility,
+    /// Its public listing and personal use approvals (ADR 0039).
+    #[serde(default)]
+    #[schema(required = false)]
+    pub approvals: EmoteApprovals,
     pub animated: bool,
     pub tags: Vec<String>,
     /// For example `https://cdn.cyex.tv/emotes/<sha256>`.
@@ -860,7 +944,14 @@ pub struct EmoteSet {
     pub name: String,
     pub kind: SetKind,
     pub owner: Option<AccountSummary>,
+    /// The slots the set has. A personal set's come from its owner's roles (3, or 10 for a
+    /// subscriber) unless staff set `capacityOverride` (ADR 0038). A personal set may hold more
+    /// than this after its owner lost a role: it keeps its emotes and takes no new one until it
+    /// is under the limit.
     pub capacity: u32,
+    /// Staff set this personal set's capacity by hand (`updateSet`). Null: the owner's roles decide.
+    #[serde(default)]
+    pub capacity_override: Option<u32>,
     pub emotes: Vec<SetEmote>,
     /// Who can find and open it.
     #[serde(default)]
@@ -919,7 +1010,8 @@ pub struct SetCapacityRange {
     /// The most slots you may pick.
     pub max: u32,
     /// The most without a staff permission: the owner's `set_capacity_max` role limit (1.000 by
-    /// default) for a channel set, 5 for a personal set, or the set's capacity if it is higher.
+    /// default) for a channel set, or the set's capacity if it is higher. A personal set's owner
+    /// can't change it: there `setCapacityRange` is null without `sets.edit_any`.
     pub owner_max: u32,
     /// Emotes in the set now, pending ones included.
     pub used: u32,
@@ -995,10 +1087,15 @@ pub struct CreateSet {
 #[cfg_attr(feature = "graphql", graphql(name = "UpdateSetInput"))]
 pub struct UpdateSet {
     pub name: Option<String>,
-    /// 1 to the owner's `set_capacity_max` role limit (1.000 by default; 5 for a personal set),
-    /// never below the emotes the set holds; up to 1.000.000 with `sets.edit_any`.
-    /// `setCapacityRange` says what you may pick.
+    /// 1 to the owner's `set_capacity_max` role limit (1.000 by default), never below the emotes
+    /// the set holds; up to 1.000.000 with `sets.edit_any`. On a personal set this is the staff
+    /// override and needs `sets.edit_any` (`forbidden` otherwise); audited. `setCapacityRange` says
+    /// what you may pick.
     pub capacity: Option<u32>,
+    /// Personal sets, `sets.edit_any`: drop the override, so the owner's roles decide the slots
+    /// again.
+    #[serde(default)]
+    pub reset_capacity: Option<bool>,
     /// Every set is public: changing it needs `sets.edit_any` (staff hiding a set). Personal sets
     /// can't be `PRIVATE`; the global set is always listed.
     #[serde(default)]
@@ -1164,6 +1261,8 @@ pub enum EmoteFlag {
         graphql(deprecation = "NSFW emotes aren't allowed on cyex.tv; this flag finds nothing.")
     )]
     Nsfw,
+    /// Approved for personal use (ADR 0039): it can go in a personal set.
+    PersonalUse,
 }
 
 /// How far back `TRENDING` counts channel adds.
@@ -1295,10 +1394,13 @@ pub struct LoginMatch {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct ReviewCounts {
-    /// Pending and public.
+    /// Pending and not private: listed once its listing is approved.
     pub public: u64,
-    /// Pending and unlisted or private.
+    /// Pending and private (every upload is unlisted until its listing is approved, ADR 0039).
     pub limited: u64,
+    /// Personal use pending, emote usable: the personal queue (ADR 0039).
+    #[serde(default)]
+    pub personal: u64,
 }
 
 /// A part of the review queue.
@@ -1309,12 +1411,15 @@ pub enum ReviewTab {
     /// Every pending emote. The default.
     #[default]
     Pending,
-    /// Pending and public: search shows it once approved.
+    /// Pending and not private: search shows it once its listing is approved.
     Public,
-    /// Pending and unlisted or private.
+    /// Pending and private.
     Limited,
     /// Approved or rejected by a reviewer.
     Resolved,
+    /// The personal queue (ADR 0039): personal use pending, and the emote may be used (pending
+    /// or approved). Needs `emotes.review_personal` (or `emotes.review`).
+    Personal,
 }
 
 /// How the review queue is ordered. Ties go by upload time.
@@ -1347,6 +1452,9 @@ pub struct ReviewQueueFilter {
     /// Only this uploader's emotes (an account ID).
     #[serde(default)]
     pub uploader_id: Option<String>,
+    /// Only emotes whose personal use is in this state (ADR 0039), for example `APPROVED`.
+    #[serde(default)]
+    pub personal_use: Option<ApprovalState>,
 }
 
 /// A note reviewers keep on one emote (`emotes.review`). The uploader never sees it.
@@ -1394,6 +1502,11 @@ pub struct Role {
     /// rank people. Staff and its holders still see it.
     #[serde(default)]
     pub invisible: bool,
+    /// Optional colour, `#rrggbb` in lower case. Drawn as a dot on its chips and, for the most
+    /// senior coloured public role, as the ring round its holders' profile pictures
+    /// (`AccountProfile.roleColor`). Readable on both themes: the editor shows the contrast.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Set on the built-in roles: `USER` (every account holds it), `ADMIN` and `ROOT` (the
     /// owners' top role, shown only to its holders).
     #[serde(default)]
@@ -1450,6 +1563,9 @@ pub struct PermissionDecision {
 pub struct PublicRole {
     pub id: String,
     pub name: String,
+    /// The role's colour, `#rrggbb`, if it has one.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 /// The set a channel shows now, on a profile ("Active emotes").
@@ -1473,6 +1589,11 @@ pub struct AccountProfile {
     pub identities: Vec<PublicIdentity>,
     /// Roles marked public, most senior first.
     pub roles: Vec<PublicRole>,
+    /// The colour of the profile picture's ring: the `#rrggbb` of the most senior of the
+    /// public `roles` that has one; null when none does (the neutral ring). Never from the
+    /// badge or paint.
+    #[serde(default)]
+    pub role_color: Option<String>,
     /// Each channel's active set, for channels showing one.
     pub active_sets: Vec<ActiveChannelSet>,
     pub created_at: String,
@@ -1802,6 +1923,9 @@ pub struct CreateRole {
     /// Never show it publicly, and leave it out wherever roles rank people. Default false.
     #[serde(default)]
     pub invisible: Option<bool>,
+    /// Its colour, `#rrggbb` (any case, stored lower case). Default none.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1824,6 +1948,9 @@ pub struct UpdateRole {
     /// Never show it publicly, and leave it out wherever roles rank people.
     #[serde(default)]
     pub invisible: Option<bool>,
+    /// Its colour, `#rrggbb`. An empty string clears it.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 /// Which part of the site a limit covers, for grouping them on the role page.

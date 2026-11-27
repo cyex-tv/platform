@@ -152,6 +152,10 @@ pub async fn erase(conn: &mut PgConnection, account_id: Uuid) -> DbResult<()> {
         "DELETE FROM oauth_states WHERE link_account_id = $1",
         "DELETE FROM app_auth_codes WHERE account_id = $1",
         "DELETE FROM idempotency_keys WHERE account_id = $1",
+        // Direct uploads (ADR 0036): open ones expire now, and the worker's clean-up deletes
+        // their bytes, then the rows; finalized rows go within a day.
+        "UPDATE direct_uploads SET expires_at = least(expires_at, now())
+            WHERE account_id = $1 AND finalized_at IS NULL",
         "UPDATE account_restrictions SET reason = NULL WHERE account_id = $1",
         "DELETE FROM set_editors WHERE account_id = $1",
         "DELETE FROM account_editors WHERE account_id = $1 OR editor_id = $1",

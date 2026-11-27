@@ -49,6 +49,12 @@ pub const EMOTES_DELETE_ANY: &str = "emotes.delete_any";
 /// Change any emote's flags after review (ADR 0024): its visibility (off the listings, private)
 /// and zero-width, without its name or tags. Audited; the owner is told of a visibility change.
 pub const EMOTES_FLAGS: &str = "emotes.flags";
+/// Approve or deny an emote's personal use (ADR 0039): the personal queue, and the personal-use
+/// part of Approve both. Audited; the owner is told.
+pub const EMOTES_REVIEW_PERSONAL: &str = "emotes.review_personal";
+/// Give any emote to another account directly (ADR 0039). Nobody else can move an emote, its
+/// owner included. Audited; the old and the new owner are told.
+pub const EMOTES_TRANSFER: &str = "emotes.transfer";
 /// Add, change and remove any account's editors on its behalf, as its owner can. Audited.
 pub const EDITORS_MANAGE_ANY: &str = "editors.manage_any";
 /// Change the review queue's ready reject reasons. Audited.
@@ -97,6 +103,8 @@ pub const ALL: &[&str] = &[
     EMOTES_FLAGS,
     EMOTES_UPLOAD,
     REPORTS_FILE,
+    EMOTES_REVIEW_PERSONAL,
+    EMOTES_TRANSFER,
 ];
 
 /// What anyone with `roles.manage` may add to the built-in User role, which every account holds

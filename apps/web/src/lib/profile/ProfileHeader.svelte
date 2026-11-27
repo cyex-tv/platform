@@ -1,7 +1,7 @@
 <script lang="ts">
   // The profile's identity band, cyex's own take on the 7TV profile: the person heads the page,
   // left-aligned like a cyex tool header. One surface band across the content column: the
-  // paint-ringed avatar, the name (the page's h1, drawn in the paint, with the badge) and the first
+  // avatar ringed in the colour of the account's highest role that has one (never the paint or badge), the name (the page's h1, drawn in the paint, with the badge) and the first
   // roles as flags right after it; under them one line of facts. Lists that can grow (connections,
   // with the set each channel shows; editors; roles past the first three) are collapsed behind
   // count chips that open a panel on purpose (FactPopover), so the band keeps its height for an
@@ -14,7 +14,7 @@
   import Avatar from '$lib/components/Avatar.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
-  import { paintRing } from '$lib/cosmetics/paint';
+  import { dot } from '$lib/admin/role-color';
   import { looks, NO_LOOK, seedLook, wantLooks, type Look } from '$lib/cosmetics/store.svelte';
   import { clean, date } from '$lib/format';
   import { platformName } from '$lib/shell/account';
@@ -42,7 +42,7 @@
   };
   let { account, relation, profile, seed = null, actions, heading = true, loading = false, facts = true, flat = false }: Props = $props();
 
-  type Role = { id: string; name: string; public: boolean; invisible?: boolean };
+  type Role = { id: string; name: string; public: boolean; invisible?: boolean; color?: string | null };
   /** localStorage: '1' when your roles show only to you (app.html holds their line on a phone). */
   const OWN_FLAGS_KEY = 'cyexOwnFlags';
   const name = $derived(clean(account.displayName));
@@ -103,7 +103,7 @@
 {#snippet flag(r: Role)}
   {@const hid = !r.public || !!r.invisible}
   <li class="flag" class:hidden={hid}>
-    {#if hid}<Icon name="eye-off" size={12} />{/if}<bdi>{clean(r.name)}</bdi>{#if hid}<span class="hid">{r.invisible ? 'Invisible' : 'Hidden'}</span>{/if}
+    {#if dot(r.color)}<i class="cdot" style:background={dot(r.color)} aria-hidden="true"></i>{/if}{#if hid}<Icon name="eye-off" size={12} />{/if}<bdi>{clean(r.name)}</bdi>{#if hid}<span class="hid">{r.invisible ? 'Invisible' : 'Hidden'}</span>{/if}
   </li>
 {/snippet}
 
@@ -118,7 +118,7 @@
   </header>
 {:else}
 <header class="band" class:flat>
-  <span class="ring" style={paintRing(look.paint)}><span class="gap"><Avatar src={account.avatar} {name} size={64} /></span></span>
+  <span class="ring" style:background={dot(profile?.roleColor)}><span class="gap"><Avatar src={account.avatar} {name} size={64} /></span></span>
   <div class="id">
     <div class="top">
       <svelte:element this={heading ? 'h1' : 'p'} class="name"><PaintedName {name} paint={look.paint} badge={look.badge} badgeSize={22} /></svelte:element>
@@ -212,6 +212,7 @@
   .flags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
   .flag { display: inline-flex; align-items: center; gap: 4px; height: 22px; max-width: 100%; padding: 0 7px; border-radius: var(--radius);
     background: var(--neutral-chip); color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .cdot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
   .flag > bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .flag.hidden { padding-left: 5px; }
   .flag .hid { font-weight: 500; color: var(--dim); }

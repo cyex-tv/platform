@@ -11,8 +11,8 @@ use cyex_tv_db::reads::{self, EmoteRow, MemberRow, Summary};
 use cyex_tv_db::sets::Set;
 use cyex_tv_db::{DbResult, channels, editors, ids, sets};
 use cyex_tv_shared::model::{
-    AccountSummary, Channel, Emote, EmoteFile, EmoteFlags, EmoteProcessing, EmoteSet, EmoteState,
-    EmoteVisibility, SetEmote, SetSummary, SetVisibility,
+    AccountSummary, Channel, Emote, EmoteApprovals, EmoteFile, EmoteFlags, EmoteProcessing,
+    EmoteSet, EmoteState, EmoteVisibility, SetEmote, SetSummary, SetVisibility,
 };
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -108,6 +108,10 @@ fn emote(
             wide,
         },
         visibility: EmoteVisibility::of(row.private, row.unlisted),
+        approvals: EmoteApprovals {
+            public_listing: row.listing_review,
+            personal_use: row.personal_review,
+        },
         animated: row.animated,
         tags: tags.get(&row.id).cloned().unwrap_or_default(),
         host,
@@ -284,6 +288,7 @@ async fn build_sets(
             kind: set.kind,
             owner: summary(&summaries, set.owner_account_id),
             capacity: u32::try_from(set.capacity).unwrap_or(0),
+            capacity_override: set.capacity_override.and_then(|n| u32::try_from(n).ok()),
             emotes: by_set.remove(&set.id).unwrap_or_default(),
             visibility: set.visibility,
             listed: set.visibility == SetVisibility::Listed,

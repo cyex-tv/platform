@@ -200,7 +200,7 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   UpdateEmote: (c) => ({ id: c.myEmoteId, input: { name: 'MockRenamed', tags: ['cat'], zeroWidth: false } }),
   SetEmoteFlags: (c) => ({ id: c.emoteId, input: { visibility: 'PUBLIC', zeroWidth: false } }),
   DeleteEmote: (c) => ({ id: c.deletableEmoteId }),
-  CreateSet: () => ({ input: { name: 'Mock set', kind: 'PERSONAL', visibility: 'UNLISTED' } }),
+  CreateSet: () => ({ input: { name: 'Mock set', kind: 'CHANNEL', visibility: 'UNLISTED' } }),
   UpdateSet: (c) => ({ id: c.setId, input: { name: 'Mock set renamed' } }),
   DeleteSet: (c) => ({ id: c.deletableSetId }),
   AddSetEmote: (c) => ({ setId: c.setId, emoteId: c.emoteId, input: { name: 'MockAlias' } }),
@@ -226,6 +226,9 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   DeleteAccount: () => ({ confirm: 'lumen_fox' }),
   Approve: (c) => ({ id: c.pendingEmoteId, visibility: 'PUBLIC' }),
   RequeueEmotes: (c) => ({ ids: [c.pendingEmoteId] }),
+  // The queues' call (only what is still pending) and the edit dialog's (changes a decision made).
+  ReviewApprovals: (c) => ({ ids: [c.pendingEmoteId3], input: { publicListing: 'APPROVE', personalUse: 'APPROVE' } }),
+  EmoteReviewApprovals: (c) => ({ ids: [c.emoteId], input: { personalUse: 'APPROVE', onlyPending: false } }),
   Reject: (c) => ({ id: c.pendingEmoteId2, reason: 'A mock reason' }),
   EmoteHistory: (c) => ({ emoteId: c.emoteId }),
   EmoteNotes: (c) => ({ emoteId: c.emoteId }),
@@ -336,8 +339,9 @@ const PAINT_INPUT = (name: string) => ({
 
 // Allowed to answer a GraphQL error, with the reason. Everything else must answer data.
 const EXPECTED_ERRORS: Record<string, string> = {
-  CancelEmoteTransfer: 'only the editor who asked can cancel; the one seeded request was asked by someone else, so the mock answers forbidden (same as the API)',
-  AcceptEmoteTransfer: 'the seeded request is declined first, so it is no longer open (not_pending, as the API)',
+  CancelEmoteTransfer: 'retired with transfer requests (ADR 0039): always 410 transfer_requests_retired, as the API',
+  AcceptEmoteTransfer: 'retired with transfer requests (ADR 0039): always 410 transfer_requests_retired, as the API',
+  DeclineEmoteTransfer: 'retired with transfer requests (ADR 0039): always 410 transfer_requests_retired, as the API',
 };
 
 // ---- Checks ---------------------------------------------------------------------------------------
@@ -513,7 +517,7 @@ const SEEDS: { op: string; take: (d: any, c: Ctx) => void }[] = [
   { op: 'Cosmetics', take: (d, c) => { c.badgeId = d.cosmetics.badges[0]?.id; c.paintId = d.cosmetics.paints[0]?.id; } },
   { op: 'ShopItems', take: (d, c) => { const it = pick(d, 'shopItems') ?? []; c.itemId = it[0]?.id; c.lastItemId = it.at(-1)?.id; } },
   { op: 'Roles', take: (d, c) => { const r = pick(d, 'roles') ?? []; c.roleId = r.find((x: any) => !x.builtIn)?.id ?? r[0]?.id; } },
-  { op: 'ReviewQueue', take: (d, c) => { const it = pick(d, 'reviewQueue.items') ?? []; c.pendingEmoteId = it[0]?.id; c.pendingEmoteId2 = it[1]?.id ?? it[0]?.id; } },
+  { op: 'ReviewQueue', take: (d, c) => { const it = pick(d, 'reviewQueue.items') ?? []; c.pendingEmoteId = it[0]?.id; c.pendingEmoteId2 = it[1]?.id ?? it[0]?.id; c.pendingEmoteId3 = it[2]?.id ?? it[0]?.id; } },
   { op: 'ReportQueue', take: (d, c) => { const it = pick(d, 'reportQueue.items') ?? pick(d, 'reports.items') ?? []; c.reportId = it[0]?.id; } },
   { op: 'MyNotifications', take: (d, c) => { const it = pick(d, 'myNotifications.items') ?? pick(d, 'notifications.items') ?? []; c.noteId = it[0]?.id; } },
   { op: 'MySessions', take: (d, c) => { const it = pick(d, 'mySessions') ?? []; c.otherSessionId = it.find((s: any) => !s.current)?.id ?? it[0]?.id; } },

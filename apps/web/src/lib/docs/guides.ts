@@ -284,7 +284,17 @@ export const guides: Guide[] = [
       p('A role can also change the file limits of the people who hold it for badge and paint pictures: `badge_max_bytes`, `badge_max_side`, `badge_max_frames`, `paint_max_bytes` and `paint_max_side`, listed in `limits.account` with the rest, up to a ceiling the operator sets (16 MB; 4096 px for a badge, 6144 px for a paint, by default). Emote limits can’t be set per role or by the operator: `setRoleLimits` answers `bad_limit` to an `emote_max_*` key.'),
       note('Emote rules, fixed for everyone: at most 1000 × 1000 px, 8 MB (8 × 1024 × 1024 bytes), 1000 frames, 50 fps and 4:1 wide (width at most 4 × height; a tall picture has no ratio rule). A GIF frame shown for under 20 ms (a 0 or 10 ms delay) is shown for 100 ms, as browsers do, so the rate never goes over 50 fps and such a GIF is accepted. Wider than 4:1 is refused with `bad_dimensions`. The CDN serves an emote at most 128 px tall.'),
       p('Both upload routes, `POST /v1/emotes` and `POST /v1/cosmetics/images`, answer `202` with the same four fields next to the object itself, so one client handles both: `id`, `state`, `files` and `limits_used`. `state` is the emote’s review state (`pending` first) or, for a badge or paint picture, `processing` until the worker has made its files and then `ready`. `files` is empty until then. `limits_used` says what the file was checked against (`kind`, `max_bytes`, `max_side`, `max_frames`): for an emote the fixed rules, for a badge or paint your own numbers after your roles. They share their errors too: `bad_form`, `signed_out`, `forbidden`, `restricted`, `too_large`, `unsupported_format`, `invalid_image`, `rate_limited` and `unavailable`; an emote can also be `too_many_pending`, `blocked`, `bad_name` or `bad_dimensions` (wider than 4:1), a picture `bad_kind` or `bad_dimensions`.'),
+      p('Badge and paint pictures can also go straight to storage (direct uploads), so a large original doesn’t pass through the API: `POST /v1/cosmetics/images/uploads` with `{ kind, size, content_type }` answers `201` with `id`, `url`, `method` (`PUT`), `headers` and `expires_at`. `PUT` the file to `url` with exactly those headers (the size and type are signed into it; storage refuses others) within 15 minutes, then `POST /v1/cosmetics/images/uploads/{id}/finalize`, which checks the stored file as a form upload is checked and answers the same `202`. The URL is only given after the same checks (permission, your byte cap for the kind, the type, the rate limit, at most 10 open uploads: `too_many_uploads`). Finalize can also answer `upload_missing`, `size_mismatch`, `upload_expired` (after an hour) or `already_finalized`. Where a server has no public storage address the first call answers `501 direct_upload_off`: send the form instead.'),
       { t: 'pre', code: `HTTP/2 202\n\n{ "id": "${EX.emoteId}", "state": "pending", "files": [],\n  "limits_used": { "kind": "emote", "max_bytes": 8388608, "max_side": 1000, "max_frames": 1000 },\n  "name": "OMEGALUL", … }` },
+    ],
+  },
+  {
+    id: 'role-colours',
+    title: 'Role colours',
+    search: 'role color colour hex ring avatar profile roleColor public',
+    blocks: [
+      p('A role can have a colour: `Role.color`, a hex colour like `#3b82f6` (`#rrggbb`, stored in lower case, or null for none). Set it with `createRole` or `updateRole` and the `color` input, which needs `roles.manage` like any other change to a role. `updateRole` takes an empty string to clear it and leaves it alone when you leave it out. Anything that is not `#rrggbb` is `bad_color`. The change is in the audit log with the rest of the role.'),
+      p('On a public profile, `accountProfile.roles` lists the public roles with their `color`, most senior first. `accountProfile.roleColor` is the colour of the ring round the profile picture: the `color` of the first of those roles that has one, or null for the neutral ring. It never comes from the badge or paint, and a role that is hidden or invisible never counts, so the ring looks the same to everyone. Show a role’s colour as a dot next to its name, not as the text colour: a role colour is checked for 3:1 contrast on both the light and the dark ground only as a hint in the editor, not by the API.'),
     ],
   },
   {
@@ -354,7 +364,7 @@ export const guides: Guide[] = [
       { t: 'pre', code: `HTTP/2 409\n\n{ "error": "too_many_pending",\n  "message": "You have 20 emotes waiting for review. Upload more once some are reviewed.",\n  "details": { "limit": 20, "current": 20 } }` },
       p('Which status a limit error has follows one rule. A limit the account or set has **reached** is `409`: the request is fine, the state is full. A cap on **one request’s size** is `400`, and a file over its byte cap is `413`. These existed before the rule, so they keep their status. At a `409` limit `current` equals `limit`; for a request cap it is what you sent; for `too_large` over the byte cap it is the file’s size. A side or frame cap names its numbers in the message instead.'),
       table(
-        ['`set_full`, `too_many_pending`, `too_many_editors`, `limit_reached`', '`409`: the set, the review queue, the editors or the list is full.'],
+        ['`set_full`, `too_many_pending`, `too_many_editors`, `too_many_uploads`, `limit_reached`', '`409`: the set, the review queue, the editors, the open direct uploads or the list is full.'],
         ['`capacity_over_limit`', '`400`: a set capacity above what the owner’s roles allow. It was `400` from the start and stays, so clients that match it keep working.'],
         ['`too_many`, `bad_batch`, `too_many_tags`, `too_many_reasons`, `too_many_sets`', '`400`: more items in one request than allowed.'],
         ['`too_large`', '`413`: a file over its byte, side or frame cap.'],
@@ -392,15 +402,16 @@ export const guides: Guide[] = [
     title: 'Emotes and files',
     search: 'emote object cdn files webp avif static picture image host',
     blocks: [
-      p('An emote has an `id` (store this, as a string: names change; see [IDs](#ids)), a `name`, `flags` (`zero_width`, `private`, `wide`; `nsfw` is retired and always false: NSFW emotes aren’t allowed), and a `host` with a list of `files`. Public reads only return approved emotes; a pending one shows to its owner alone.'),
+      p('An emote has an `id` (store this, as a string: names change; see [IDs](#ids)), a `name`, `flags` (`zero_width`, `private`, `wide`; `nsfw` is retired and always false: NSFW emotes aren’t allowed), and a `host` with a list of `files`. Public reads only return approved emotes; a pending one shows to its owner alone. Every emote also has two `approvals`, `public_listing` and `personal_use` (see [Approvals and transfers](#approvals)).'),
       p('Each file entry carries its full address as `url` (`<host>/<name>`) and its media type as `mime` (`image/webp` or `image/avif`), so a client uses `url` as it is instead of joining `host` and `name`. `host` and `name` stay. The address is:'),
       { t: 'pre', code: `${EX.host}/2x.webp` },
       fmt(
         ['1x.webp … 4x.webp', 'Scales 1 to 4. Pick by line height times the device pixel ratio.'],
-        ['1x.avif … 4x.avif', 'Still emotes also come as AVIF.'],
+        ['1x.avif … 4x.avif', 'Still emotes also come as AVIF. Animated ones too (an animated AVIF, `is_static` false), at each size where it is no larger than the animated WebP; a size without one has only WebP, so read the `files` list rather than assuming.'],
         ['1x_static.webp', 'Animated emotes: the first frame, for reduced motion or a paused chat.'],
       ),
       p('The host is the hash of the picture, so a file never changes once it exists. The CDN sends them with `Cache-Control: public, max-age=31536000, immutable`: cache files for good. The API’s own reads (sets, channels, emote objects) are the opposite: they change, so they carry an `ETag` and a short `max-age`, set per route; see [Caching](#caching).'),
+      p('**Any listed width, once enabled.** The CDN can also resize a picture file on request: add `?w=` (one of 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256, 320, 384, 448, 512, 640, 768 or 1024) and optionally `?format=` (`webp`, `avif`, or `auto` for AVIF when your `Accept` header takes it) to any emote, badge or paint file URL, for example `<url>?w=48&format=auto`. It is never wider than the file, keeps the animation, and is cached as immutably as the file itself. Other widths, other parameters or other paths answer `400`. This isn’t switched on yet: until it is, the parameters are ignored and the file comes back at its own size, so it is safe to send them now. The fixed files (`1x` … `4x`, `128`, `original`) stay as they are.'),
       note('A zero-width emote draws over the emote before it, not beside it.'),
     ],
   },
@@ -424,6 +435,22 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'approvals',
+    title: 'Approvals and transfers',
+    search: 'approvals public listing personal use review unlisted pending approved denied transfer ownership reviewApprovals PERSONAL_USE emotes.review_personal emotes.transfer',
+    blocks: [
+      p('Every emote has two approvals, decided apart by moderators: `approvals.public_listing` (may it be listed in search, browse and its creator’s page) and `approvals.personal_use` (may it go in a personal set, shown in chat everywhere its owner talks). Each is `pending`, `approved` or `denied` over REST and `PENDING`, `APPROVED` or `DENIED` in GraphQL (`Emote.approvals { publicListing personalUse }`). Anyone who may see the emote sees both.'),
+      fmt(
+        ['Uploads', 'Every upload starts `unlisted` with both approvals `pending`, and goes to review. The uploader chooses only zero-width and private; `visibility=unlisted` from anyone without `emotes.flags` or `emotes.edit_any` is `400 bad_visibility`, and `public` means “not private”: it is listed once its listing is approved.'],
+        ['Listing', 'An emote whose listing is `denied` stays usable by link and in channel sets, but unlisted. Search and browse return listed emotes only.'],
+        ['Personal use', 'A personal set takes only emotes with `personal_use` `approved`: anything else is `409 personal_use_not_approved`. Emotes already in a personal set stay there. To find them, pass `PERSONAL_USE` in the `flags` of `searchEmotes`.'],
+      ),
+      p('Staff decide with [reviewApprovals](#gql-mutation-reviewApprovals): up to 100 emotes, `publicListing` and `personalUse` each `APPROVE`, `DENY` or left out, a `reason` for any denial (the owner sees it, otherwise `400 bad_approvals`), and `onlyPending` (default true, what the queues send) to skip parts someone already decided. Listing needs `emotes.review`, personal use `emotes.review_personal`. [reviewQueue](#gql-query-reviewQueue) has a `PERSONAL` tab for approved emotes whose personal use is pending, `counts.personal` and `filter.personalUse`.'),
+      p('The owner is notified of each change: `emote.approved` for the first listing verdict and `emote.approvals_changed` for every later one, both with `public_listing`, `personal_use` and `reason` in the payload.'),
+      p('**Ownership.** Only staff with `emotes.transfer` move an emote, directly, with [transferEmote](#gql-mutation-transferEmote): anyone else, the owner included, gets `403 transfer_staff_only`, and both owners get `emote.transferred` (its `role` is `from` or `to`, and `actor_name` is who moved it). The request flow is retired: `acceptEmoteTransfer`, `declineEmoteTransfer` and `cancelEmoteTransfer` answer `410 transfer_requests_retired`, and `emoteTransferRequests` is always empty. Until its sunset, `GET /v1/meta` lists this as the deprecation `emote_transfer_requests`.'),
+    ],
+  },
+  {
     id: 'sets-and-channels',
     title: 'Sets and channels',
     search: 'set channel personal global active capacity',
@@ -433,7 +460,7 @@ export const guides: Guide[] = [
       fmt(
         ['CHANNEL', 'A channel\'s emotes. A channel can keep several and switch the active one.'],
         ['GLOBAL', 'The cyex.tv global set, shown in every channel.'],
-        ['PERSONAL', 'One per account: emotes its owner can use in any channel that allows them.'],
+        ['PERSONAL', 'One per account, made at sign-up: emotes its owner can use in any channel that allows them. 3 slots, or 10 with a subscriber role; `capacity` is the number it has now and `capacityOverride` is set when staff chose it by hand. After losing a role a set may hold more than `capacity`: it keeps them and takes no new one until it is under. It takes only emotes whose `personal_use` approval is `approved`; adding any other is `409 personal_use_not_approved`.'],
       ),
       p('So a chat line can use the channel\'s active set, the global set, and its sender\'s personal set where the channel has `allow_personal_emotes` on. Look personal sets up for up to 100 chatters at once with [Look up personal sets](#rest-lookup_personal_sets).'),
     ],

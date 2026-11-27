@@ -149,6 +149,7 @@ function baseAnswer(body, session, admin) {
     if (flags.has('NSFW')) hits = [];
     if (flags.has('ZERO_WIDTH')) hits = hits.filter((e) => e.flags.zeroWidth);
     if (flags.has('WIDE')) hits = hits.filter((e) => e.flags.wide);
+    if (flags.has('PERSONAL_USE')) hits = hits.filter((e) => e.approvals?.personalUse === 'APPROVED');
     if (tags.length) hits = hits.filter((e) => tags.every((t) => e.tags.some((g) => g.toLowerCase() === t)));
     hits = sorted(hits, v.sort ?? 'RELEVANCE', v.window ?? 'WEEK');
     const p = pageOf(hits, v);
@@ -197,6 +198,8 @@ createServer(async (req, res) => {
   res.setHeader('access-control-allow-origin', SITE);
   res.setHeader('access-control-allow-credentials', 'true');
   res.setHeader('access-control-allow-headers', 'content-type');
+  // PUT: direct uploads go to the mock's storage (ADR 0036).
+  res.setHeader('access-control-allow-methods', 'GET, HEAD, POST, PUT, OPTIONS');
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
   const session = OPEN_ENV || /(?:^|;\s*)mock_session=1/.test(req.headers.cookie ?? '');
   setRestoreCookie(/(?:^|;\s*)mock_restore=1/.test(req.headers.cookie ?? ''));
@@ -263,6 +266,50 @@ createServer(async (req, res) => {
     if (!out) return json(res, 400, { error: 'too_many', message: 'Look up at most 100 users at once.', details: { limit: 100, current: ids.length } });
     return json(res, 200, { users: out.map((u) => ({ platform_user_id: u.platformUserId, badge_id: u.badgeId, paint_id: u.paintId })) });
   }
+  // Direct uploads (ADR 0036): a presigned PUT to the mock's own storage, then finalize. Set
+  // MOCK_DIRECT_UPLOADS=0 to answer 501 as a server without a public storage address does.
+  if (req.method === 'POST' && url.pathname === '/v1/cosmetics/images/uploads') {
+    const body = await read(req);
+    if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
+    if (!admin) return json(res, 403, { error: 'forbidden', message: 'This needs cosmetics.manage.' });
+    if (process.env.MOCK_DIRECT_UPLOADS === '0')
+      return json(res, 501, { error: 'direct_upload_off', message: 'Direct uploads aren’t available here. Send the picture to POST /v1/cosmetics/images.' });
+    let input;
+    try { input = JSON.parse(body.toString('utf8')); } catch { input = null; }
+    if (!input || typeof input !== 'object') return json(res, 400, { error: 'bad_form', message: 'Send JSON: { kind, size, content_type }.' });
+    if (input.kind !== 'badge' && input.kind !== 'paint') return json(res, 400, { error: 'bad_kind', message: 'kind is badge or paint.' });
+    if (!DIRECT_TYPES.includes(input.content_type))
+      return json(res, 415, { error: 'unsupported_format', message: 'Upload PNG, APNG, GIF, WebP or JPEG (content_type image/png, image/gif, image/webp or image/jpeg).' });
+    if (!Number.isInteger(input.size) || input.size < 1) return json(res, 400, { error: 'bad_form', message: 'size is the file’s length in bytes, at least 1.' });
+    const cap = 8 * 1024 * 1024;
+    if (input.size > cap) return json(res, 413, { error: 'too_large', message: 'The file is over 8 MB, the most an upload can be.', details: { limit: cap, current: input.size } });
+    const id = `01JD8XUPL${String(100 + DIRECT.size).padStart(17, '0')}`;
+    const expires = new Date(Date.now() + 3600_000).toISOString();
+    DIRECT.set(id, { kind: input.kind, size: input.size, type: input.content_type, bytes: null, done: false });
+    return json(res, 201, { id, kind: input.kind, method: 'PUT', url: `${BASE}/mock-storage/uploads/${id}`,
+      headers: { 'content-length': String(input.size), 'content-type': input.content_type }, expires_at: expires });
+  }
+  const put = url.pathname.match(/^\/mock-storage\/uploads\/([0-9A-Z]+)$/);
+  if (req.method === 'PUT' && put) {
+    const body = await read(req);
+    const up = DIRECT.get(put[1]);
+    // As storage does with a presigned URL: only the signed length and type.
+    if (!up || body.length !== up.size || req.headers['content-type'] !== up.type) return res.writeHead(403).end();
+    up.bytes = body;
+    return res.writeHead(200).end();
+  }
+  const fin = url.pathname.match(/^\/v1\/cosmetics\/images\/uploads\/([0-9A-Z]+)\/finalize$/);
+  if (req.method === 'POST' && fin) {
+    await read(req);
+    if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
+    if (!admin) return json(res, 403, { error: 'forbidden', message: 'This needs cosmetics.manage.' });
+    const up = DIRECT.get(fin[1]);
+    if (!up) return json(res, 404, { error: 'not_found', message: 'Not found.' });
+    if (up.done) return json(res, 409, { error: 'already_finalized', message: 'This upload was already finalized.' });
+    if (!up.bytes) return json(res, 409, { error: 'upload_missing', message: 'Nothing has been uploaded yet. PUT the file to the upload URL, then finalize.' });
+    up.done = true;
+    return acceptPicture(res, up.kind, up.bytes);
+  }
   if (req.method === 'POST' && url.pathname === '/v1/cosmetics/images') {
     const body = await read(req);
     if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
@@ -274,36 +321,7 @@ createServer(async (req, res) => {
     if (kind !== 'badge' && kind !== 'paint') return json(res, 400, { error: 'bad_kind', message: 'kind is badge or paint.' });
     const file = parts.file?.data;
     if (!file?.length) return json(res, 400, { error: 'bad_form', message: 'Attach the image as `file`.' });
-    if (file.length > 8 * 1024 * 1024) return json(res, 413, { error: 'too_large', message: 'The file is over 8 MB, the most an upload can be.' });
-    // The uploaded picture itself is kept and served back (as the worker's files would be), so what
-    // was uploaded is what the site shows. The checks are the API's (cosmetics::check_dimensions).
-    const probe = probeImage(file);
-    if (!probe) return json(res, 415, { error: 'unsupported_format', message: 'Use a PNG, APNG, JPEG, GIF or WebP.' });
-    if (kind === 'badge' && !(probe.width === probe.height && probe.width >= 72))
-      return json(res, 422, { error: 'bad_dimensions', message: 'Badge pictures are square and at least 72×72 px.' });
-    if (kind === 'paint' && probe.height < 64) return json(res, 422, { error: 'bad_dimensions', message: 'Paint pictures are at least 64 px tall.' });
-    if (kind === 'paint' && probe.width > probe.height * 8) return json(res, 422, { error: 'bad_dimensions', message: 'Paint pictures are at most 8 times as wide as they are tall (8:1).' });
-    // The real POST answers in the REST shape, and the same bytes give the same picture again
-    // (the API keys pictures by their SHA-256), already ready.
-    const sha = createHash('sha256').update(file).digest('hex');
-    const again = UPLOADED.get(sha);
-    if (again) return json(res, 202, uploadReply(again, kind, again.ready ? 'ready' : 'processing'));
-    const id = `01JD8XIMG${String(100 + nextCosmeticSeq()).padStart(17, '0')}`;
-    // A badge's original is its own size, at most 512 px (bigger is scaled down to 512).
-    const fit = Math.min(1, 512 / Math.max(probe.width, probe.height));
-    const files = kind === 'badge' ? ladderFiles(probe.animated, file.length, BADGE_LADDER, [Math.round(probe.width * fit), Math.round(probe.height * fit)]) : PAINT_LADDER.flatMap(([stem, scale, px]) => {
-      const h = Math.min(px, probe.height); // never above the original
-      const w = Math.round((probe.width / probe.height) * h);
-      return (probe.animated ? [false, true] : [false]).map((still) => ({ name: `${stem}${still ? '_static' : ''}.webp`, format: 'WEBP', scale, width: w, height: h, size: file.length, isStatic: still }));
-    });
-    UPLOAD_FILES.set(id, { bytes: file, mime: probe.mime });
-    const img = { id, kind: kind.toUpperCase(), host: `${BASE}/cosmetics/uploads/${id}`, animated: probe.animated, width: probe.width, height: probe.height,
-      ready: false, files: [], createdAt: new Date().toISOString() };
-    C_IMAGES.push(img);
-    UPLOADED.set(sha, img);
-    // The files are "made" a moment later, as the worker would.
-    setTimeout(() => Object.assign(img, { ready: true, files }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
-    return json(res, 202, uploadReply(img, kind, 'processing'));
+    return acceptPicture(res, kind, file);
   }
   const uploaded = url.pathname.match(/^\/cosmetics\/uploads\/([0-9A-Z]+)\/(?:[124]x|128|256|512|original)(?:_static)?\.(?:webp|avif)$/);
   if (uploaded) {
@@ -421,10 +439,11 @@ createServer(async (req, res) => {
     flags.nsfw = false;
     const visField = (field('visibility') ?? '').trim().toLowerCase();
     if (visField && !['public', 'unlisted', 'private'].includes(visField)) return json(res, 400, { error: 'bad_form', message: 'Visibility is public or private.' });
-    // Uploads are public unless private; only staff (the mock admin) may upload unlisted.
+    // Every upload starts unlisted and in review (ADR 0039): the owner only makes it private, `public`
+    // means "not private", and `unlisted` is for staff (the mock admin).
     if (visField === 'unlisted' && !admin) return json(res, 400, { error: 'bad_visibility', message: UNLISTED_REFUSAL });
-    const visibility = visField ? visField.toUpperCase() : flags.private ? 'PRIVATE' : 'PUBLIC';
-    if (field('private') !== undefined && visField && flags.private !== (visibility === 'PRIVATE'))
+    const visibility = visField === 'private' || (!visField && flags.private) ? 'PRIVATE' : 'UNLISTED';
+    if (field('private') !== undefined && visField && flags.private !== (visField === 'private'))
       return json(res, 400, { error: 'bad_form', message: 'visibility and private say different things.' });
     flags.private = visibility === 'PRIVATE';
     // Upload as (ADR 0014): an account where you hold EMOTE_UPLOAD on every set owns it.
@@ -499,7 +518,7 @@ createServer(async (req, res) => {
 
 // The REST API's JSON: snake_case keys and lower-case enum values (the GraphQL shapes are camelCase
 // with upper-case enums).
-const REST_ENUM_KEYS = new Set(['kind', 'shape', 'format', 'state', 'visibility', 'processing']);
+const REST_ENUM_KEYS = new Set(['kind', 'shape', 'format', 'state', 'visibility', 'processing', 'publicListing', 'personalUse']);
 /** What both upload routes add to their object: `state` and `limits_used` (crates/shared/src/upload.rs). */
 const UPLOAD_LIMITS = { emote: { max_bytes: 8 * 1024 * 1024, max_side: 1000, max_frames: 1000 }, badge: { max_bytes: 8 * 1024 * 1024, max_side: 2048, max_frames: 120 }, paint: { max_bytes: 8 * 1024 * 1024, max_side: 4096, max_frames: 120 } };
 function uploadReply(x, kind, state) {
@@ -554,6 +573,44 @@ function pruneAnswer(query, out) {
   const op = doc.definitions.find((d) => d.kind === Kind.OPERATION_DEFINITION);
   return op ? { ...out, data: prune(out.data, [op.selectionSet], frags) } : out;
 }
+
+/** The checks and answer of a badge or paint picture upload, multipart or direct (ADR 0036). */
+function acceptPicture(res, kind, file) {
+  if (file.length > 8 * 1024 * 1024) return json(res, 413, { error: 'too_large', message: 'The file is over 8 MB, the most an upload can be.' });
+  // The uploaded picture itself is kept and served back (as the worker's files would be), so what
+  // was uploaded is what the site shows. The checks are the API's (cosmetics::check_dimensions).
+  const probe = probeImage(file);
+  if (!probe) return json(res, 415, { error: 'unsupported_format', message: 'Use a PNG, APNG, JPEG, GIF or WebP.' });
+  if (kind === 'badge' && !(probe.width === probe.height && probe.width >= 72))
+    return json(res, 422, { error: 'bad_dimensions', message: 'Badge pictures are square and at least 72×72 px.' });
+  if (kind === 'paint' && probe.height < 64) return json(res, 422, { error: 'bad_dimensions', message: 'Paint pictures are at least 64 px tall.' });
+  if (kind === 'paint' && probe.width > probe.height * 8) return json(res, 422, { error: 'bad_dimensions', message: 'Paint pictures are at most 8 times as wide as they are tall (8:1).' });
+  // The real POST answers in the REST shape, and the same bytes give the same picture again
+  // (the API keys pictures by their SHA-256), already ready.
+  const sha = createHash('sha256').update(file).digest('hex');
+  const again = UPLOADED.get(sha);
+  if (again) return json(res, 202, uploadReply(again, kind, again.ready ? 'ready' : 'processing'));
+  const id = `01JD8XIMG${String(100 + nextCosmeticSeq()).padStart(17, '0')}`;
+  // A badge's original is its own size, at most 512 px (bigger is scaled down to 512).
+  const fit = Math.min(1, 512 / Math.max(probe.width, probe.height));
+  const files = kind === 'badge' ? ladderFiles(probe.animated, file.length, BADGE_LADDER, [Math.round(probe.width * fit), Math.round(probe.height * fit)]) : PAINT_LADDER.flatMap(([stem, scale, px]) => {
+    const h = Math.min(px, probe.height); // never above the original
+    const w = Math.round((probe.width / probe.height) * h);
+    return (probe.animated ? [false, true] : [false]).map((still) => ({ name: `${stem}${still ? '_static' : ''}.webp`, format: 'WEBP', scale, width: w, height: h, size: file.length, isStatic: still }));
+  });
+  UPLOAD_FILES.set(id, { bytes: file, mime: probe.mime });
+  const img = { id, kind: kind.toUpperCase(), host: `${BASE}/cosmetics/uploads/${id}`, animated: probe.animated, width: probe.width, height: probe.height,
+    ready: false, files: [], createdAt: new Date().toISOString() };
+  C_IMAGES.push(img);
+  UPLOADED.set(sha, img);
+  // The files are "made" a moment later, as the worker would.
+  setTimeout(() => Object.assign(img, { ready: true, files }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
+  return json(res, 202, uploadReply(img, kind, 'processing'));
+}
+
+/** Direct uploads by ID (ADR 0036), and the types they may declare. */
+const DIRECT = new Map();
+const DIRECT_TYPES = ['image/png', 'image/gif', 'image/webp', 'image/jpeg'];
 
 function json(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json' });

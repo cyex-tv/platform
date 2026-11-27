@@ -16,7 +16,7 @@ use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::{audit, roles, sets};
-use cyex_tv_shared::model::{Platform, SetKind};
+use cyex_tv_shared::model::{EmoteState, Platform, SetKind};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -426,8 +426,8 @@ async fn owners_edit_and_delete_their_emotes() {
     w.db.close().await;
 }
 
-/// Unlisted is a moderator's call (ADR 0020, amendment 2026/11/22): owners choose public or
-/// private only, and can't list again an emote a moderator took off the listings; staff can.
+/// Unlisted is a moderator's call (ADR 0020, amendment 2026/11/22): owners choose private or
+/// not only, and can't list an emote themselves; staff approve or deny its listing (ADR 0039).
 #[tokio::test]
 async fn only_staff_take_an_emote_off_the_listings() {
     let Some(w) = World::new().await else { return };
@@ -436,7 +436,8 @@ async fn only_staff_take_an_emote_off_the_listings() {
     let id = w.pending(&owner, "listMe").await;
     let set = "mutation($id: String!, $v: EmoteVisibility, $z: Boolean) { updateEmote(id: $id, input: { visibility: $v, zeroWidth: $z }) { visibility flags { private zeroWidth } } }";
 
-    // The owner: private and back are fine, unlisted is not.
+    // The owner: private and back are fine, unlisted is not. ADR 0039: PUBLIC means "not
+    // private"; the emote is still pending, so it reads UNLISTED until its listing is approved.
     let r = w
         .gql(Some(&owner), set, json!({ "id": id, "v": "PRIVATE" }))
         .await;
@@ -444,20 +445,37 @@ async fn only_staff_take_an_emote_off_the_listings() {
     let r = w
         .gql(Some(&owner), set, json!({ "id": id, "v": "PUBLIC" }))
         .await;
-    assert_eq!(r["data"]["updateEmote"]["visibility"], "PUBLIC", "{r}");
+    assert_eq!(r["data"]["updateEmote"]["visibility"], "UNLISTED", "{r}");
     let r = w
         .gql(Some(&owner), set, json!({ "id": id, "v": "UNLISTED" }))
         .await;
     assert_eq!(code(&r), "bad_visibility", "{r}");
 
-    // Staff unlist it; the owner can't list it again or make it private, but other changes work.
+    // Review approves the listing: it is public now.
+    let mut conn = w.db.conn().await;
+    emotes::set_state(&mut conn, w.db.row(&id).await, EmoteState::Approved)
+        .await
+        .unwrap();
+    drop(conn);
+
+    // Staff unlist it (the listing is denied); the owner can't list it again, but nothing they
+    // ask for as "not private" is an error any more, and other changes work.
     let flags = "mutation($id: String!) { setEmoteFlags(id: $id, input: { visibility: UNLISTED }) { visibility } }";
     let r = w.gql(Some(&staff), flags, json!({ "id": id })).await;
     assert_eq!(r["data"]["setEmoteFlags"]["visibility"], "UNLISTED", "{r}");
-    for v in ["PUBLIC", "PRIVATE"] {
-        let r = w.gql(Some(&owner), set, json!({ "id": id, "v": v })).await;
-        assert_eq!(code(&r), "bad_visibility", "{v}: {r}");
-    }
+    // ADR 0039: PUBLIC from the owner is "not private"; the listing stays denied.
+    let r = w
+        .gql(Some(&owner), set, json!({ "id": id, "v": "PUBLIC" }))
+        .await;
+    assert_eq!(r["data"]["updateEmote"]["visibility"], "UNLISTED", "{r}");
+    let r = w
+        .gql(Some(&owner), set, json!({ "id": id, "v": "PRIVATE" }))
+        .await;
+    assert_eq!(r["data"]["updateEmote"]["visibility"], "PRIVATE", "{r}");
+    let r = w
+        .gql(Some(&owner), set, json!({ "id": id, "v": "PUBLIC" }))
+        .await;
+    assert_eq!(r["data"]["updateEmote"]["visibility"], "UNLISTED", "{r}");
     let r = w
         .gql(
             Some(&owner),
@@ -465,10 +483,14 @@ async fn only_staff_take_an_emote_off_the_listings() {
             json!({ "id": id, "v": "UNLISTED", "z": true }),
         )
         .await;
+    assert_eq!(code(&r), "bad_visibility", "{r}");
+    let r = w
+        .gql(Some(&owner), set, json!({ "id": id, "z": true }))
+        .await;
     assert_eq!(r["data"]["updateEmote"]["visibility"], "UNLISTED", "{r}");
     assert_eq!(r["data"]["updateEmote"]["flags"]["zeroWidth"], true);
 
-    // Staff list it again.
+    // Staff list it again (approve the listing).
     let list = "mutation($id: String!) { setEmoteFlags(id: $id, input: { visibility: PUBLIC }) { visibility } }";
     let r = w.gql(Some(&staff), list, json!({ "id": id })).await;
     assert_eq!(r["data"]["setEmoteFlags"]["visibility"], "PUBLIC", "{r}");

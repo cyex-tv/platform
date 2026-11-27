@@ -60,13 +60,19 @@ async fn seed(c: &mut PgConnection, s: &Scale) -> Uuid {
         "CREATE TABLE seed_files AS
          SELECT row_number() OVER (ORDER BY id) AS n, id FROM files",
         "INSERT INTO emotes (id, owner_account_id, file_id, name, state, private, unlisted, nsfw,
-                             animated, zero_width, created_at)
+                             animated, zero_width, listing_review, personal_review, created_at)
          SELECT gen_random_uuid(), a.id, f.id,
                 (ARRAY['Pepe','Kek','Pog','Cat','Dance','Sad','Wide','Hype'])[1 + f.n % 8]
                 || (ARRAY['Laugh','Clap','Spin','Jam','Cry','Wave','Sit','Run'])[1 + (f.n / 8) % 8]
                 || f.n,
                 CASE WHEN f.n % 20 = 0 THEN 'pending' ELSE 'approved' END,
                 f.n % 50 = 1, f.n % 33 = 2 AND f.n % 50 <> 1, f.n % 50 = 3, f.n % 4 = 0, f.n % 40 = 5,
+                -- ADR 0039: a trigger derives `unlisted` from the listing review, so the
+                -- unlisted rows (n % 33 = 2) are the ones whose listing is denied.
+                CASE WHEN f.n % 20 = 0 THEN 'pending'
+                     WHEN f.n % 33 = 2 AND f.n % 50 <> 1 THEN 'denied'
+                     ELSE 'approved' END,
+                CASE WHEN f.n % 20 = 0 THEN 'pending' ELSE 'approved' END,
                 now() - f.n * interval '1 minute'
          FROM seed_files f JOIN seed_accounts a ON a.n = 1 + f.n % $1",
         "CREATE TABLE seed_emotes AS
@@ -758,7 +764,8 @@ const OLD_NEWEST: &str = "SELECT * FROM (
              SELECT m.set_id, m.emote_id, m.name, m.zero_width, m.added_by, m.added_at,
                 e.owner_account_id AS emote_owner, e.name AS emote_name,
                 e.zero_width AS emote_zero_width, e.private, e.unlisted, e.nsfw,
-                e.animated, e.state, e.created_at AS emote_created_at,
+                e.animated, e.state, e.listing_review, e.personal_review,
+                e.created_at AS emote_created_at,
                 f.sha256, f.variants, (f.processing_failed_at IS NOT NULL) AS processing_failed,
                     row_number() OVER (PARTITION BY m.set_id
                                        ORDER BY m.added_at DESC, m.emote_id DESC) AS rn

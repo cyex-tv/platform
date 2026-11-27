@@ -418,6 +418,18 @@ pub const ERROR_CODES: &[ErrorCode] = &[
     ),
     e(
         "Emotes",
+        "personal_use_not_approved",
+        "The emote is not approved for personal use.",
+        "Adding an emote to a personal set before its personal use is approved, or after it was denied (409, ADR 0039).",
+    ),
+    e(
+        "Emotes",
+        "bad_approvals",
+        "The review asks for nothing, or a denial has no reason.",
+        "reviewApprovals without publicListing or personalUse, or with a DENY and no reason (ADR 0039).",
+    ),
+    e(
+        "Emotes",
         "already_taken_down",
         "The emote is taken down already.",
         "Taking down an emote that is gone.",
@@ -568,6 +580,18 @@ pub const ERROR_CODES: &[ErrorCode] = &[
     ),
     e(
         "Transfers",
+        "transfer_staff_only",
+        "Only staff with emotes.transfer can change who owns an emote.",
+        "transferEmote without the emotes.transfer permission, the emote's owner included (403, ADR 0039).",
+    ),
+    e(
+        "Transfers",
+        "transfer_requests_retired",
+        "Transfer requests are gone: ownership can't be requested.",
+        "acceptEmoteTransfer, declineEmoteTransfer or cancelEmoteTransfer (410, ADR 0039).",
+    ),
+    e(
+        "Transfers",
         "same_owner",
         "That account owns the emote already.",
         "Transferring an emote to its owner.",
@@ -619,6 +643,42 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "bad_image",
         "The image does not fit this paint.",
         "Only image paints take an image.",
+    ),
+    e(
+        "Cosmetics",
+        "direct_upload_off",
+        "Direct uploads aren't set up on this server.",
+        "Asking for a direct upload URL where storage has no public upload address (501). Send the picture to POST /v1/cosmetics/images instead.",
+    ),
+    e(
+        "Cosmetics",
+        "too_many_uploads",
+        "You have as many direct uploads open as allowed.",
+        "Asking for another direct upload URL while that many are neither finalized nor expired (409, with details).",
+    ),
+    e(
+        "Cosmetics",
+        "upload_missing",
+        "Nothing was uploaded to that direct upload yet.",
+        "Finalizing before the PUT to the upload URL finished (409). Upload, then finalize again.",
+    ),
+    e(
+        "Cosmetics",
+        "upload_expired",
+        "The direct upload has expired.",
+        "Finalizing an upload past its expiry (410). Ask for a new upload URL.",
+    ),
+    e(
+        "Cosmetics",
+        "size_mismatch",
+        "The uploaded file isn't the size that was declared.",
+        "Finalizing an upload whose stored object differs from the declared size (422). The upload is discarded.",
+    ),
+    e(
+        "Cosmetics",
+        "already_finalized",
+        "The direct upload was already finalized.",
+        "Finalizing the same upload twice (409). The first answer's picture stands.",
     ),
     e(
         "Cosmetics",

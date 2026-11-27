@@ -21,7 +21,7 @@ import { inwardId } from '../snowflake.mjs';
 export const linkedNote = () => Object.entries(LINKED).flatMap(([p, l]) => [l.channel && `${p.toLowerCase()} channel`, l.user && `${p.toLowerCase()} chatter`]).filter(Boolean);
 
 // The mock account's personal set: the one made on the site if there is one, else a small built-in one.
-const BUILT_IN_PERSONAL = { id: '01JD8XSET00000000000PERSNL', name: 'Personal', kind: 'PERSONAL', capacity: 10, owner: ME_SUMMARY,
+const BUILT_IN_PERSONAL = { id: '01JD8XSET00000000000PERSNL', name: 'Personal', kind: 'PERSONAL', capacity: 3, owner: ME_SUMMARY,
   emotes: MINE.slice(0, 4).map((e) => member(e)), visibility: 'LISTED', createdAt: '2026-11-10T12:10:00.000Z' };
 const myPersonal = () => [...SETS, ...SHARED_SETS].find((s) => s.kind === 'PERSONAL' && s.owner?.id === ME_ID) ?? BUILT_IN_PERSONAL;
 

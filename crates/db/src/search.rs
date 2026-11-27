@@ -198,7 +198,7 @@ fn net_adds(days: i32) -> String {
 /// The filters every emote search applies. `$1` text, `$2` animated, `$3` owner, `$4` nsfw
 /// (retired), `$5` the lowercase LIKE pattern, `$8` zero-width, `$9` wide, `$10` NSFW only
 /// (retired: finds nothing, since NSFW emotes are never listed), `$11` tags,
-/// `$12` exact. Each costly check comes after a cheap test that skips it when it isn't asked
+/// `$12` exact, `$13` approved for personal use (ADR 0039). Each costly check comes after a cheap test that skips it when it isn't asked
 /// for (Postgres stops an `OR` at the first true), and the name match finds its candidates
 /// through the name, word and tag indexes instead of testing every emote.
 #[doc(hidden)]
@@ -210,6 +210,7 @@ pub const SEARCH_WHERE: &str = concat!(
            AND ($4 OR NOT $4)
            AND NOT $10
            AND (NOT $8 OR e.zero_width)
+           AND (NOT $13 OR e.personal_review = 'approved')
            AND (NOT $9 OR EXISTS (SELECT 1 FROM files f
                                   WHERE f.id = e.file_id AND f.width * 4 >= f.height * 7))
            AND (cardinality($11::text[]) = 0
@@ -225,7 +226,7 @@ pub const SEARCH_WHERE: &str = concat!(
                                  SELECT t.emote_id FROM emote_tags t WHERE t.tag LIKE $5 || '%')))"
 );
 
-/// Binds `$1` to `$12` of [`SEARCH_WHERE`] and the page statements, in order.
+/// Binds `$1` to `$13` of [`SEARCH_WHERE`] and the page statements, in order.
 macro_rules! bind_search {
     ($query:expr, $text:expr, $pattern:expr, $tags:expr, $q:expr) => {
         $query
@@ -241,6 +242,7 @@ macro_rules! bind_search {
             .bind($q.flags.contains(&EmoteFlag::Nsfw))
             .bind($tags)
             .bind($q.exact)
+            .bind($q.flags.contains(&EmoteFlag::PersonalUse))
     };
 }
 
@@ -261,7 +263,7 @@ fn page_sql(q: &Query<'_>, text_is_empty: bool) -> String {
              ORDER BY {}
              LIMIT $6 + 1",
             trending_join(q),
-            keyset::after(&keys, 13),
+            keyset::after(&keys, 14),
             keyset::order(&keys)
         );
     }

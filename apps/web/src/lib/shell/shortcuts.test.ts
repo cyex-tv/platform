@@ -49,7 +49,7 @@ describe('the shortcut registry', () => {
 
   it('the review keys match the letters the queue handles', () => {
     const letters = REVIEW_KEYS.items.flatMap((i) => i.keys).filter((k) => /^[A-Z]$/.test(k));
-    expect(letters.sort()).toEqual(['A', 'P', 'R', 'S', 'U', 'X', 'Z']);
+    expect(letters.sort()).toEqual(['A', 'D', 'L', 'N', 'P', 'R', 'S', 'X', 'Z']);
   });
 });
 

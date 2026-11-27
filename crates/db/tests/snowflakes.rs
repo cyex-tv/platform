@@ -339,9 +339,11 @@ async fn the_backfill_follows_created_at_and_stays_unique() {
     db.migrate().await;
 
     let mut c = db.conn().await;
+    // The personal sets a later migration made for the two accounts (ADR 0038) are not part of
+    // what was seeded.
     let rows: Vec<(Uuid, i64, DateTime<Utc>)> = sqlx::query_as(
         "SELECT id, public_id, created_at FROM accounts
-         UNION ALL SELECT id, public_id, created_at FROM emote_sets
+         UNION ALL SELECT id, public_id, created_at FROM emote_sets WHERE kind <> 'personal'
          UNION ALL SELECT id, public_id, created_at FROM emotes",
     )
     .fetch_all(&mut *c)

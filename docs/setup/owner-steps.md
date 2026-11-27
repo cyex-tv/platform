@@ -384,6 +384,150 @@ short one above.
 ## 2026/11/26: Panchang is fetched at build time
 The landing page's headline font, Panchang (Indian Type Foundry, ITF Free Font License), is not in this repository: section 02 of its licence forbids distribution through public repositories. The website image build runs `npm run fonts` (`apps/web/scripts/fetch-fonts.mjs`), which downloads Fontshare's official zip and checks the woff2's sha256, so every deploy serves its own copy from cyex.tv (section 01). The build needs network access to api.fontshare.com. Dev, tests and the CI `web` job run without it and show the Arial fallback; run `npm run fonts` locally to see the real font. If Fontshare changes the file the build fails with a message: check it, then update the pin in the script.
 
+# Owner steps 2026/11/27: on-the-fly resizing at the CDN (ADR 0037)
+Optional. Until this is done, `?w=` and `?format=` on a picture URL are ignored (the file comes
+back at its own size). The Worker's code is in the infra repo, `cloudflare/cdn-resize/`; it only
+touches `cdn.cyex.tv` in the `cyex.tv` zone. Nothing here touches cyex.app.
+
+## 1. Turn on transformations for the zone
+Cloudflare dashboard (account level) → **Images** → **Transformations** → the row of the
+**cyex.tv** zone → **Enable for zone**. Then open the zone's transformation settings and, under
+**Sources**, choose **Specified origins** and add `cdn.cyex.tv` only (so no other host can be
+resized through the zone). Don't turn on "Resize from any
+origin". The URL format (`/cdn-cgi/image/...`) stays available to the zone, but only for
+`cdn.cyex.tv` sources; the Worker is what clients use.
+
+Billing: Images transformations are billed per unique transformation a month (check the
+current free allowance on the Images page). The Worker allows 28 widths × 2 formats per file, and only those
+actually asked for are made.
+
+## 2. Deploy the Worker
+From a checkout of cyex-tv/infra (Node 20 or later):
+```bash
+cd cloudflare/cdn-resize
+npm test                                  # 14 tests, no packages
+npx wrangler@4 login                      # opens the browser; your Cloudflare account
+npx wrangler@4 deploy                     # name cyex-tv-cdn-resize, route cdn.cyex.tv/*
+```
+Or by hand: **Workers & Pages** → **Create** → **Create Worker** → name `cyex-tv-cdn-resize` →
+Deploy → **Edit code**: paste `src/plan.js` and `src/index.js` as two files of the same names
+(module syntax) → Deploy. Then **Settings** → **Variables and Secrets** → add the plain text
+variable `CDN_HOST` = `cdn.cyex.tv` (no secrets are needed).
+
+## 3. The route
+If you deployed with wrangler, the route is already there; check it. Otherwise: the
+**cyex.tv** zone → **Workers Routes** → **Add route**: route `cdn.cyex.tv/*`, Worker
+`cyex-tv-cdn-resize`. Set **Request limit failure mode** to **Fail open (proceed)**, so if the
+Worker's free request quota runs out, files are still served (without resizing). Don't add a
+route for any other host.
+
+Requests without `w` or `format` pass straight through, so the existing cache rule for
+`cdn.cyex.tv` and the worker's takedown purge keep working as before.
+
+## 4. Check
+```bash
+H=<an emote hash>
+curl -sI "https://cdn.cyex.tv/emotes/$H/4x.webp"                         # 200, as before
+curl -sI "https://cdn.cyex.tv/emotes/$H/4x.webp?w=48"                    # 200, image/webp,
+                                                                       # cache-control: public, max-age=31536000, immutable
+curl -s -o /tmp/a.bin -w '%{content_type}\n' -H 'Accept: image/avif' \
+     "https://cdn.cyex.tv/emotes/$H/4x.webp?w=48&format=auto"           # image/avif
+curl -s -o /dev/null -w '%{http_code}\n' "https://cdn.cyex.tv/emotes/$H/4x.webp?w=49"        # 400
+curl -s -o /dev/null -w '%{http_code}\n' "https://cdn.cyex.tv/originals/$H?w=48"            # 400
+curl -s -o /dev/null -w '%{http_code}\n' "https://cdn.cyex.tv/emotes/$H/4x.webp?w=48&x=1"   # 400
+```
+A second `?w=48` request comes from the Worker's edge cache (no new transformation is counted
+on the Images page). Take down a test emote: its `?w=` URLs
+answer 404 as soon as the original does (the Worker checks the original before serving a cached
+variant).
+
+To turn it off: remove the route (or the Worker). URLs with `?w=` then get the file at its own
+size again.
+
+# Owner steps 2026/11/27: direct uploads of badge and paint pictures (ADR 0036)
+Optional. Until this is done the website sends badge and paint pictures as a form, as now. Once
+it is, large originals (up to the 16 MB a role may allow) go from the browser straight to
+`tv-s3`, and the API only checks them. Nothing here touches cyex.app.
+
+## 1. A narrow upload front for tv-s3
+`tv-s3` stays private. A second site in the `tv-cdn` Caddy passes only presigned `PUT`s under
+`/<bucket>/uploads/` to it. In the infra checkout, append to `cdn/Caddyfile`:
+```
+# upload.cyex.tv: presigned PUTs of direct uploads (ADR 0036) to tv-s3, nothing else.
+http://{$UPLOAD_HOST:upload.cyex.tv} {
+	log {
+		output stdout
+		format json
+	}
+	request_body {
+		max_size {$UPLOAD_MAX_BODY:17MB}
+	}
+	@preflight {
+		method OPTIONS
+		path /{$CDN_BUCKET:cyex-tv-cdn}/uploads/*
+	}
+	handle @preflight {
+		header Access-Control-Allow-Origin "{$UPLOAD_SITE:https://cyex.tv}"
+		header Access-Control-Allow-Methods "PUT"
+		header Access-Control-Allow-Headers "content-type"
+		header Access-Control-Max-Age "600"
+		respond 204
+	}
+	@put {
+		method PUT
+		path /{$CDN_BUCKET:cyex-tv-cdn}/uploads/*
+		query X-Amz-Signature=*
+	}
+	handle @put {
+		header Access-Control-Allow-Origin "{$UPLOAD_SITE:https://cyex.tv}"
+		# The Host header is passed on unchanged, so tv-s3 checks the signature against
+		# upload.cyex.tv, the host the API signed.
+		reverse_proxy tv-s3:7070
+	}
+	respond "404 not found" 404
+}
+```
+The `tv-cdn` service is already on the `cyextv` network, so it reaches `tv-s3:7070`. The global
+`read_body` timeout (`CDN_READ_TIMEOUT`, 10 s) also applies here: a 16 MB picture on a slow line
+needs longer, so set `CDN_READ_TIMEOUT=120s` in `env/cdn.env` (it only matters for request bodies,
+and the CDN takes none). Reload it:
+```bash
+cd /srv/cyex-tv/infra
+docker compose -f compose/docker-compose.yaml --profile cdn up -d tv-cdn
+docker compose -f compose/docker-compose.yaml --profile cdn exec tv-cdn caddy validate --config /etc/caddy/Caddyfile
+```
+
+## 2. The tunnel hostname
+Cloudflare → Zero Trust → Networks → Tunnels → the cyex tunnel → **Public Hostnames** → Add a
+public hostname: subdomain `upload`, domain `cyex.tv`, Service URL `http://cyex-tv-tv-cdn-1:80`
+(the same container as `cdn.cyex.tv`; Caddy tells them apart by host). Save.
+
+Then **Caching** → Cache Rules → Create rule "upload.cyex.tv: never cache": hostname equals
+`upload.cyex.tv` → **Bypass cache**. Deploy. Uploads over 100 MB would hit Cloudflare's body
+limit; ours are at most 16 MB.
+
+## 3. The API's env
+In `api.env` (not `worker.env`):
+```
+CYEX_TV_S3_UPLOAD_ENDPOINT=https://upload.cyex.tv
+```
+Restart the api: `docker compose -f compose/docker-compose.yaml up -d api`. The api signs for
+this host with the same keys and region (`us-east-1`) as before.
+
+## 4. Check
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X GET https://upload.cyex.tv/cyex-tv-cdn/uploads/x   # 404
+curl -s -o /dev/null -w '%{http_code}\n' -X PUT https://upload.cyex.tv/cyex-tv-cdn/emotes/x    # 404
+curl -s -o /dev/null -w '%{http_code}\n' -X PUT https://upload.cyex.tv/cyex-tv-cdn/uploads/x   # 404 (unsigned)
+```
+Then on cyex.tv, upload a badge picture on the admin badge page. In the browser's network panel
+you see `POST /v1/cosmetics/images/uploads` (201), a `PUT` to `upload.cyex.tv` (200) and
+`POST .../finalize` (202). An upload never finalized is deleted by the worker within an hour
+and a clean-up round.
+
+To turn it off again, remove `CYEX_TV_S3_UPLOAD_ENDPOINT` and restart the api: the presign then
+answers `501 direct_upload_off` and the website goes back to the form by itself.
+
 # Deploy note 2026/11/27: indexes built `CONCURRENTLY` that ended up INVALID
 
 Some migrations build an index with `CREATE INDEX CONCURRENTLY IF NOT EXISTS` (for example
