@@ -2,7 +2,7 @@
   // Page tabs that are links (each its own address, so the URL holds the tab): words on a hairline,
   // the current one bold, never a bar or a fill (owner rule). The profile's section tabs; the
   // /me pages use the same row. Arrow keys move between them; the row scrolls sideways on a phone.
-  // A tab with an `icon` leads with it: icon and words on wide screens, the icon alone under 700px,
+  // A tab with an `icon` leads with it: icon and words on wide screens, the icon alone under 720px,
   // where the label turns into a tooltip (the same text is the link's aria-label either way).
   //   <LinkTabs label="lumen_fox's profile" items={[{ href, label, icon, count, current }]} />
   import Icon, { type IconName } from '$lib/components/Icon.svelte';
@@ -31,7 +31,7 @@
   function showTip(ev: Event) {
     clearTimeout(timer);
     const a = (ev.target as Element | null)?.closest?.('a.icon');
-    if (!(a instanceof HTMLElement) || !window.matchMedia('(max-width: 700px)').matches) return (tip = null);
+    if (!(a instanceof HTMLElement) || !window.matchMedia('(max-width: 719.98px)').matches) return (tip = null);
     const r = a.getBoundingClientRect();
     const text = a.querySelector('.tl')?.textContent ?? '';
     const put = () => (tip = { text, x: Math.min(Math.max(r.left + r.width / 2, 40), document.documentElement.clientWidth - 40), y: r.bottom + 6 });
@@ -66,8 +66,8 @@
   .n { font-size: var(--t-small); color: var(--dim); font-weight: 500; font-variant-numeric: tabular-nums; }
   @media (hover: hover) and (pointer: fine) { .tabs a:hover { color: var(--text); } }
 
-  /* Icon tabs: icon first, then the words. Under 700px the words go and the icon is the tab (44px wide to hit). */
-  @media (max-width: 700px) {
+  /* Icon tabs: icon first, then the words. Under 720px the words go and the icon is the tab (44px wide to hit). */
+  @media (max-width: 719.98px) {
     .tabs a.icon { justify-content: center; min-width: 40px; padding: 0 6px; }
     .tabs a.icon .tl, .tabs a.icon .n { display: none; }
     /* No bold word to mark the current tab: its icon takes the accent (selected state, never a bar). */
