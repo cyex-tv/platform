@@ -527,3 +527,39 @@ and a clean-up round.
 
 To turn it off again, remove `CYEX_TV_S3_UPLOAD_ENDPOINT` and restart the api: the presign then
 answers `501 direct_upload_off` and the website goes back to the form by itself.
+
+# Deploy note 2026/11/27: indexes built `CONCURRENTLY` that ended up INVALID
+
+Some migrations build an index with `CREATE INDEX CONCURRENTLY IF NOT EXISTS` (for example
+`20261227000101_keyset_popular`, `..102_keyset_top`, `..103_owner_newest`), so a live table
+keeps taking writes while it builds. If such a build is interrupted (the api restarted, a
+deadlock, a duplicate row for a unique index), Postgres keeps the half-built index marked
+**INVALID**: it is never used for reads but still slows every write, and `IF NOT EXISTS` skips
+it on the next run, so the migration counts as done.
+
+The api repairs this itself on every start: after the migrations it drops each invalid index the
+migrations create and builds it again from its own definition, concurrently
+(`cyex_tv_db::repair_invalid_indexes`, logged as `rebuilt an invalid index`). Invalid indexes
+the migrations don't create are only logged (`invalid index our migrations don't create`), never
+touched. If a rebuild fails again the api refuses to start; the log names the index.
+
+To check by hand (`psql` against the cyex.tv database):
+
+```sql
+SELECT c.relname AS index, t.relname AS table
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+WHERE NOT i.indisvalid;
+```
+
+No rows: all good. For a row, drop the index and build it again, each statement on its own (not
+in a transaction), then check again:
+
+```sql
+DROP INDEX CONCURRENTLY IF EXISTS emotes_keyset_popular;
+-- then the CREATE INDEX CONCURRENTLY line from its migration file, for example
+-- crates/db/migrations/20261227000101_keyset_popular.sql
+```
+
+Restarting the api does the same for the indexes the migrations create.

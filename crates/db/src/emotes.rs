@@ -5,7 +5,7 @@ use cyex_tv_shared::model::{ApprovalState, EmoteState};
 use sqlx::{Connection, FromRow, PgConnection};
 use uuid::Uuid;
 
-use crate::error::{DbError, DbResult};
+use crate::error::{DbError, DbResult, retrying};
 use crate::ids::new_id;
 
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]
@@ -89,10 +89,12 @@ pub async fn get(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Emote>> {
 }
 
 /// Like `get`, but locks the row until the transaction ends. Use it to read the "before" of an
-/// audited change.
+/// audited change. `FOR NO KEY UPDATE`: other writers of the emote wait, but a member insert's
+/// foreign key check (`KEY SHARE`) doesn't, so `sets::add_member` holding a set never waits here
+/// while this transaction's version trigger waits for that set.
 pub async fn lock(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Emote>> {
     Ok(sqlx::query_as(&format!(
-        "SELECT {EMOTE} FROM emotes WHERE id = $1 AND deleted_at IS NULL FOR UPDATE"
+        "SELECT {EMOTE} FROM emotes WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE"
     ))
     .bind(id)
     .fetch_optional(conn)
@@ -358,16 +360,32 @@ pub async fn sets_containing(conn: &mut PgConnection, id: Uuid) -> DbResult<Vec<
 
 /// Takes an emote out of every set (when it is deleted). Returns the sets it was in, with the
 /// name it had there.
+///
+/// The sets are locked first, ordered by ID, and only then the member rows: the order every set
+/// write uses (`sets::add_member` locks the set, then inserts). Deleting first and letting the
+/// version trigger lock the sets afterwards could deadlock with an `add_member` of the same emote
+/// to one of them. Tried again on a deadlock (see `retrying!`).
 pub async fn remove_from_all_sets(
     conn: &mut PgConnection,
     id: Uuid,
 ) -> DbResult<Vec<(Uuid, String)>> {
-    Ok(
-        sqlx::query_as("DELETE FROM emote_set_members WHERE emote_id = $1 RETURNING set_id, name")
-            .bind(id)
-            .fetch_all(conn)
-            .await?,
-    )
+    retrying!(conn, |tx| {
+        sqlx::query(
+            "SELECT s.id FROM emote_sets s
+             WHERE s.id IN (SELECT set_id FROM emote_set_members WHERE emote_id = $1)
+             ORDER BY s.id
+             FOR NO KEY UPDATE",
+        )
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+        Ok(sqlx::query_as(
+            "DELETE FROM emote_set_members WHERE emote_id = $1 RETURNING set_id, name",
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await?)
+    })
 }
 
 /// How many emotes an account has made since `since`, deleted ones included (for the upload rate

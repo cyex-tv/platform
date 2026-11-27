@@ -97,24 +97,56 @@ impl ReadCache {
             let mut slots = self.slots();
             match slots.get(key) {
                 Some(slot) if slot.at.elapsed() < self.ttl => slot.clone(),
-                _ => {
-                    if slots.len() >= MAX_ENTRIES {
-                        let ttl = self.ttl;
-                        slots.retain(|_, s| s.at.elapsed() < ttl);
-                        if slots.len() >= MAX_ENTRIES {
-                            slots.clear();
-                        }
-                    }
-                    let slot = Arc::new(Slot {
-                        at: Instant::now(),
-                        cell: OnceCell::new(),
-                    });
-                    slots.insert(key.to_owned(), slot.clone());
-                    slot
-                }
+                _ => self.insert(&mut slots, key, OnceCell::new()),
             }
         };
         slot.cell.get_or_try_init(load).await.cloned()
+    }
+
+    /// A fresh entry's answer when it is built already; never waits and never loads. For a bulk
+    /// read, which loads what is missing in one go and hands it to [`Self::put`].
+    pub fn peek(&self, key: &str) -> Option<Cached> {
+        if self.ttl.is_zero() {
+            return None;
+        }
+        let slots = self.slots();
+        let slot = slots.get(key).filter(|s| s.at.elapsed() < self.ttl)?;
+        slot.cell.get().cloned()
+    }
+
+    /// Keeps an answer built elsewhere (a bulk read) for `ttl` from now, as `get_or_load` would
+    /// have. A fresh entry already there (maybe being built right now) is left as it is.
+    pub fn put(&self, key: &str, value: Cached) {
+        if self.ttl.is_zero() {
+            return;
+        }
+        let mut slots = self.slots();
+        if slots.get(key).is_some_and(|s| s.at.elapsed() < self.ttl) {
+            return;
+        }
+        self.insert(&mut slots, key, OnceCell::new_with(Some(value)));
+    }
+
+    /// A new slot for `key`, making room past [`MAX_ENTRIES`] (expired ones first, then all).
+    fn insert(
+        &self,
+        slots: &mut HashMap<String, Arc<Slot>>,
+        key: &str,
+        cell: OnceCell<Cached>,
+    ) -> Arc<Slot> {
+        if slots.len() >= MAX_ENTRIES {
+            let ttl = self.ttl;
+            slots.retain(|_, s| s.at.elapsed() < ttl);
+            if slots.len() >= MAX_ENTRIES {
+                slots.clear();
+            }
+        }
+        let slot = Arc::new(Slot {
+            at: Instant::now(),
+            cell,
+        });
+        slots.insert(key.to_owned(), slot.clone());
+        slot
     }
 
     /// Drops one entry. Reads already waiting on it still get it; new ones build afresh.
@@ -197,6 +229,28 @@ mod tests {
             payload: serde_json::Value::Null,
             created_at: chrono::Utc::now(),
         }
+    }
+
+    #[tokio::test]
+    async fn a_put_answer_is_what_a_later_read_gets() {
+        let cache = ReadCache::new(Duration::from_secs(60));
+        assert!(cache.peek("set:1").is_none());
+        cache.put("set:1", body("bulk"));
+        cache.put("set:2", None);
+        assert_eq!(cache.peek("set:1"), Some(body("bulk")));
+        assert_eq!(cache.peek("set:2"), Some(None));
+        let got = cache
+            .get_or_load("set:1", || async { panic!("served from the bulk read") })
+            .await
+            .unwrap();
+        assert_eq!(got, body("bulk"));
+        // A fresh entry isn't replaced.
+        cache.put("set:1", body("later"));
+        assert_eq!(cache.peek("set:1"), Some(body("bulk")));
+        // Off: nothing is kept.
+        let off = ReadCache::disabled();
+        off.put("set:1", body("bulk"));
+        assert!(off.peek("set:1").is_none());
     }
 
     #[tokio::test]

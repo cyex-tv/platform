@@ -271,6 +271,16 @@ async fn a_key_reads_but_never_acts() {
         "3000",
         "the key's own bucket"
     );
+    // It carries the key's quota, so no shared cache may keep it.
+    let control = header(&a, "cache-control");
+    assert!(control.starts_with("private"), "{control}");
+    assert!(!control.contains("public"), "{control}");
+    // The same read without a key is public, and carries nobody's quota.
+    let anon = w.get(As::Nobody, "/v1/sets/global").await;
+    assert_eq!(anon.status, StatusCode::OK);
+    assert!(header(&anon, "cache-control").starts_with("public"));
+    assert!(header(&anon, "ratelimit-remaining").is_empty());
+    assert!(header(&anon, "ratelimit-limit").is_empty());
 
     // GraphQL queries run signed out: the key is not the account.
     let r = w
@@ -357,9 +367,9 @@ async fn a_key_has_its_own_bucket_and_counts_its_requests() {
         w.get(As::Bearer(&other), "/v1/sets/global").await.status,
         StatusCode::OK
     );
+    // (A public answer carries no `RateLimit-*`, so the status is what shows it.)
     let anon = w.get(As::Nobody, "/v1/sets/global").await;
     assert_eq!(anon.status, StatusCode::OK);
-    assert_eq!(header(&anon, "ratelimit-limit"), "1200");
 
     w.state.key_usage.flush(&w.db.pool).await.unwrap();
     let list = w.gql(As::Site(&alice.site), KEYS, json!({})).await;

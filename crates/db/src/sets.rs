@@ -16,7 +16,7 @@ use cyex_tv_shared::model::{ApprovalState, EmoteState, Platform, SetKind, SetVis
 use sqlx::{Connection, FromRow, PgConnection};
 use uuid::Uuid;
 
-use crate::error::{DbError, DbResult, unique_violation};
+use crate::error::{DbError, DbResult, retrying, unique_violation};
 use crate::ids::new_id;
 
 /// Default capacity of a channel set (D20).
@@ -317,15 +317,18 @@ pub async fn personal_for_users(
     .await?)
 }
 
+/// Renames a set. Tried again on a deadlock (see `retrying!`).
 pub async fn rename(conn: &mut PgConnection, id: Uuid, name: &str) -> DbResult<Set> {
-    sqlx::query_as(&format!(
-        "UPDATE emote_sets SET name = $2, updated_at = now() WHERE id = $1 RETURNING {SET}"
-    ))
-    .bind(id)
-    .bind(name)
-    .fetch_optional(conn)
-    .await?
-    .ok_or(DbError::NotFound)
+    retrying!(conn, |tx| {
+        sqlx::query_as(&format!(
+            "UPDATE emote_sets SET name = $2, updated_at = now() WHERE id = $1 RETURNING {SET}"
+        ))
+        .bind(id)
+        .bind(name)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(DbError::NotFound)
+    })
 }
 
 /// Changes who can find and open a set.
@@ -436,9 +439,12 @@ pub async fn delete(conn: &mut PgConnection, id: Uuid) -> DbResult<bool> {
     Ok(done.rows_affected() > 0)
 }
 
+/// Locks the set row until the transaction ends. `FOR NO KEY UPDATE`: it keeps out every other
+/// writer of the set (they take the same lock, as do the version triggers), but not the
+/// `KEY SHARE` lock a member insert's foreign key check takes.
 async fn lock_set(conn: &mut PgConnection, id: Uuid) -> DbResult<Set> {
     sqlx::query_as(&format!(
-        "SELECT {SET} FROM emote_sets WHERE id = $1 FOR UPDATE"
+        "SELECT {SET} FROM emote_sets WHERE id = $1 FOR NO KEY UPDATE"
     ))
     .bind(id)
     .fetch_optional(conn)
@@ -465,7 +471,7 @@ struct EmoteForSet {
 }
 
 /// Adds an emote to a set, checking capacity, unique names, the emote's state and, for a personal
-/// set, its personal-use approval.
+/// set, its personal-use approval. Tried again on a deadlock (see `retrying!`).
 pub async fn add_member(
     conn: &mut PgConnection,
     set_id: Uuid,
@@ -476,15 +482,26 @@ pub async fn add_member(
 
 /// [`add_member`] against `capacity` instead of the set's own, when the api holds a stricter or
 /// fresher number. A set over its capacity (a personal set whose owner lost a role) takes no
-/// new member until it is under: the check is "holds at least capacity", not "equals".
+/// new member until it is under: the check is "holds at least capacity", not "equals". Tried
+/// again on a deadlock (see `retrying!`).
 pub async fn add_member_within(
     conn: &mut PgConnection,
     set_id: Uuid,
     new: NewMember<'_>,
     capacity: Option<i32>,
 ) -> DbResult<Member> {
-    let mut tx = conn.begin().await?;
-    let set = lock_set(&mut tx, set_id).await?;
+    retrying!(conn, |tx| {
+        add_member_once(tx, set_id, new, capacity).await
+    })
+}
+
+async fn add_member_once(
+    tx: &mut PgConnection,
+    set_id: Uuid,
+    new: NewMember<'_>,
+    capacity: Option<i32>,
+) -> DbResult<Member> {
+    let set = lock_set(&mut *tx, set_id).await?;
 
     let emote: EmoteForSet = sqlx::query_as(
         "SELECT owner_account_id, name, zero_width, state, personal_review
@@ -511,7 +528,7 @@ pub async fn add_member_within(
         return Err(DbError::PersonalUseNotApproved(emote.personal_review));
     }
 
-    if count(&mut tx, set_id).await? >= i64::from(capacity.unwrap_or(set.capacity)) {
+    if count(&mut *tx, set_id).await? >= i64::from(capacity.unwrap_or(set.capacity)) {
         return Err(DbError::SetFull);
     }
 
@@ -528,7 +545,6 @@ pub async fn add_member_within(
     .fetch_one(&mut *tx)
     .await
     .map_err(member_conflict)?;
-    tx.commit().await?;
     Ok(member)
 }
 
@@ -540,7 +556,9 @@ fn member_conflict(err: sqlx::Error) -> DbError {
     }
 }
 
-/// Renames an emote in a set, or changes its zero-width flag there.
+/// Renames an emote in a set, or changes its zero-width flag there. Like every member write, it
+/// locks the set first and then the member row (`add_member`'s order), so two writes of one set
+/// never wait on each other in a circle; tried again on a deadlock (see `retrying!`).
 pub async fn update_member(
     conn: &mut PgConnection,
     set_id: Uuid,
@@ -548,35 +566,42 @@ pub async fn update_member(
     name: Option<&str>,
     zero_width: Option<bool>,
 ) -> DbResult<Member> {
-    sqlx::query_as(&format!(
-        "UPDATE emote_set_members
-         SET name = coalesce($3, name), zero_width = coalesce($4, zero_width)
-         WHERE set_id = $1 AND emote_id = $2
-         RETURNING {MEMBER}"
-    ))
-    .bind(set_id)
-    .bind(emote_id)
-    .bind(name)
-    .bind(zero_width)
-    .fetch_optional(conn)
-    .await
-    .map_err(member_conflict)?
-    .ok_or(DbError::NotFound)
+    retrying!(conn, |tx| {
+        lock_set(&mut *tx, set_id).await?;
+        sqlx::query_as(&format!(
+            "UPDATE emote_set_members
+             SET name = coalesce($3, name), zero_width = coalesce($4, zero_width)
+             WHERE set_id = $1 AND emote_id = $2
+             RETURNING {MEMBER}"
+        ))
+        .bind(set_id)
+        .bind(emote_id)
+        .bind(name)
+        .bind(zero_width)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(member_conflict)?
+        .ok_or(DbError::NotFound)
+    })
 }
 
+/// Takes an emote out of a set: the set locked first, then the member row (see `update_member`).
 pub async fn remove_member(
     conn: &mut PgConnection,
     set_id: Uuid,
     emote_id: Uuid,
 ) -> DbResult<Member> {
-    sqlx::query_as(&format!(
-        "DELETE FROM emote_set_members WHERE set_id = $1 AND emote_id = $2 RETURNING {MEMBER}"
-    ))
-    .bind(set_id)
-    .bind(emote_id)
-    .fetch_optional(conn)
-    .await?
-    .ok_or(DbError::NotFound)
+    retrying!(conn, |tx| {
+        lock_set(&mut *tx, set_id).await?;
+        sqlx::query_as(&format!(
+            "DELETE FROM emote_set_members WHERE set_id = $1 AND emote_id = $2 RETURNING {MEMBER}"
+        ))
+        .bind(set_id)
+        .bind(emote_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(DbError::NotFound)
+    })
 }
 
 /// A set's emotes in the order they were added.
@@ -701,9 +726,15 @@ pub async fn prune_changes(
                      WHERE c.changed_at < $1 OR c.version <= s.version - $2
                      ORDER BY c.id LIMIT $3)
                  RETURNING set_id, version
+             ), locked AS (
+                 SELECT s.id FROM emote_sets s
+                 WHERE s.id IN (SELECT set_id FROM gone)
+                 ORDER BY s.id
+                 FOR NO KEY UPDATE
              ), floors AS (
                  UPDATE emote_sets s SET change_floor = GREATEST(s.change_floor, g.v)
                  FROM (SELECT set_id, max(version) AS v FROM gone GROUP BY set_id) g
+                 JOIN locked l ON l.id = g.set_id
                  WHERE s.id = g.set_id
                  RETURNING 1
              )
