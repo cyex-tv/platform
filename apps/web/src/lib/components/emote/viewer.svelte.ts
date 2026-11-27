@@ -2,6 +2,7 @@
 // the phone action bar and the review block. Only the browser asks (only it has the cookie).
 import { ApiError, gql } from '$lib/api';
 import type { MySetNamesQuery } from '$lib/gql/graphql';
+import { PERSONAL_NOT_APPROVED } from './approvals';
 import { ADD_SET_EMOTE, MY_CHANNELS, MY_SET_NAMES, REPORT_EMOTE } from '$lib/queries';
 
 export type ViewerSet = MySetNamesQuery['mySets'][number];
@@ -57,7 +58,7 @@ export class Viewer {
       if (set) set.emotes.push({ emote: { id: this.emoteId } });
       this.added = setId;
     } catch (e) {
-      this.addError = e instanceof Error ? e.message : 'That didn’t work.';
+      this.addError = e instanceof ApiError && e.code === 'personal_use_not_approved' ? PERSONAL_NOT_APPROVED : e instanceof Error ? e.message : 'That didn’t work.';
     } finally {
       this.adding = null;
     }

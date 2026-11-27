@@ -41,6 +41,17 @@ function id(data: Record<string, unknown>, key: string): string | null {
 }
 
 const noun = (kind: string | null) => (kind === 'badge' ? 'badge' : kind === 'paint' ? 'paint' : 'cosmetic');
+/** One approval state from a payload (`pending`, `approved`, `denied`), or null. */
+function approval(data: Record<string, unknown>, key: string): 'pending' | 'approved' | 'denied' | null {
+  const v = data[key];
+  return v === 'pending' || v === 'approved' || v === 'denied' ? v : null;
+}
+const verdict = { pending: 'is waiting for review', approved: 'approved', denied: 'denied' } as const;
+/** "public listing approved, personal use denied", or null when the payload says neither. */
+function approvalStates(listing: ReturnType<typeof approval>, personal: ReturnType<typeof approval>): string | null {
+  const parts = [listing && `public listing ${verdict[listing]}`, personal && `personal use ${verdict[personal]}`].filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+}
 const withReason = (sentence: string, reason: string | null) => (reason ? `${sentence} Reason: ${iso(reason)}` : sentence);
 
 /** What a notification says, which icon it gets and where it leads. Unknown kinds get a neutral line. */
@@ -59,8 +70,22 @@ export function describe(kind: string, payload: string | null | undefined): Line
   const owned = id(d, 'owner_id');
 
   switch (kind) {
-    case 'emote.approved':
-      return { icon: 'check', text: `${name ? iso(name) : 'Your emote'} was approved.`, href: emote ? `/emotes/${emote}` : null };
+    case 'emote.approved': {
+      // Since ADR 0038 the payload also says where the two approvals stand; older ones don't.
+      const listing = approval(d, 'public_listing');
+      const personal = approval(d, 'personal_use');
+      const states = approvalStates(listing, personal);
+      const lead = `${name ? iso(name) : 'Your emote'} was approved.`;
+      const text = states ? `${lead} ${states[0].toUpperCase()}${states.slice(1)}.` : lead;
+      return { icon: 'check', text: withReason(text, listing === 'denied' || personal === 'denied' ? reason : null), href: emote ? `/emotes/${emote}` : null };
+    }
+    case 'emote.approvals_changed': {
+      const listing = approval(d, 'public_listing');
+      const personal = approval(d, 'personal_use');
+      const states = approvalStates(listing, personal);
+      const text = `${name ? iso(name) : 'Your emote'}: ${states ?? 'its approvals changed'}.`;
+      return { icon: listing === 'denied' || personal === 'denied' ? 'x' : 'check', text: withReason(text, reason), href: emote ? `/emotes/${emote}` : null };
+    }
     case 'emote.rejected':
       return {
         icon: 'x',
@@ -104,12 +129,13 @@ export function describe(kind: string, payload: string | null | undefined): Line
     case 'emote.transferred': {
       const what = name ? iso(name) : 'An emote';
       const role = str(d, 'role', 10);
+      // Staff move emotes now (ADR 0038); older ones were accepted requests (role 'editor').
       const text =
         role === 'to'
-          ? `${what} is yours now, from ${who('from_name')}.`
+          ? `Staff moved ${what} to you.`
           : role === 'editor'
             ? `${who('from_name')} accepted: ${what} went to ${who('to_name')}.`
-            : `${what} went to ${who('to_name')}.`;
+            : `${what} was moved to ${who('to_name')}.`;
       return { icon: 'arrow-right', text, href: emote && role !== 'from' ? `/emotes/${emote}` : null };
     }
     case 'emote.transfer_declined':

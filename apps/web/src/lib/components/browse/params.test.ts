@@ -16,8 +16,15 @@ describe('browse params', () => {
     expect(u('q=pog&sort=new').sort).toBe('new');
   });
   it('round trips', () => {
-    const s = '?q=pog&sort=new&kind=animated&zw=1&wide=1&tag=cat&tag=happy&n=3';
+    const s = '?q=pog&sort=new&kind=animated&zw=1&wide=1&personal=1&tag=cat&tag=happy&n=3';
     expect(toSearch(u(s.slice(1)))).toBe(s);
+  });
+  it('filters on personal use: the PERSONAL_USE flag, a chip, and cleared with the rest', () => {
+    const b = u('personal=1');
+    expect(apiVars(b, 1).flags).toEqual(['PERSONAL_USE']);
+    expect(active(b).map((a) => a.label)).toEqual(['Personal use']);
+    expect(without(b, 'personal')).toEqual({ personal: false });
+    expect(toSearch(change(b, CLEARED))).toBe('');
   });
   it('has no NSFW filter: an old nsfw=1 link is ignored and dropped', () => {
     const b = u('nsfw=1&tag=cat');

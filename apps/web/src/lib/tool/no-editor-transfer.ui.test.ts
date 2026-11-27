@@ -31,19 +31,19 @@ describe('no transfer for editors', () => {
   });
 
   it('nothing on the site asks for, accepts, declines or cancels a transfer request', () => {
+    // The developer docs name the retired operations to say they are gone (ADR 0038).
     for (const [f, text] of source) {
+      if (f.includes('/lib/docs/')) continue;
       expect(text, f).not.toMatch(/ACCEPT_EMOTE_TRANSFER|DECLINE_EMOTE_TRANSFER|CANCEL_EMOTE_TRANSFER|EMOTE_TRANSFER_REQUESTS|acceptEmoteTransfer|emoteTransferRequests/);
       expect(text, f).not.toMatch(/Cancel request|It moves only if you accept|has to accept first/);
     }
   });
 
-  it('the emote editor offers Give only to the owner, and editor grants never unlock it', () => {
+  it('the owner emote editor has no hand-over; only the staff pop-up transfers (emotes.transfer)', () => {
     const page = files['/src/routes/(tool)/me/emotes/[id]/+page.svelte'];
-    expect(page).toMatch(/const canGive = \$derived\(mine\);/);
-    expect(page).not.toMatch(/EMOTE_TRANSFER/);
-    const give = page.indexOf('<Section title="Hand-over"');
-    expect(give).toBeGreaterThan(0);
-    expect(page.lastIndexOf('{#if canGive}', give)).toBeGreaterThan(page.lastIndexOf('{/if}', give));
+    expect(page).not.toMatch(/EMOTE_TRANSFER|TRANSFER_EMOTE|Hand-over|canGive/);
+    const dialog = files['/src/lib/components/emote/EditEmoteDialog.svelte'];
+    expect(dialog).toMatch(/can\('emotes\.transfer'\)/);
     // Nowhere else does a grant's transfer flag turn on an action.
     for (const [f, text] of source) if (!f.endsWith('/lib/tool/editors.ts')) expect(text, f).not.toMatch(/'EMOTE_TRANSFER'/);
   });

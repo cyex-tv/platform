@@ -22,7 +22,8 @@ function answer() {
   });
 }
 
-const base = { place: 3, total: 41, busy: false, resolved: false, hasNext: true, onskip: () => {}, onreject: () => {}, onapprove: () => {} };
+const both = { listing: true, personal: true };
+const base = { place: 3, total: 41, busy: false, resolved: false, hasNext: true, onskip: () => {}, onact: () => {}, reviewer: both };
 
 describe('ReviewInspector', () => {
   it('shows the upload at every size, its place and the uploader’s history', async () => {
@@ -38,20 +39,51 @@ describe('ReviewInspector', () => {
     expect(screen.getByText('rejected').parentElement?.textContent).toContain('1');
   });
 
-  it('sends the verdicts from its foot', async () => {
+  it('sends the verdicts from its foot: Approve both first, then the single ones', async () => {
     answer();
-    const onapprove = vi.fn();
-    const onreject = vi.fn();
+    const onact = vi.fn();
     const onskip = vi.fn();
-    render(ReviewInspector, { ...base, emote: emote('E1', 'pupHmm'), onapprove, onreject, onskip });
-    await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    expect(onapprove).toHaveBeenCalledWith();
-    await fireEvent.click(screen.getByRole('button', { name: 'Approve as unlisted' }));
-    expect(onapprove).toHaveBeenLastCalledWith('UNLISTED');
+    render(ReviewInspector, { ...base, emote: emote('E1', 'pupHmm'), onact, onskip });
+    await fireEvent.click(screen.getByRole('button', { name: 'Approve both' }));
+    expect(onact).toHaveBeenLastCalledWith('both');
+    await fireEvent.click(screen.getByRole('button', { name: 'Approve public listing' }));
+    expect(onact).toHaveBeenLastCalledWith('listing');
+    await fireEvent.click(screen.getByRole('button', { name: 'Approve personal use only' }));
+    expect(onact).toHaveBeenLastCalledWith('personal');
+    await fireEvent.click(screen.getByRole('button', { name: 'Deny public listing' }));
+    expect(onact).toHaveBeenLastCalledWith('deny-listing');
+    await fireEvent.click(screen.getByRole('button', { name: 'Deny personal use' }));
+    expect(onact).toHaveBeenLastCalledWith('deny-personal');
     await fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
-    expect(onreject).toHaveBeenCalled();
+    expect(onact).toHaveBeenLastCalledWith('reject');
     await fireEvent.click(screen.getByRole('button', { name: 'Skip to the next, no verdict' }));
     expect(onskip).toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /unlisted/i })).toBeNull();
+  });
+
+  it('offers a reviewer with only the listing permission a plain Approve', () => {
+    answer();
+    render(ReviewInspector, { ...base, reviewer: { listing: true, personal: false }, emote: emote('E1', 'pupHmm') });
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Approve both' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Deny personal use' })).toBeNull();
+  });
+
+  it('shows only approve and deny personal use in the personal queue', () => {
+    answer();
+    render(ReviewInspector, { ...base, mode: 'personal', emote: emote('E1', 'pupHmm', 'APPROVED') });
+    expect(screen.getByRole('button', { name: 'Approve personal use' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Deny personal use' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Approve both' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Deny public listing' })).toBeNull();
+  });
+
+  it('shows both approvals on the facts', () => {
+    answer();
+    render(ReviewInspector, { ...base, emote: { ...emote('E1', 'pupHmm', 'APPROVED'), approvals: { publicListing: 'APPROVED', personalUse: 'DENIED' } } as EmoteFieldsFragment });
+    expect(screen.getByText('Public listing').nextElementSibling?.textContent).toBe('Approved');
+    expect(screen.getByText('Personal use').nextElementSibling?.textContent).toBe('Denied');
   });
 
   it('has no verdicts on resolved uploads', () => {

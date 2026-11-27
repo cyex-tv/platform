@@ -8,14 +8,13 @@
   //         of chat with the emote in it at chat size. Animated emotes play, or show their still
   //         frame under reduced motion (no pause button);
   //   right the name, the creator in their paint and the upload date, flags and tags, the
-  //         actions (add to set, edit, more), a grid of facts (channels, trending, review), then the
-  //         tabs (Channels using it, Activity, More by the creator; `?tab=` in the address) with
-  //         a pager in the tab bar, and last the staff flags panel.
+  //         actions (add to set, edit, more), a grid of facts (channels, trending, public listing and
+  //         personal use), then the tabs (Channels using it, Activity, More by the creator; `?tab=`
+  //         in the address) with a pager in the tab bar. "Edit emote" opens a pop-up (ADR 0038).
   // Under 900px the columns stack; phones get the actions in a bar fixed to the bottom.
   import { onMount } from 'svelte';
-  import { goto, invalidateAll } from '$app/navigation';
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import EmoteFlagsPanel from '$lib/admin/EmoteFlagsPanel.svelte';
   import EmoteActions from '$lib/components/EmoteActions.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
@@ -29,6 +28,8 @@
   import { emoteCan } from '$lib/tool/editors';
   import ActivityTab from './ActivityTab.svelte';
   import ChannelsTab from './ChannelsTab.svelte';
+  import EditEmoteDialog from './EditEmoteDialog.svelte';
+  import { approvalTone, approvalWord } from './approvals';
   import Pager from './Pager.svelte';
   import { canReport, flagsOf, scaleFiles, tabFrom, tabUrl, tabUrlStale, trust, type EmoteChannel, type PageEmote } from './emote-page';
   import type { PagerState } from './pager';
@@ -81,11 +82,14 @@
       .then((g) => (grants = g))
       .catch(() => {});
   });
-  const editHref = $derived(
-    session.me && (emoteCan(grants, e.owner?.id, session.me.id, 'EMOTE_MANAGE') || can('emotes.edit_any'))
-      ? `/me/emotes/${encodeURIComponent(e.id)}`
-      : null,
-  );
+  const canEdit = $derived(!!session.me && (emoteCan(grants, e.owner?.id, session.me.id, 'EMOTE_MANAGE') || can('emotes.edit_any')));
+  // The pop-up is for who may change the emote and for staff who review or transfer it.
+  const canOpenEdit = $derived(canEdit || can('emotes.review') || can('emotes.review_personal') || can('emotes.transfer'));
+  // Where an owner deletes a broken emote (the editor page keeps Delete).
+  const editHref = $derived(canEdit ? `/me/emotes/${encodeURIComponent(e.id)}` : null);
+  let editDialog = $state<EditEmoteDialog>();
+  const onedit = $derived(canOpenEdit ? () => editDialog?.open() : null);
+  const approvals = $derived(e.approvals ?? { publicListing: 'PENDING' as const, personalUse: 'PENDING' as const });
 
   // Motion follows the reader's setting: the still frame under reduced motion, no pause button.
   const reduced = $derived(reducedMotion.matches);
@@ -234,7 +238,7 @@
       </header>
 
       <div class="head-actions">
-        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} owner={e.owner} />
+        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {onedit} {approvals} addable={public_} reportable={canReport(e, session.me?.id)} owner={e.owner} />
       </div>
 
       <dl class="facts">
@@ -242,7 +246,8 @@
         {#if trending}<div><dt>Added in 7 days</dt><dd class="num">+{count(trending.channels)}</dd></div>{/if}
         {#if trending}<div><dt>Trending</dt><dd class="num">#{trending.rank}</dd></div>{/if}
         {#if uploaded}<div><dt>Uploaded</dt><dd class="num"><time datetime={e.createdAt}>{uploaded}</time></dd></div>{/if}
-        <div><dt>Review</dt><dd class={t.tone}>{#if public_}<Icon name="check" size={12} stroke={2.4} />{/if}{t.status}</dd></div>
+        <div data-fact="listing"><dt>Public listing</dt><dd class={approvalTone(approvals.publicListing)}>{#if approvals.publicListing === 'APPROVED'}<Icon name="check" size={12} stroke={2.4} />{/if}{approvalWord(approvals.publicListing)}</dd></div>
+        <div data-fact="personal"><dt>Personal use</dt><dd class={approvalTone(approvals.personalUse)}>{#if approvals.personalUse === 'APPROVED'}<Icon name="check" size={12} stroke={2.4} />{/if}{approvalWord(approvals.personalUse)}</dd></div>
       </dl>
 
       {#if tabs.length}
@@ -289,15 +294,13 @@
           {/if}
         </section>
       {/if}
-
-      <!-- Staff with emotes.flags change its flags after review (ADR 0024); nothing for anyone else.
-           Last in the column: it shows once the session is known, so nothing below it can move. -->
-      <EmoteFlagsPanel emote={e} id="emote-flags" onsaved={() => invalidateAll()} />
     </section>
   </div>
 
+  {#if canOpenEdit}<EditEmoteDialog bind:this={editDialog} emote={e} {canEdit} />{/if}
+
   <div class="bar" use:bottomBar>
-    <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} owner={e.owner} />
+    <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {onedit} {approvals} addable={public_} reportable={canReport(e, session.me?.id)} owner={e.owner} />
   </div>
 </div>
 

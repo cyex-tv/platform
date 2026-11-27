@@ -68,7 +68,7 @@ describe('mock notification prefs', () => {
   it('refuses a kind twice and more kinds than exist', async () => {
     const p = { kind: 'cosmetic.granted', notify: true, toast: true };
     expect(code(await gql(PREFS, { prefs: [p, p] }))).toBe('unknown_kind');
-    const many = Array.from({ length: 15 }, () => p);
+    const many = Array.from({ length: 20 }, () => p);
     expect(code(await gql(PREFS, { prefs: many }))).toBe('too_many');
     expect((await gql(PREFS, { prefs: [p] })).errors).toBeUndefined();
   });

@@ -13,6 +13,10 @@ export const EMOTE_FIELDS = graphql(`
     createdAt
     channelCount
     visibility
+    approvals {
+      publicListing
+      personalUse
+    }
     flags {
       zeroWidth
       private

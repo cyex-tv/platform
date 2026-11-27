@@ -31,6 +31,7 @@
   const flags: { key: Flag; label: string; icon: IconName; hint: string }[] = [
     { key: 'zeroWidth', label: 'Zero-width', icon: 'layers', hint: 'Drawn over the emote before it' },
     { key: 'wide', label: 'Wide', icon: 'wide', hint: 'About twice as wide as tall or more' },
+    { key: 'personal', label: 'Approved for personal use', icon: 'user', hint: 'Moderators approved it as a personal emote' },
   ];
 
   type Section = 'search' | 'match' | 'type' | 'flags' | 'tags';

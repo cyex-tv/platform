@@ -1,8 +1,22 @@
 // Mock API: signed in/review. See ../mock-api.mjs.
 import { ME_ID, ME_SUMMARY, OWNERS } from '../config.mjs';
 import { GLOBAL } from '../set-data.mjs';
-import { CLOSED_REPORTS, FILE_EMOTES, NSFW_REFUSAL, PENDING, REPORTS, REQUEUED, RESOLVED, REVIEW_REASONS, batchIds, duplicatesOf, logEmote, reviewQueueAnswer, setReviewReasons } from '../review.mjs';
+import { CLOSED_REPORTS, FILE_EMOTES, NSFW_REFUSAL, PENDING, REPORTS, REQUEUED, RESOLVED, REVIEW_REASONS, batchIds, decideListing, duplicatesOf, logEmote, rejectOutright, reviewApprovals, reviewQueueAnswer, setReviewReasons } from '../review.mjs';
+import { NOTES } from '../account.mjs';
+import { noteOff } from '../site.mjs';
 import { anyEmote, err } from '../sets.mjs';
+
+// approveEmote and reviewEmotes decide the listing only (ADR 0038): no visibility or PUBLIC approves it,
+// UNLISTED denies it, PRIVATE makes the emote private and approves it. Personal use waits in its own queue.
+function settle(e, visibility) {
+  if (visibility === 'PRIVATE') Object.assign(e, { visibility: 'PRIVATE', flags: { ...e.flags, private: true } });
+  decideListing(e, visibility === 'UNLISTED' ? 'DENIED' : 'APPROVED');
+}
+// The owner's notification, when the owner is the mock account (the others have no inbox here).
+function tell(e, kind, payload) {
+  if (e.owner?.id !== ME_ID || noteOff(kind)) return;
+  NOTES.unshift({ id: `01JD8XREV${String(Date.now()).padStart(17, '0')}`, kind, payload: JSON.stringify(payload), createdAt: new Date().toISOString(), read: false });
+}
 
 // The signed-in operations of this area, by operation name: null when the operation is not here.
 export function signedInReview(op, body, v, ADMIN) {
@@ -16,11 +30,9 @@ export function signedInReview(op, body, v, ADMIN) {
     case 'Reject': {
       const at = PENDING.findIndex((x) => x.id === v.id);
       if (at < 0) return err('Only pending emotes can be approved or rejected.', 'not_pending');
-      const e = PENDING.splice(at, 1)[0];
-      e.state = op === 'Approve' ? 'APPROVED' : 'REJECTED';
-      if (op === 'Approve' && v.visibility) Object.assign(e, { visibility: v.visibility, flags: { ...e.flags, private: v.visibility === 'PRIVATE' } });
-      e.reviewedAt = new Date().toISOString();
-      RESOLVED.unshift(e);
+      const e = PENDING[at];
+      if (op === 'Approve') settle(e, v.visibility);
+      else rejectOutright(e);
       logEmote(e.id, op === 'Approve' ? 'emote.approved' : 'emote.rejected', { state: e.state.toLowerCase(), reason: v.reason ?? null, visibility: e.visibility.toLowerCase() });
       return { data: { [op === 'Approve' ? 'approveEmote' : 'rejectEmote']: { id: e.id, state: e.state, visibility: e.visibility } } };
     }
@@ -40,15 +52,20 @@ export function signedInReview(op, body, v, ADMIN) {
             : { id, code: 'not_found', message: 'Not found.' });
           continue;
         }
-        const e = PENDING.splice(at, 1)[0];
-        e.state = v.verdict === 'APPROVE' ? 'APPROVED' : 'REJECTED';
-        if (v.verdict === 'APPROVE' && v.visibility) Object.assign(e, { visibility: v.visibility, flags: { ...e.flags, private: v.visibility === 'PRIVATE' } });
-        e.reviewedAt = new Date().toISOString();
-        RESOLVED.unshift(e);
+        const e = PENDING[at];
+        if (v.verdict === 'APPROVE') settle(e, v.visibility);
+        else rejectOutright(e);
         logEmote(e.id, v.verdict === 'APPROVE' ? 'emote.approved' : 'emote.rejected', { state: e.state.toLowerCase(), reason: reason || null, visibility: e.visibility.toLowerCase() });
         done.push(id);
       }
       return { data: { reviewEmotes: { done, failed } } };
+    }
+    case 'ReviewApprovals':
+    case 'EmoteReviewApprovals': {
+      // The mock admin holds emotes.review and emotes.review_personal; anyone else holds neither.
+      const out = reviewApprovals(v, { listing: !!ADMIN, personal: !!ADMIN }, tell);
+      if (out.error) return err(...out.error);
+      return { data: { reviewApprovals: out } };
     }
     case 'RequeueEmotes': {
       if (!ADMIN) return err('This needs emotes.review.', 'forbidden');
@@ -78,7 +95,11 @@ export function signedInReview(op, body, v, ADMIN) {
       if (v.input.zeroWidth !== undefined && v.input.zeroWidth !== null) e.flags.zeroWidth = v.input.zeroWidth;
       // Saving clears an old NSFW mark (the API's review of it).
       e.flags.nsfw = false;
-      if (v.input.visibility) e.visibility = v.input.visibility;
+      // A visibility change moves the listing approval with it (ADR 0038): PUBLIC approves, UNLISTED denies.
+      if (v.input.visibility) {
+        e.visibility = v.input.visibility;
+        if (e.visibility !== 'PRIVATE') decideListing(e, e.visibility === 'PUBLIC' ? 'APPROVED' : 'DENIED');
+      }
       e.flags.private = e.visibility === 'PRIVATE';
       const after = { visibility: e.visibility.toLowerCase(), nsfw: e.flags.nsfw, zero_width: e.flags.zeroWidth };
       if (JSON.stringify(before) !== JSON.stringify(after)) logEmote(e.id, 'emote.flags_changed', { ...after, via: 'emotes.flags' });

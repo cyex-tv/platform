@@ -345,7 +345,7 @@
         {/snippet}
       </PageHead>
     {/snippet}
-    <SetEmotes setId={set.id} capacity={set.capacity} used={set.slotsUsed} {rev} onchange={load} />
+    <SetEmotes setId={set.id} capacity={set.capacity} used={set.slotsUsed} {rev} onchange={load} personal={set.kind === 'PERSONAL'} />
     <AddEmotes setId={set.id} personal={set.kind === 'PERSONAL'} {taken} {names} {full} onadded={added} />
   </MeFrame>
 {/if}

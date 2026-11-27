@@ -98,7 +98,7 @@ describe('emote page layout', () => {
     expect(right.querySelector('h1')?.textContent).toBe('fernYawn');
     expect(right.querySelector('a.creator')?.getAttribute('href')).toBe('/users/A1');
     const facts = [...right.querySelectorAll('.facts dt')].map((d) => d.textContent);
-    expect(facts).toEqual(['Channels', 'Uploaded', 'Review']);
+    expect(facts).toEqual(['Channels', 'Uploaded', 'Public listing', 'Personal use']);
     expect(right.querySelector('[role="tablist"]')).toBeTruthy();
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toMatch(/All emotes\s*\/\s*fernYawn/);
   });

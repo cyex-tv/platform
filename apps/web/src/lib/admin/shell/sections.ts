@@ -30,7 +30,7 @@ export const SECTIONS: SectionGroup[] = [
     label: 'Tickets',
     icon: 'ticket',
     items: [
-      { href: '/admin/review', label: 'Review', icon: 'inbox', text: 'Uploads waiting for a verdict, oldest first.', any: ['emotes.review'], count: 'review', urgent: true },
+      { href: '/admin/review', label: 'Review', icon: 'inbox', text: 'Uploads waiting for a verdict, oldest first.', any: ['emotes.review', 'emotes.review_personal'], count: 'review', urgent: true },
       { href: '/admin/reports', label: 'Reports', icon: 'flag', text: 'Open reports, grouped by emote: dismiss or take down.', any: TICKETS, count: 'reports', urgent: true },
     ],
   },

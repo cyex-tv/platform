@@ -24,7 +24,7 @@ const activeAnnouncement = () => {
   const live = ANNOUNCEMENTS.filter((a) => annLive(a)).sort((a, b) => Date.parse(b.startsAt ?? b.createdAt) - Date.parse(a.startsAt ?? a.createdAt));
   return live[0] ? annOut(live[0]) : null;
 };
-const NOTE_KINDS = [['emote.approved', false], ['emote.rejected', false], ['emote.failed', false], ['emote.taken_down', true], ['emote.transfer_requested', true], ['emote.transferred', false],
+const NOTE_KINDS = [['emote.approved', false], ['emote.rejected', false], ['emote.approvals_changed', false], ['emote.failed', false], ['emote.taken_down', true], ['emote.visibility_changed', true], ['emote.transfer_requested', true], ['emote.transferred', false],
   ['emote.transfer_declined', false], ['emote.transfer_cancelled', false], ['editor.added', false], ['editor.changed', false], ['editor.removed', false],
   ['cosmetic.granted', false], ['cosmetic.revoked', false], ['webhook.disabled', true]];
 const NOTE_PREFS = { off: new Set(), quiet: new Set() };
@@ -85,6 +85,9 @@ export const META = {
   }, {
     id: 'file_scale_non_emote', what: 'The `scale` of a badge or paint picture file. It is 1, 2 or 4 for the chat sizes but 7, 14 and 28 for the larger badge sizes (128, 256 and 512 px), which is no scale of anything. Emote files keep `scale` (1 to 4) and are not affected.',
     since: '2026-11-26', sunset: '2027-11-26', replacement: "Read the file's `width` (and `height`): it is the contract for every file. `scale` stays in v1 and is only dropped for badge and paint files in v2.",
+  }, {
+    id: 'emote_transfer_requests', what: 'Emote transfer requests: the `emoteTransferRequests` query (always empty) and the `acceptEmoteTransfer`, `declineEmoteTransfer` and `cancelEmoteTransfer` mutations (always `410 transfer_requests_retired`). Ownership can’t be requested any more.',
+    since: '2026-11-27', sunset: '2027-06-01', replacement: 'None: staff with `emotes.transfer` move an emote directly with `transferEmote` (ADR 0038). Past transfers stay in the audit log.',
   }],
 };
 const metaAnswer = () => ({ apiVersion: META.api_version, build: META.build, limits: { rest: META.limits.rest, graphqlField: META.limits.graphql_field }, deprecations: META.deprecations });

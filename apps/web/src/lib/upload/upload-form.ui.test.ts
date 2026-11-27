@@ -61,6 +61,14 @@ describe('upload form fields', () => {
     expect(document.body.textContent).not.toMatch(/NSFW|Unlisted|Visibility/);
     expect(screen.queryByRole('radiogroup')).toBeNull();
   });
+
+  it('says every upload is unlisted and goes to review, and offers no listing choice', () => {
+    render(UploadDropHarness);
+    const note = screen.getByTestId('review-note').textContent ?? '';
+    expect(note).toMatch(/unlisted and goes to review/);
+    expect(note).toMatch(/public listing and its personal use separately/);
+    expect(screen.getAllByRole('checkbox').map((c) => c.getAttribute('data-testid') ?? 'other')).toEqual(['flag-overlaying', 'flag-private', 'accept-rules']);
+  });
 });
 
 describe('upload form drops', () => {

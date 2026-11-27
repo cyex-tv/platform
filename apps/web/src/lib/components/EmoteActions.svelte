@@ -1,7 +1,7 @@
 <script lang="ts">
   // An emote's actions, kept together: Add to set (the sets on your own channels first, marked "On
-  // your channel"), Edit for the owner and for staff who may change any emote (`editHref`), and a
-  // heart (your favourites, signed in), and a More menu with Copy link, Copy name, Hide for me and
+  // your channel"), Edit for the owner and for staff (`onedit` opens the edit pop-up; a personal
+  // set is disabled, with the reason, until the emote is approved for personal use), and a More menu with Copy link, Copy name, Hide for me and
   // Hide everything by the creator (signed in; Show again once hidden), Download and Report (the
   // last two open in the same panel).
   // Signed out, "Add to set" becomes "Sign in to add". `variant="bar"` is the phone's fixed bar
@@ -24,6 +24,7 @@
   import { session } from '$lib/tool/session.svelte';
   import { notify } from '$lib/tool/notices.svelte';
   import { listError, personal } from '$lib/personal/lists.svelte';
+  import { personalBlock, type Approvals } from './emote/approvals';
 
   type Props = {
     emoteId: string;
@@ -31,8 +32,10 @@
     viewer?: Viewer;
     variant?: 'head' | 'bar';
     picture?: Pick<PageEmote, 'host' | 'animated' | 'files'>;
-    /** Where Edit goes, for people allowed to change the emote; no Edit button without it. */
-    editHref?: string | null;
+    /** Opens the edit pop-up, for people allowed to change the emote; no Edit button without it. */
+    onedit?: (() => void) | null;
+    /** The emote's approvals: a personal set takes it only once personal use is approved. */
+    approvals?: Approvals | null;
     /** Whether the emote can be added to sets (approved and public); otherwise only Edit and More. */
     addable?: boolean;
     /** Whether Report is offered (approved emotes). */
@@ -42,7 +45,7 @@
     /** The emote page's path, when the actions sit elsewhere (the profile's emote panel): Copy link copies it. */
     path?: string;
   };
-  let { emoteId, name, viewer: given, variant = 'head', picture, editHref = null, addable = true, reportable = true, owner = null, path }: Props = $props();
+  let { emoteId, name, viewer: given, variant = 'head', picture, onedit = null, approvals = null, addable = true, reportable = true, owner = null, path }: Props = $props();
 
   // svelte-ignore state_referenced_locally
   const viewer = given ?? new Viewer(emoteId);
@@ -68,26 +71,10 @@
   );
   $effect(() => personal.ensure());
   const signedIn = $derived(!!session.me);
-  const fav = $derived(personal.favourites.has(emoteId));
   const hidden = $derived(personal.hiddenEmotes.has(emoteId));
   const creatorHidden = $derived(!!owner && personal.hiddenCreators.has(owner.id));
   const creatorName = $derived(clean(owner?.displayName ?? ''));
   const canHideCreator = $derived(!!owner && owner.id !== session.me?.id);
-  let favBusy = $state(false);
-
-  async function toggleFavourite() {
-    if (favBusy) return;
-    favBusy = true;
-    try {
-      if (fav) await personal.unfavourite(emoteId);
-      else await personal.favourite(emoteId);
-    } catch (e) {
-      notify(listError(e), true);
-    } finally {
-      favBusy = false;
-    }
-  }
-
   async function run(change: () => Promise<unknown>, done: string) {
     moreOpen = false;
     try {
@@ -97,7 +84,6 @@
       notify(listError(e), true);
     }
   }
-  const favSaid = $derived(fav ? 'In your favourites' : '');
   const moreWidth = $derived(mode === 'report' ? '340px' : mode === 'download' ? '300px' : signedIn && canHideCreator ? '280px' : '220px');
 </script>
 
@@ -125,11 +111,12 @@
               {#each viewer.own as s (s.id)}
                 {@const inIt = viewer.has(s)}
                 {@const live = viewer.live.has(s.id)}
+                {@const block = s.kind === 'PERSONAL' && !inIt ? personalBlock(approvals) : null}
                 <li>
-                  <button type="button" class="set" aria-disabled={inIt || viewer.adding !== null} onclick={() => !inIt && viewer.add(s.id)}>
+                  <button type="button" class="set" aria-disabled={inIt || !!block || viewer.adding !== null} onclick={() => !inIt && !block && viewer.add(s.id)}>
                     <span class="set-text">
                       <span class="set-name" title={clean(s.name)}><Name value={s.name} /></span>
-                      {#if live}<span class="live fine"><Icon name="tv" size={12} />On your channel</span>{/if}
+                      {#if block}<span class="live fine">{block}</span>{:else if live}<span class="live fine"><Icon name="tv" size={12} />On your channel</span>{/if}
                     </span>
                     {#if viewer.adding === s.id}
                       <span class="state fine">Adding…</span>
@@ -150,17 +137,8 @@
     {/if}
   {/if}
 
-  {#if editHref}
-    <a class="btn btn-s edit" href={editHref} aria-label={variant === 'bar' ? 'Edit' : undefined}><Icon name="pencil" /><span class="word">Edit</span></a>
-  {/if}
-
-  {#if signedIn}
-    <button class="btn btn-s heart" class:on={fav} type="button" aria-pressed={fav} aria-busy={favBusy}
-      aria-label={fav ? `Remove ${iso(name)} from favourites` : `Favourite ${iso(name)}`} title={fav ? 'Remove from favourites' : 'Favourite'}
-      onclick={toggleFavourite}>
-      <Icon name="heart" />
-    </button>
-    <span class="sr-only" role="status">{favSaid}</span>
+  {#if onedit}
+    <button class="btn btn-s edit" type="button" aria-label={variant === 'bar' ? 'Edit emote' : undefined} onclick={onedit}><Icon name="pencil" /><span class="word">Edit emote</span></button>
   {/if}
 
   <span class="sr-only" role="status">{said}</span>
@@ -227,18 +205,13 @@
   .btn :global(.icon) { flex: none; }
   .btn { gap: 8px; }
   .more { gap: 6px; padding-right: 10px; }
-  .heart { width: 40px; padding: 0; justify-content: center; }
-  .heart :global(.icon) { color: var(--muted); transition: color var(--dur-color), transform var(--dur-press) ease-out; }
-  .heart.on :global(.icon) { color: var(--accent-text); fill: currentColor; }
-  .heart:active :global(.icon) { transform: scale(.88); }
-  .heart[aria-busy='true'] { opacity: .7; }
   .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .more :global(.icon) { color: var(--muted); }
 
   .bar { flex-wrap: nowrap; justify-content: stretch; }
   .bar > :global(.pop-root:first-child), .bar > .add { flex: 1; min-width: 0; }
   .bar .add { width: 100%; height: 44px; }
-  .bar .edit, .bar .more, .bar .heart { width: 44px; height: 44px; padding: 0; justify-content: center; }
+  .bar .edit, .bar .more { width: 44px; height: 44px; padding: 0; justify-content: center; }
   .bar .word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .bar .more :global(.icon) { color: inherit; }
 

@@ -30,8 +30,10 @@
     rev?: number;
     /** The set changed here; `change` says how, so the page can follow without reading it all again. */
     onchange: (change?: MemberChange) => unknown;
+    /** A personal set: members not approved for personal use are flagged (ADR 0038; they stay). */
+    personal?: boolean;
   };
-  let { setId, capacity, used, rev = 0, onchange }: Props = $props();
+  let { setId, capacity, used, rev = 0, onchange, personal = false }: Props = $props();
   let gridEl = $state<HTMLElement>();
   let heading = $state<HTMLElement>();
   /** Emotes with a remove on its way: one request per row, however often it is pressed. */
@@ -229,8 +231,13 @@
         eager={12}
         href={(e) => (byId.get(e.id)?.emote.owner?.id === session.me?.id ? `/me/emotes/${e.id}` : `/emotes/${e.id}`)}
         note={(e) => {
-          const st = byId.get(e.id)?.emote.state;
-          return st && st !== 'APPROVED' ? STATE_LABEL[st].toLowerCase() : undefined;
+          const em = byId.get(e.id)?.emote;
+          const st = em?.state;
+          if (st && st !== 'APPROVED') return STATE_LABEL[st].toLowerCase();
+          // Added before personal sets took approved-for-personal-use emotes only: kept, but flagged.
+          const pu = em?.approvals?.personalUse;
+          if (personal && pu && pu !== 'APPROVED') return pu === 'DENIED' ? 'not for personal use' : 'personal use pending';
+          return undefined;
         }}
       >
         {#snippet below(e)}
