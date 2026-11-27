@@ -33,6 +33,7 @@ fn media(l: &Media, min_side: Option<u32>, max_aspect: Option<u32>, served: u32)
         max_duration_ms: (l.max_duration_ms != u64::MAX).then(|| wide(l.max_duration_ms)),
         min_side: min_side.map(int),
         max_aspect: max_aspect.map(int),
+        max_tall: l.max_tall.map(int),
         max_fps: max_fps.map(int),
         max_served_side: int(served),
     }
@@ -133,6 +134,10 @@ mod tests {
         assert_eq!(l.emote.max_total_pixels, 1_000_000_000);
         assert_eq!(l.emote.max_duration_ms, None);
         assert_eq!((l.emote.max_aspect, l.emote.max_fps), (Some(4), Some(50)));
+        assert_eq!(
+            (l.emote.max_tall, l.badge.max_tall, l.paint.max_tall),
+            (Some(3), None, None)
+        );
         assert_eq!((l.badge.max_aspect, l.badge.max_fps), (Some(1), None));
         assert_eq!(l.paint.max_fps, None);
         assert_eq!(l.emote.max_served_side, 128);

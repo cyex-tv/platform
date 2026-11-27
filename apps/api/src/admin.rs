@@ -996,7 +996,7 @@ pub fn parse_limits(input: &[RoleLimitInput]) -> ApiResult<RoleOverrides> {
             return Err(bad(
                 "bad_limit",
                 format!(
-                    "{key} can't be set: emote limits are fixed and the same for everyone (at most 1000×1000 px, 8 MB, 1000 frames, 50 fps, 4:1)."
+                    "{key} can't be set: emote limits are fixed and the same for everyone (at most 1000×1000 px, 8 MB, 1000 frames, 50 fps, 4:1 wide to 1:3 tall)."
                 ),
             ));
         }

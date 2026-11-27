@@ -3362,7 +3362,7 @@
             "code": "bad_dimensions",
             "group": "Cosmetics",
             "meaning": "The picture's size does not fit.",
-            "when": "Badge or paint pictures outside the allowed size or aspect, and an emote wider than 4:1 (422)."
+            "when": "Badge or paint pictures outside the allowed size or aspect, and an emote wider than 4:1 or taller than 1:3 (422)."
           },
           {
             "code": "image_not_ready",
@@ -3824,7 +3824,7 @@
               "null"
             ],
             "format": "int32",
-            "description": "How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for\nno rule at upload. Emotes have no rule for a tall picture."
+            "description": "How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for\nno rule at upload."
           },
           "max_bytes": {
             "type": "integer",
@@ -3861,6 +3861,14 @@
             "type": "integer",
             "format": "int32",
             "description": "The longest side of an upload."
+          },
+          "max_tall": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "How many times as tall as wide a picture may be (emotes 3, so 1:3); null for no rule at\nupload (badges and paints have their own shape rules)."
           },
           "max_total_pixels": {
             "type": "integer",

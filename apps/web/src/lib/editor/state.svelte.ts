@@ -3,16 +3,17 @@
 // dialog does, so closing the dialog and opening it again finds the work where it was.
 import { History } from './history';
 import { allPass, checkRules, editorLimits, EDITOR_LIMITS, type EditorLimits, type FixId } from './rules';
-import { canvasSize, cropNoWider, createDoc, dropEveryFrames, fitTo, limitFpsFrames, outSize, scaleBy, type Doc } from './model';
+import { canvasSize, cropNoTaller, cropNoWider, createDoc, dropEveryFrames, exportDoc, exportFrames, fitTo, frozen, limitFpsFrames, outSize, scaleBy, speedOf, type Doc } from './model';
 import { shortest, total } from './timing';
 import { Cancelled, canEncodeWebp, encodeDoc, importFile, type ImportProgress } from './media';
 import { budgetFor } from './sniff';
 
-export type Tool = 'select' | 'crop' | 'pen' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text' | 'pan';
+export type Tool = 'select' | 'crop' | 'size' | 'pen' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text' | 'pan';
 
 export const TOOLS: { id: Tool; label: string; key: string; icon: string }[] = [
   { id: 'select', label: 'Select and move', key: 'V', icon: 'pointer' },
   { id: 'crop', label: 'Crop', key: 'C', icon: 'crop' },
+  { id: 'size', label: 'Resize and stretch', key: 'S', icon: 'stretch' },
   { id: 'pen', label: 'Pen', key: 'P', icon: 'pen' },
   { id: 'line', label: 'Line', key: 'L', icon: 'line' },
   { id: 'arrow', label: 'Arrow', key: 'A', icon: 'arrow' },
@@ -29,7 +30,8 @@ export type Brush = { color: string; fill: string; width: number; filled: boolea
 /** Above this many pixels in all frames the size is checked on request, not after every edit. */
 export const AUTO_ENCODE_PIXELS = 30_000_000;
 
-type Encoded = { doc: Doc; format: 'webp' | 'gif'; quality: number; blob: Blob };
+/** `still` is the frame a frozen animation (speed 0) uploads, else -1. */
+type Encoded = { doc: Doc; still: number; format: 'webp' | 'gif'; quality: number; blob: Blob };
 
 export class EditorState {
   doc = $state.raw<Doc | null>(null);
@@ -52,13 +54,14 @@ export class EditorState {
   picked = $state.raw<ReadonlySet<number>>(new Set());
   shape = $state<number | null>(null);
   ratio = $state('free');
-  keepAspect = $state(true);
+  /** Width and height change together. Off by default: an emote can be stretched to any shape. */
+  keepAspect = $state(false);
   playing = $state(false);
   onion = $state(false);
   brush = $state<Brush>({ color: '#ff4d4d', fill: '#ffffff', width: 6, filled: false, outlined: true, size: 48, scope: 'all' });
 
   format = $state<'webp' | 'gif'>('webp');
-  quality = $state(0.9);
+  quality = $state(1);
   webp = $state(true);
   encoded = $state.raw<Encoded | null>(null);
   encoding = $state.raw<{ done: number; total: number } | null>(null);
@@ -244,8 +247,8 @@ export class EditorState {
     const d = this.doc;
     if (!d) return null;
     const o = outSize(d);
-    const fresh = this.encoded && this.encoded.doc === d && this.encoded.format === this.format && this.encoded.quality === this.quality ? this.encoded : null;
-    return { width: o.w, height: o.h, frames: d.frames.length, shortest: shortest(d.frames), duration: total(d.frames), size: fresh ? fresh.blob.size : null };
+    const frames = exportFrames(d, this.current, this.limits.minDelayMs);
+    return { width: o.w, height: o.h, frames: frames.length, shortest: shortest(frames), duration: total(frames), size: this.result ? this.result.size : null };
   }
 
   get rules() {
@@ -260,7 +263,17 @@ export class EditorState {
   /** The encoded file for the current document, when it is encoded. */
   get result(): Blob | null {
     const e = this.encoded;
-    return e && e.doc === this.doc && e.format === this.format && e.quality === this.quality ? e.blob : null;
+    return e && e.doc === this.doc && e.still === this.still && e.format === this.format && e.quality === this.quality ? e.blob : null;
+  }
+
+  /** The frame a frozen animation uploads as its still; -1 when it isn't frozen. */
+  get still(): number {
+    return this.doc && frozen(this.doc) ? this.current : -1;
+  }
+
+  /** The playback speed, 1 as timed; 0 frozen. */
+  get speed(): number {
+    return this.doc ? speedOf(this.doc) : 1;
   }
 
   get pixels() {
@@ -284,14 +297,16 @@ export class EditorState {
     this.#encoder = ctl;
     const format = this.format;
     const quality = this.quality;
+    const still = this.still;
+    const out = exportDoc(d, this.current, this.limits.minDelayMs);
     this.encodeError = null;
-    this.encoding = { done: 0, total: d.frames.length };
+    this.encoding = { done: 0, total: out.frames.length };
     try {
-      const blob = await encodeDoc(d, this.sources, { format, quality }, (done, n) => {
+      const blob = await encodeDoc(out, this.sources, { format, quality }, (done, n) => {
         if (this.#encoder === ctl) this.encoding = { done, total: n };
       }, ctl.signal);
       if (this.#encoder !== ctl) return null;
-      this.encoded = { doc: d, format, quality, blob };
+      this.encoded = { doc: d, still, format, quality, blob };
       return blob;
     } catch (e) {
       if (e instanceof Cancelled || this.#encoder !== ctl) return null;
@@ -336,6 +351,13 @@ export class EditorState {
         if (o.w / o.h > l.maxAspect) return this.commit({ ...next, sx: (o.h * l.maxAspect) / next.crop.w }, `Crop to ${l.maxAspect}:1`);
         return this.commit(next, `Crop to ${l.maxAspect}:1`);
       }
+      case 'tall': {
+        const next = cropNoTaller(d, l.maxTall);
+        // A stretched output can be too tall with a crop that isn't: then the output gets shorter.
+        const o = outSize(next);
+        if (o.h / o.w > l.maxTall) return this.commit({ ...next, sy: (o.w * l.maxTall) / next.crop.h }, `Crop to 1:${l.maxTall}`);
+        return this.commit(next, `Crop to 1:${l.maxTall}`);
+      }
       case 'shrink':
         return this.commit(scaleBy(d, 0.75), 'Scale to 75%');
     }
@@ -349,25 +371,46 @@ export class EditorState {
 
   #timer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Whether playback can run: an animation that isn't frozen. */
+  get canPlay() {
+    const d = this.doc;
+    return !!d && d.frames.length > 1 && !frozen(d);
+  }
+
   play() {
-    const n = this.doc?.frames.length ?? 0;
-    if (n < 2) return;
+    if (!this.canPlay) return;
     this.playing = true;
     this.#tick();
+  }
+
+  /** The upload's frames as (frame index, delay), cached per document: playback shows them. */
+  #plan: { doc: Doc; min: number; steps: { i: number; delay: number }[] } | null = null;
+  #steps(d: Doc) {
+    const min = this.limits.minDelayMs;
+    if (this.#plan?.doc !== d || this.#plan.min !== min) {
+      const index = new Map(d.frames.map((f, i) => [f.id, i]));
+      this.#plan = { doc: d, min, steps: exportFrames(d, this.current, min).map((f) => ({ i: index.get(f.id) ?? 0, delay: f.delay })) };
+    }
+    return this.#plan.steps;
   }
 
   #tick() {
     clearTimeout(this.#timer);
     const d = this.doc;
-    if (!this.playing || !d || d.frames.length < 2) {
+    if (!this.playing || !d || !this.canPlay) {
       this.playing = false;
       return;
     }
-    const delay = d.frames[this.current]?.delay || 100;
+    // At the playback speed: frames merged at high speeds are skipped, as in the upload.
+    const steps = this.#steps(d);
+    let k = 0;
+    for (let j = 0; j < steps.length && steps[j].i <= this.current; j++) k = j;
+    const delay = steps[k]?.delay || 100;
     this.#timer = setTimeout(() => {
-      const n = this.doc?.frames.length ?? 0;
-      if (!n) return;
-      this.current = (this.current + 1) % n;
+      const now = this.doc;
+      if (!now || now !== d) return this.#tick();
+      const next = steps[(k + 1) % steps.length];
+      this.current = next ? next.i : 0;
       this.#tick();
     }, delay);
   }

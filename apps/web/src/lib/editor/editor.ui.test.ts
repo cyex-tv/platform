@@ -73,7 +73,9 @@ describe('the upload dialog’s modes', () => {
     await fireEvent.input(name, { target: { value: 'catJAM' } });
     await fireEvent.click(mode('Editor'));
     expect(await screen.findByText('Drop a picture or a video here')).toBeTruthy();
-    expect(document.querySelector('dialog')!.classList.contains('wide')).toBe(true);
+    // Same dialog, same size: only the mode changes, nothing that resizes it.
+    expect(document.querySelector('dialog')!.dataset.mode).toBe('editor');
+    expect(document.querySelector('dialog')!.classList.contains('wide')).toBe(false);
     await fireEvent.click(mode('Quick upload'));
     expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('catJAM');
     // The editor stays mounted (hidden), so its work is kept.
@@ -156,5 +158,70 @@ describe('the upload dialog’s modes', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
     expect(document.querySelector('.tl .pos')?.textContent?.trim()).toBe('1 / 4');
     expect(imports.n).toBe(1);
+  });
+
+  it('stretches freely to any shape and blocks Continue outside 1:3 to 4:1, saying why', async () => {
+    const d = await dialog();
+    await fireEvent.click(mode('Editor'));
+    await screen.findByText('Drop a picture or a video here');
+    await drop(d, [mp4()]);
+    await waitFor(() => expect(document.querySelector('.tl .pos')?.textContent?.trim()).toBe('1 / 30'));
+    const rule = (id: string) => document.querySelector(`.rule[data-rule="${id}"]`)!;
+    const cont = () => screen.getByTestId('editor-continue') as HTMLButtonElement;
+    // Proportions are free by default: the height changes alone.
+    expect(screen.getByRole('button', { name: 'Lock proportions' }).getAttribute('aria-pressed')).toBe('false');
+    const height = screen.getByRole('textbox', { name: 'Height in px' });
+    await fireEvent.input(height, { target: { value: '300' } });
+    await fireEvent.blur(height);
+    expect((screen.getByRole('textbox', { name: 'Width in px' }) as HTMLInputElement).value).toBe('96');
+    expect(rule('aspect').classList.contains('fail')).toBe(true);
+    expect(rule('aspect').textContent).toContain('too tall: at most 1:3');
+    expect(screen.getByTestId('shape-line').textContent).toContain('can’t upload');
+    expect(cont().disabled).toBe(true);
+    expect(document.querySelector('.end .state')?.textContent).toContain('Can’t continue');
+    // 96 × 288 is exactly 1:3: it passes.
+    await fireEvent.input(height, { target: { value: '288' } });
+    await fireEvent.blur(height);
+    expect(rule('aspect').classList.contains('pass')).toBe(true);
+    await waitFor(() => expect(cont().disabled).toBe(false), { timeout: 3000 });
+    // Too wide, then the one-click fix.
+    const width = screen.getByRole('textbox', { name: 'Width in px' });
+    await fireEvent.input(width, { target: { value: '1000' } });
+    await fireEvent.blur(width);
+    await fireEvent.input(height, { target: { value: '100' } });
+    await fireEvent.blur(height);
+    expect(rule('aspect').textContent).toContain('too wide: at most 4:1');
+    await fireEvent.click(within(rule('aspect') as HTMLElement).getByRole('button', { name: 'Crop to 4:1' }));
+    expect(rule('aspect').classList.contains('pass')).toBe(true);
+  });
+
+  it('has a speed control from 0% to 2000%, 100% by default; 0% uploads a still', async () => {
+    const d = await dialog();
+    await fireEvent.click(mode('Editor'));
+    await screen.findByText('Drop a picture or a video here');
+    await drop(d, [mp4()]);
+    await waitFor(() => expect(document.querySelector('.tl .pos')?.textContent?.trim()).toBe('1 / 30'));
+    const pct = screen.getByRole('textbox', { name: 'Speed in percent' }) as HTMLInputElement;
+    expect(pct.value).toBe('100');
+    expect((screen.getByRole('slider', { name: 'Speed' }) as HTMLInputElement).value).toBe('500');
+    expect(document.querySelector('.tl .len')?.textContent?.trim()).toBe('1 s');
+    // 200%: half a second a loop, the same 30 frames (16 or 17 ms would be over 50 fps, so they merge).
+    await fireEvent.input(pct, { target: { value: '200' } });
+    await fireEvent.keyDown(pct, { key: 'Enter' });
+    expect(document.querySelector('.tl .len')?.textContent?.trim()).toBe('0,5 s');
+    expect(document.querySelector('.spdnote')?.textContent).toMatch(/of 30 frames upload/);
+    expect(document.querySelector('.rule[data-rule="fps"]')?.classList.contains('pass')).toBe(true);
+    // 0%: frozen, a still of the frame on show; play is off.
+    await fireEvent.input(pct, { target: { value: '0' } });
+    await fireEvent.keyDown(pct, { key: 'Enter' });
+    expect(document.querySelector('.spdnote')?.textContent).toContain('Uploads as a still image of frame 1');
+    expect(document.querySelector('.rule[data-rule="frames"] .val')?.textContent?.trim()).toBe('1');
+    expect((screen.getByRole('button', { name: 'Play' }) as HTMLButtonElement).disabled).toBe(true);
+    // Over 2000% is held at 2000%; the 100% button goes back.
+    await fireEvent.input(pct, { target: { value: '5000' } });
+    await fireEvent.keyDown(pct, { key: 'Enter' });
+    expect(pct.value).toBe('2000');
+    await fireEvent.click(screen.getByRole('button', { name: 'Speed back to 100%' }));
+    expect(pct.value).toBe('100');
   });
 });

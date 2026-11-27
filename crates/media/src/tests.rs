@@ -928,7 +928,7 @@ fn the_4_to_1_rule_is_the_uploads_and_an_original_is_made_again_at_any_shape() {
     assert!(encode::transcode(&wide, &Limits::emote()).is_err());
     // ... and an original already stored is transcoded, fitted in the 4:1 box as before.
     let l = Limits::emote_original();
-    assert_eq!(l.max_aspect, None);
+    assert_eq!((l.max_aspect, l.max_tall), (None, None));
     let made = encode::transcode(&wide, &l).expect("a 6:1 original makes its files again");
     assert!(!made.webp.is_empty());
     assert_eq!(encode::size_for(600, 100, 4), (512, 85));
@@ -936,6 +936,7 @@ fn the_4_to_1_rule_is_the_uploads_and_an_original_is_made_again_at_any_shape() {
     assert_eq!(
         Limits {
             max_aspect: Some(4),
+            max_tall: Some(3),
             ..l
         },
         Limits::emote()
@@ -969,8 +970,8 @@ fn an_emote_file_is_at_most_8_mb() {
 fn an_emote_side_is_at_most_1000_px() {
     let l = Limits::emote();
     assert!(probe(&png(1000, 1000), &l).is_ok());
-    // Tall pictures have no ratio rule: 1 x 1000 is fine.
-    assert!(probe(&png(1, 1000), &l).is_ok());
+    // A 1:3 picture at the full side is fine.
+    assert!(probe(&png(334, 1000), &l).is_ok());
     for (w, h) in [(1001, 1000), (1000, 1001), (1001, 1001)] {
         let Err(MediaError::TooLarge(message)) = probe(&png(w, h), &l) else {
             panic!("{w}x{h} is refused");
@@ -980,7 +981,7 @@ fn an_emote_side_is_at_most_1000_px() {
 }
 
 #[test]
-fn an_emote_is_at_most_4_to_1_wide_and_tall_pictures_have_no_ratio_rule() {
+fn an_emote_is_at_most_4_to_1_wide() {
     let l = Limits::emote();
     assert!(probe(&png(400, 100), &l).is_ok());
     assert!(probe(&png(1000, 250), &l).is_ok());
@@ -990,10 +991,33 @@ fn an_emote_is_at_most_4_to_1_wide_and_tall_pictures_have_no_ratio_rule() {
         };
         assert!(message.contains("4:1"), "{message}");
     }
-    // Tall: 10 x 1000 is 1:100 and fine.
-    assert!(probe(&png(10, 1000), &l).is_ok());
     // Badges and paints have their own shape rules (the API's), none here.
     assert!(probe(&png(500, 100), &Limits::badge()).is_ok());
+}
+
+#[test]
+fn an_emote_is_at_most_1_to_3_tall() {
+    assert_eq!(EmoteRules::MAX_TALL, 3);
+    let l = Limits::emote();
+    assert_eq!(l.max_tall, Some(3));
+    // Exactly 1:3 passes.
+    assert!(probe(&png(100, 300), &l).is_ok());
+    assert!(probe(&png(333, 999), &l).is_ok());
+    for (w, h) in [(100, 301), (10, 1000), (1, 4)] {
+        let Err(MediaError::BadShape(message)) = probe(&png(w, h), &l) else {
+            panic!("{w}x{h} is refused as too tall");
+        };
+        assert!(message.contains("1:3"), "{message}");
+        assert!(message.contains(&format!("{w}×{h} px")), "{message}");
+    }
+    // An emote stored before the rule is made again at its shape.
+    let tall = png(10, 1000);
+    assert!(encode::transcode(&tall, &Limits::emote()).is_err());
+    let made = encode::transcode(&tall, &Limits::emote_original())
+        .expect("a 1:100 original makes its files again");
+    assert!(!made.webp.is_empty());
+    // Badges and paints have no tall rule here.
+    assert!(probe(&png(100, 500), &Limits::badge()).is_ok());
 }
 
 #[test]

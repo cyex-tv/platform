@@ -120,7 +120,7 @@ as defaults; `.env.example` lists them all. Set the same values in `api.env` and
 (the api checks uploads with them, the worker decodes with them), then restart both; either
 refuses to start on a value that doesn't read. Nothing needs setting unless a limit should
 change. Emotes have no variables: their rules are fixed in code and the same for everyone
-(1000 x 1000 px, 8 MB, 1000 frames, 50 fps, at most 4:1 wide; ADR 0031), so delete any old
+(1000 x 1000 px, 8 MB, 1000 frames, 50 fps, between 1:3 tall and 4:1 wide; ADR 0031), so delete any old
 `CYEX_TV_LIMIT_EMOTE_*` or `CYEX_TV_LIMIT_ROLE_EMOTE_*` line (they are ignored now). `GET /v1/limits`
 and the GraphQL `limits` query show what a running api enforces, so check them after a change.
 

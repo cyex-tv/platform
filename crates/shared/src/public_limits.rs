@@ -23,8 +23,11 @@ pub struct MediaLimits {
     /// The smallest side an upload may have (badges: both sides; paints: the height); null for none.
     pub min_side: Option<i32>,
     /// How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for
-    /// no rule at upload. Emotes have no rule for a tall picture.
+    /// no rule at upload.
     pub max_aspect: Option<i32>,
+    /// How many times as tall as wide a picture may be (emotes 3, so 1:3); null for no rule at
+    /// upload (badges and paints have their own shape rules).
+    pub max_tall: Option<i32>,
     /// The most frames a second (emotes 50; null for the others). Frames shown for under
     /// 1000 / `maxFps` ms (20 ms: a 0 or 10 ms GIF delay) are shown for 100 ms, as browsers do.
     pub max_fps: Option<i32>,

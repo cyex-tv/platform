@@ -1,14 +1,18 @@
 <script lang="ts">
   // The editor's stage: the current frame on a transparent checkerboard, zoomed and panned, with
   // the crop box and the drawings on top. Mouse, pen and touch all work (one pointer draws, two
-  // pinch to zoom); Ctrl + wheel zooms at the pointer, the wheel pans, Space + drag pans with any
-  // tool. Keyboard: arrows move the picked drawing (or the crop box), Shift by 10 px; Delete
-  // removes the drawing; Esc lets go of it.
+  // pinch to zoom); the wheel (and a trackpad pinch, Ctrl + wheel) zooms at the pointer, Shift +
+  // wheel pans sideways, Space + drag pans with any tool. The resize tool shows the output as it
+  // uploads (cropped and stretched) with handles that stretch it to any shape; Shift keeps the
+  // shape. Keyboard: arrows move the picked drawing (or the crop box), Shift by 10 px; with the
+  // resize tool they change the width and height; Delete removes the drawing; Esc lets go of it.
   import { onMount, untrack } from 'svelte';
   import EditorIcon from './EditorIcon.svelte';
   import { DRAW_TOOLS, type EditorState } from './state.svelte';
-  import { HANDLES, clamp, dragCrop, fitView, handlePoint, segmentDistance, zoomAt, type Handle, type Rect } from './geometry';
-  import { addShape, deleteShape, fitShape, moveShape, setCrop, shapeBounds, shapesOn, updateShape, type Doc, type Shape } from './model';
+  import { HANDLES, MAX_ZOOM, chain, clamp, dragCrop, fitView, handlePoint, minZoom, segmentDistance, stretchBy, wheelZoom, zoomAt, type Handle, type Rect } from './geometry';
+  import { addShape, deleteShape, fitShape, moveShape, outSize, outputTransform, resize, setCrop, shapeBounds, shapesOn, updateShape, type Doc, type Shape } from './model';
+  import { ratioText, shapeOk } from './rules';
+  import { count } from '$lib/format';
   import { drawShape, measureText, paintFrame } from './render';
   import { RATIOS } from './geometry';
 
@@ -28,20 +32,30 @@
   let panning = $state(false);
 
   const doc = $derived(ed.doc);
+  /** The resize tool: the stage shows the output, not the canvas. */
+  const sizing = $derived(ed.tool === 'size');
+  /** What the stage shows: the output with the resize tool, else the whole canvas. */
+  const content = () => (sizing && ed.doc ? outSize(ed.doc) : ed.canvas);
   const ratio = $derived(RATIOS.find((r) => r.id === ed.ratio)?.ratio ?? null);
   const cursor = $derived(
-    panning ? 'grabbing' : space || ed.tool === 'pan' ? 'grab' : ed.tool === 'select' ? 'default' : ed.tool === 'text' ? 'text' : 'crosshair',
+    panning ? 'grabbing' : space || ed.tool === 'pan' || sizing ? 'grab' : ed.tool === 'select' ? 'default' : ed.tool === 'text' ? 'text' : 'crosshair',
   );
 
+  const fitted = () => {
+    const c = content();
+    return fitView(c.w, c.h, vw, vh, vw < 480 ? 12 : 32, 8);
+  };
+  /** The zoom range: down to a quarter of the fitted zoom, up to 3200%. */
+  const lowest = () => minZoom(fitted().zoom);
+
   export function fit() {
-    const c = ed.canvas;
-    view = fitView(c.w, c.h, vw, vh, vw < 480 ? 12 : 32, 8);
+    view = fitted();
     auto = true;
   }
 
   export function zoomBy(k: number) {
     auto = false;
-    const z = clamp(view.zoom * k, 0.05, 32);
+    const z = clamp(view.zoom * k, lowest(), MAX_ZOOM);
     view = zoomAt(view, z, vw / 2, vh / 2);
   }
 
@@ -56,14 +70,25 @@
     void vw;
     void vh;
     const d = ed.doc;
-    const c = ed.canvas;
+    void ed.canvas;
+    void sizing;
     untrack(() => {
       const fresh = !!d && (!fittedFor || fittedFor.sw !== d.sw || fittedFor.sh !== d.sh || ed.history.depth === 0);
-      if (d && (auto || fresh)) {
-        view = fitView(c.w, c.h, vw, vh, vw < 480 ? 12 : 32, 8);
+      // Not while a handle is dragged: the box follows the pointer, the view stays.
+      if (d && (fresh || (auto && !drag))) {
+        view = fitted();
         if (fresh) auto = true;
       }
       fittedFor = d;
+    });
+  });
+  // Into or out of the resize tool: the stage shows something else, so it fits again.
+  let wasSizing = false;
+  $effect(() => {
+    const s = sizing;
+    untrack(() => {
+      if (s !== wasSizing && ed.doc) fit();
+      wasSizing = s;
     });
   });
 
@@ -104,6 +129,7 @@
       size: parseFloat(s.getPropertyValue('--checker-size')) || 16,
       scrim: s.getPropertyValue('--scrim').trim() || 'rgb(0 0 0 / .55)',
       accent: s.getPropertyValue('--accent').trim() || '#f5a524',
+      bad: s.getPropertyValue('--red').trim() || '#e5484d',
       ink: s.getPropertyValue('--accent-ink').trim() || '#000',
       line: s.getPropertyValue('--text').trim() || '#fff',
     };
@@ -140,10 +166,11 @@
     const d = ed.doc;
     if (!d) return;
     const t = tokens();
-    const c = ed.canvas;
     const z = view.zoom * dpr;
     const ox = view.x * dpr;
     const oy = view.y * dpr;
+    if (sizing) return drawOutput(d, t, dpr, z, ox, oy);
+    const c = ed.canvas;
     // The checkerboard behind the picture, in screen pixels so it stays the same size at any zoom.
     ctx.fillStyle = checker(t, dpr);
     ctx.fillRect(Math.round(ox), Math.round(oy), Math.round(c.w * z), Math.round(c.h * z));
@@ -180,6 +207,24 @@
     if (ed.tool === 'crop') outline(screenRect(cr, dpr), t, dpr, true, true);
     const sel = ed.shape !== null ? d.shapes.find((s: Shape) => s.id === ed.shape) : null;
     if (sel && ed.tool === 'select') outline(screenRect(pad(shapeBounds(sel), sel), dpr), t, dpr, false, true);
+  }
+
+  /** The resize tool: the output as it uploads, stretched, with handles (red when off the rules). */
+  function drawOutput(d: Doc, t: ReturnType<typeof tokens>, dpr: number, z: number, ox: number, oy: number) {
+    const o = outSize(d);
+    const r = { x: Math.round(ox), y: Math.round(oy), w: Math.round(o.w * z), h: Math.round(o.h * z) };
+    ctx.fillStyle = checker(t, dpr);
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = view.zoom < 2;
+    ctx.imageSmoothingQuality = 'high';
+    const frame = d.frames[ed.current];
+    if (frame) paintFrame(ctx, d, ed.current, ed.sources[frame.src], chain([z, 0, 0, z, ox, oy], outputTransform(d)));
+    ctx.restore();
+    outline(screenRect({ x: 0, y: 0, w: o.w, h: o.h }, dpr), shapeOk(o.w, o.h, ed.limits) ? t : { ...t, accent: t.bad }, dpr, false, true);
   }
 
   const pad = (r: Rect, s: Shape): Rect => {
@@ -227,7 +272,8 @@
     | { kind: 'crop'; handle: Handle; start: Rect; px: number; py: number; fresh: boolean }
     | { kind: 'move'; id: number; start: Shape; px: number; py: number; moved: boolean }
     | { kind: 'scale'; id: number; start: Shape; bounds: Rect; handle: Handle; px: number; py: number }
-    | { kind: 'draw'; px: number; py: number; moved: boolean };
+    | { kind: 'draw'; px: number; py: number; moved: boolean }
+    | { kind: 'size'; handle: Exclude<Handle, 'move'>; w: number; h: number; sx: number; sy: number; vx: number; vy: number; auto: boolean };
   let drag: Drag | null = null;
   const pointers = new Map<number, { x: number; y: number }>();
   let pinch: { dist: number; zoom: number; mx: number; my: number; vx: number; vy: number } | null = null;
@@ -292,6 +338,19 @@
       return;
     }
     if (e.button !== 0) return;
+    if (sizing) {
+      const o = outSize(doc);
+      const h = handleAt({ x: 0, y: 0, w: o.w, h: o.h }, p);
+      if (h && h !== 'move') {
+        drag = { kind: 'size', handle: h, w: o.w, h: o.h, sx: p.x, sy: p.y, vx: view.x, vy: view.y, auto };
+        auto = false;
+      } else {
+        // The picture itself: drag to move the view.
+        drag = { kind: 'pan', sx: p.x, sy: p.y, vx: view.x, vy: view.y };
+        panning = true;
+      }
+      return;
+    }
     if (ed.tool === 'crop') {
       const h = handleAt(doc.crop, p);
       if (h) drag = { kind: 'crop', handle: h, start: doc.crop, px: c.x, py: c.y, fresh: false };
@@ -334,7 +393,7 @@
       const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
       const mx = (a.x + b.x) / 2;
       const my = (a.y + b.y) / 2;
-      const z = clamp((pinch.zoom * dist) / pinch.dist, 0.05, 32);
+      const z = clamp((pinch.zoom * dist) / pinch.dist, lowest(), MAX_ZOOM);
       const base = zoomAt({ zoom: pinch.zoom, x: pinch.vx, y: pinch.vy }, z, pinch.mx, pinch.my);
       view = { zoom: z, x: base.x + (mx - pinch.mx), y: base.y + (my - pinch.my) };
       auto = false;
@@ -347,6 +406,15 @@
         view = { ...view, x: drag.vx + p.x - drag.sx, y: drag.vy + p.y - drag.sy };
         auto = false;
         return;
+      case 'size': {
+        // Free by default; the proportions lock (or Shift, which flips it) keeps the shape.
+        const lock = ed.keepAspect !== e.shiftKey;
+        const s = stretchBy(drag.handle, drag.w, drag.h, (p.x - drag.sx) / view.zoom, (p.y - drag.sy) / view.zoom, lock);
+        ed.preview(resize(ed.history.now ?? doc, s.w, s.h));
+        // The opposite side stays where it is.
+        view = { ...view, x: drag.handle.includes('w') ? drag.vx + (drag.w - s.w) * view.zoom : drag.vx, y: drag.handle.includes('n') ? drag.vy + (drag.h - s.h) * view.zoom : drag.vy };
+        return;
+      }
       case 'crop': {
         const cs = ed.canvas;
         let handle = drag.handle;
@@ -440,7 +508,13 @@
     drag = null;
     panning = false;
     if (!d || !doc) return;
-    if (d.kind === 'crop') ed.commit(doc, 'Crop');
+    if (d.kind === 'size') {
+      ed.commit(doc, ed.keepAspect ? 'Resize' : 'Stretch');
+      // Fitted before, or grown past the stage: fit again, so every handle stays in reach.
+      const o = outSize(doc);
+      const r = screenRect({ x: 0, y: 0, w: o.w, h: o.h });
+      if (d.auto || r.x < 0 || r.y < 0 || r.x + r.w > vw || r.y + r.h > vh) fit();
+    } else if (d.kind === 'crop') ed.commit(doc, 'Crop');
     else if (d.kind === 'move' && d.moved) ed.commit(doc, 'Move drawing');
     else if (d.kind === 'scale') ed.commit(doc, 'Resize drawing');
     else if (d.kind === 'draw' && draft) {
@@ -476,15 +550,16 @@
 
   function wheel(e: WheelEvent) {
     if (!doc) return;
+    // The stage zooms; the dialog and the page behind it never scroll from here.
     e.preventDefault();
     auto = false;
     const p = local(e);
-    if (e.ctrlKey || e.metaKey) {
-      const z = clamp(view.zoom * Math.exp(-e.deltaY * 0.0025), 0.05, 32);
-      view = zoomAt(view, z, p.x, p.y);
-    } else {
-      view = { ...view, x: view.x - e.deltaX, y: view.y - e.deltaY };
+    const pinch = e.ctrlKey || e.metaKey;
+    if (e.shiftKey && !pinch) {
+      view = { ...view, x: view.x - (e.deltaX || e.deltaY) };
+      return;
     }
+    view = zoomAt(view, wheelZoom(view.zoom, e.deltaY, e.deltaMode, pinch, lowest(), MAX_ZOOM, vh), p.x, p.y);
   }
 
   function keydown(e: KeyboardEvent) {
@@ -508,6 +583,14 @@
     const step = arrows[e.key];
     if (step && !e.altKey && !e.ctrlKey && !e.metaKey) {
       const k = e.shiftKey ? 10 : 1;
+      if (sizing) {
+        // → ← wider and narrower, ↑ ↓ taller and shorter.
+        e.preventDefault();
+        const o = outSize(doc);
+        const s = stretchBy(step[0] ? 'e' : 's', o.w, o.h, step[0] * k, -step[1] * k, ed.keepAspect);
+        ed.commit(resize(doc, s.w, s.h), ed.keepAspect ? 'Resize' : 'Stretch');
+        return;
+      }
       const sel = ed.shape !== null ? doc.shapes.find((s: Shape) => s.id === ed.shape) : null;
       if (sel) {
         e.preventDefault();
@@ -532,8 +615,12 @@
   }
 
   const zoomLabel = $derived(`${Math.round(view.zoom * 100)}%`);
+  const out = $derived(doc ? outSize(doc) : { w: 1, h: 1 });
+  const fits = $derived(shapeOk(out.w, out.h, ed.limits));
   const label = $derived(
-    doc ? `Stage, frame ${ed.current + 1} of ${doc.frames.length}. ${ed.tool === 'crop' ? 'Arrow keys move the crop.' : 'Arrow keys move the picked drawing, Delete removes it.'}` : 'Stage',
+    doc
+      ? `Stage, frame ${ed.current + 1} of ${doc.frames.length}. ${sizing ? `Output ${out.w} by ${out.h} px. Arrow keys change the width and height.` : ed.tool === 'crop' ? 'Arrow keys move the crop.' : 'Arrow keys move the picked drawing, Delete removes it.'}`
+      : 'Stage',
   );
 </script>
 
@@ -561,6 +648,13 @@
     onkeydown={keydown}
     oncontextmenu={(e) => e.preventDefault()}
   ><canvas bind:this={canvas} aria-hidden="true"></canvas></div>
+  {#if doc && sizing}
+    <p class="readout" class:bad={!fits}>
+      <span class="ui-mono">{count(out.w)} × {count(out.h)} px · {ratioText(out.w, out.h)}</span>
+      {#if fits}<span class="ok">within 1:{ed.limits.maxTall} to {ed.limits.maxAspect}:1</span>
+      {:else}<span class="no"><EditorIcon name="fail" size={14} /> outside 1:{ed.limits.maxTall} to {ed.limits.maxAspect}:1, can’t upload</span>{/if}
+    </p>
+  {/if}
   {#if doc}
     <div class="zoom" role="group" aria-label="Zoom">
       <button type="button" class="zb" aria-label="Zoom out" title="Zoom out (−)" onclick={() => zoomBy(1 / 1.25)}><EditorIcon name="zoom-out" size={16} /></button>
@@ -576,6 +670,11 @@
   .hit { position: absolute; inset: 0; touch-action: none; outline: none; }
   .hit:focus-visible { box-shadow: inset 0 0 0 2px var(--focus-ring); }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+  .readout { position: absolute; left: 10px; top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; max-width: calc(100% - 20px); margin: 0; padding: 5px 10px;
+    background: var(--elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-btn); box-shadow: var(--shadow-pop);
+    font-size: var(--t-fine); color: var(--text); pointer-events: none; }
+  .readout .ok { color: var(--dim); }
+  .readout .no { display: inline-flex; align-items: center; gap: 4px; color: var(--red); font-weight: 600; }
   .zoom { position: absolute; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 2px; padding: 2px;
     background: var(--elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-btn); box-shadow: var(--shadow-pop); }
   .zb, .zl { display: inline-grid; place-items: center; height: 30px; min-width: 30px; padding: 0 6px; border: 0; border-radius: var(--radius-btn);

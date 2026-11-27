@@ -21,7 +21,7 @@ import {
   type Rect,
   type Size,
 } from './geometry';
-import { boomerang, changeSpeed, dropEvery, limitFps, moveFrames, reversed, setDelay } from './timing';
+import { boomerang, changeSpeed, dropEvery, limitFps, moveFrames, reversed, setDelay, shortest } from './timing';
 
 export type Frame = { id: number; src: number; delay: number };
 
@@ -57,6 +57,12 @@ export type Doc = {
   frames: readonly Frame[];
   shapes: readonly Shape[];
   nextId: number;
+  /**
+   * Playback speed, 1 as the frames are timed (absent: 1). The frames keep their own delays; the
+   * upload is timed by `exportFrames`. 0 freezes the animation: the upload is a still of the frame
+   * on show.
+   */
+  speed?: number;
 };
 
 /** A new document for `delays.length` source pictures of sw × sh, one frame each. */
@@ -99,6 +105,13 @@ export function setCrop(d: Doc, r: Rect): Doc {
 const same = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
 export const resetCrop = (d: Doc): Doc => setCrop(d, { x: 0, y: 0, ...canvasSize(d) });
+
+/** Shortens the crop to `tall` times its width (height / width) when it is taller, keeping its middle. */
+export function cropNoTaller(d: Doc, tall: number): Doc {
+  if (d.crop.h / d.crop.w <= tall) return d;
+  const h = Math.max(1, Math.floor(d.crop.w * tall));
+  return setCrop(d, { x: d.crop.x, y: d.crop.y + Math.round((d.crop.h - h) / 2), w: d.crop.w, h });
+}
 
 /** Narrows the crop to `ratio` (width / height) when it is wider, keeping its middle. */
 export function cropNoWider(d: Doc, ratio: number): Doc {
@@ -231,6 +244,39 @@ export function boomerangFrames(d: Doc): Doc {
 }
 
 export const speedFrames = (d: Doc, speed: number): Doc => ({ ...d, frames: changeSpeed(d.frames, speed) });
+
+/** The slowest and fastest playback speed (0 is frozen, 20 is 2000%). */
+export const MAX_SPEED = 20;
+export const speedOf = (d: Doc) => d.speed ?? 1;
+/** `d` at playback speed `speed` (0 to 20, clamped). */
+export function setSpeed(d: Doc, speed: number): Doc {
+  const s = Math.max(0, Math.min(MAX_SPEED, Number.isFinite(speed) ? speed : 1));
+  return s === speedOf(d) ? d : { ...d, speed: s };
+}
+
+/** Whether the upload is a still because the speed is 0 (an animation frozen on one frame). */
+export const frozen = (d: Doc) => d.frames.length > 1 && speedOf(d) <= 0;
+
+/**
+ * The frames as they upload. At speed 1 the frames themselves. At 0, one frame: the one at
+ * `current`. Otherwise every delay times 1 / speed; when that makes a frame shorter than
+ * `minDelay` (and the frames were within it at speed 1), the animation is sampled every
+ * `minDelay` ms (frames merged or dropped, `limitFps`) so it plays at the right speed and never
+ * faster than the frame-rate rule. Too fast at speed 1 stays as it is (the rule says so).
+ */
+export function exportFrames(d: Doc, current: number, minDelay: number): readonly Frame[] {
+  const s = speedOf(d);
+  if (d.frames.length < 2 || s === 1) return d.frames;
+  if (s <= 0) return [{ ...d.frames[Math.max(0, Math.min(d.frames.length - 1, current))], delay: 0 }];
+  const sped = changeSpeed(d.frames, s);
+  return shortest(d.frames) >= minDelay && shortest(sped) < minDelay ? limitFps(sped, minDelay) : sped;
+}
+
+/** `d` as it uploads: its frames timed by `exportFrames`, at speed 1. */
+export function exportDoc(d: Doc, current: number, minDelay: number): Doc {
+  const frames = exportFrames(d, current, minDelay);
+  return frames === d.frames ? d : { ...d, frames, speed: 1 };
+}
 export const delayFrames = (d: Doc, delay: number, picked?: Iterable<number>): Doc => {
   const set = picked ? indexSet(picked) : null;
   return { ...d, frames: setDelay(d.frames, delay, set ? (_, i) => set.has(i) : undefined) };

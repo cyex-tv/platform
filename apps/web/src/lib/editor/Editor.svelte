@@ -7,8 +7,9 @@
   //   middle  the stage, the frames under it
   //   right   preview, the tool's settings, turning and size, file format, the upload rules
   // Phones: one column, the tools a strip over the stage, everything else under the frames.
-  // Keys (not while typing): V C P L A R O T H tools, Ctrl + Z undo, Ctrl + Shift + Z or Ctrl + Y
-  // redo, K play, , and . step, [ and ] turn, + − zoom, 0 fit, 1 actual size.
+  // Keys (not while typing): V C S P L A R O T H tools, Ctrl + Z undo, Ctrl + Shift + Z or Ctrl + Y
+  // redo, K play, , and . step, [ and ] turn, + − zoom (the wheel over the stage too), 0 fit,
+  // 1 actual size.
   import { onMount } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
   import EditorIcon, { type EditorIconName } from './EditorIcon.svelte';
@@ -69,6 +70,8 @@
     const d = ed.doc;
     void ed.format;
     void ed.quality;
+    // Frozen at 0%: the still is the frame on show, so another frame is another file.
+    void ed.still;
     if (!d || ed.importing || ed.pixels > AUTO_ENCODE_PIXELS) return;
     const t = setTimeout(() => void ed.encode(), 600);
     return () => {
@@ -202,7 +205,7 @@
             <EditorIcon name={icon(t.icon)} size={18} />
             <span class="tip" aria-hidden="true">{t.label}<kbd>{t.key}</kbd></span>
           </button>
-          {#if t.id === 'crop' || t.id === 'text'}<span class="sep" aria-hidden="true"></span>{/if}
+          {#if t.id === 'size' || t.id === 'text'}<span class="sep" aria-hidden="true"></span>{/if}
         {/each}
       </div>
       <div class="centre">
@@ -225,6 +228,7 @@
         <EditorIcon name="film" size={28} />
         <p class="lead">Drop a picture or a video here</p>
         <p class="sub">PNG, JPEG, GIF, WebP, AVIF, MP4 or WebM, any size. It stays in this browser until you upload the result.</p>
+        <p class="sub">Crop, stretch and retime it freely; it uploads once it’s at most {count(ed.limits.maxSide)} px a side and between 1:{ed.limits.maxTall} and {ed.limits.maxAspect}:1.</p>
         <button type="button" class="ui-btn secondary" onclick={() => input.click()}>Browse files</button>
         {#if ed.importError}<p class="ui-error" role="alert">{ed.importError} <button type="button" class="ui-btn ghost small" onclick={() => input.click()}>Pick another file</button></p>{/if}
       {/if}
