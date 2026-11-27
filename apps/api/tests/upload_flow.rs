@@ -571,6 +571,13 @@ async fn bad_files_are_refused() {
             StatusCode::UNPROCESSABLE_ENTITY,
             "bad_dimensions",
         ),
+        // The 1:3 rule is the upload's too: taller than 1:3 is refused.
+        (
+            "taller than 1:3",
+            png(40, 121, 3),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "bad_dimensions",
+        ),
     ] {
         let r = w.upload(&alice, "nope", &file).await;
         assert_eq!(r.status, status, "{case}: {:?}", r.body);

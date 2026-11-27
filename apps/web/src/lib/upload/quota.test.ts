@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { quotaView } from './quota';
 
-const q = (pending: number, pendingMax: number | null = 20) => ({ accountId: 'A', pending, pendingMax, uploadsThisHour: 0, uploadsPerHour: 20, maxBytes: 8388608, maxSide: 1000, maxFrames: 1000, maxFps: 50, maxAspect: 4 });
+const q = (pending: number, pendingMax: number | null = 20) => ({ accountId: 'A', pending, pendingMax, uploadsThisHour: 0, uploadsPerHour: 20, maxBytes: 8388608, maxSide: 1000, maxFrames: 1000, maxFps: 50, maxAspect: 4, maxTall: 3 });
 
 describe('the upload quota line', () => {
   it('counts what waits and how much room is left', () => {

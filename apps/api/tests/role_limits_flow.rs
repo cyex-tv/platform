@@ -668,7 +668,7 @@ async fn the_owner_isnt_capped() {
 }
 
 const LIMITS: &str = "query { limits {
-    emote { maxBytes maxSide maxFrames maxFps maxTotalPixels maxDurationMs minSide maxAspect maxServedSide }
+    emote { maxBytes maxSide maxFrames maxFps maxTotalPixels maxDurationMs minSide maxAspect maxTall maxServedSide }
     badge { maxBytes maxSide maxFrames maxDurationMs minSide maxAspect maxServedSide }
     paint { maxBytes maxSide minSide maxAspect }
     names { emote { min max } tooltip { min max } }
@@ -693,6 +693,7 @@ async fn limits_lists_every_limit_and_the_callers_role_overrides() {
     assert_eq!(l["emote"]["maxFrames"], 1000, "{r}");
     assert_eq!(l["emote"]["maxFps"], 50, "{r}");
     assert_eq!(l["emote"]["maxAspect"], 4, "{r}");
+    assert_eq!(l["emote"]["maxTall"], 3, "{r}");
     assert!(l["emote"]["maxDurationMs"].is_null(), "{r}");
     assert_eq!(l["emote"]["maxServedSide"], 128, "{r}");
     assert_eq!(l["badge"]["maxSide"], 2048, "{r}");
@@ -739,7 +740,7 @@ async fn limits_lists_every_limit_and_the_callers_role_overrides() {
 }
 
 const MEDIA_QUOTA: &str =
-    "query { uploadQuota { maxBytes maxSide maxFrames maxFps maxAspect } limits {
+    "query { uploadQuota { maxBytes maxSide maxFrames maxFps maxAspect maxTall } limits {
     account { key default effective windowSeconds }
 } }";
 
@@ -1041,7 +1042,7 @@ async fn emote_frame_and_speed_rules_are_enforced() {
 }
 
 #[tokio::test]
-async fn emotes_are_at_most_4_to_1_wide_and_tall_has_no_ratio_rule() {
+async fn emotes_are_between_1_to_3_tall_and_4_to_1_wide() {
     let Some(w) = World::new().await else {
         return;
     };
@@ -1050,8 +1051,8 @@ async fn emotes_are_at_most_4_to_1_wide_and_tall_has_no_ratio_rule() {
     for (name, file) in [
         ("wide4to1", flat_png_of(1000, 250, 1)),
         ("small4to1", flat_png_of(40, 10, 2)),
-        ("tallOne", flat_png_of(10, 1000, 3)),
-        ("tallSkinny", flat_png_of(1, 1000, 4)),
+        ("tall1to3", flat_png_of(100, 300, 3)),
+        ("tallFull", flat_png_of(334, 1000, 4)),
     ] {
         let r = w.upload_file(&alice, name, &file).await;
         assert_eq!(r.status, StatusCode::ACCEPTED, "{name} {:?}", r.body);
@@ -1060,6 +1061,9 @@ async fn emotes_are_at_most_4_to_1_wide_and_tall_has_no_ratio_rule() {
         ("wide41", flat_png_of(41, 10, 5)),
         ("wide1000", flat_png_of(1000, 249, 6)),
         ("wideLine", flat_png_of(500, 1, 7)),
+        ("tall301", flat_png_of(100, 301, 8)),
+        ("tallOne", flat_png_of(10, 1000, 9)),
+        ("tallLine", flat_png_of(1, 1000, 10)),
     ] {
         let r = w.upload_file(&alice, name, &file).await;
         assert_eq!(
@@ -1070,7 +1074,12 @@ async fn emotes_are_at_most_4_to_1_wide_and_tall_has_no_ratio_rule() {
         );
         assert_eq!(r.body["error"], "bad_dimensions");
         let message = r.body["message"].as_str().unwrap();
-        assert!(message.contains("4:1"), "{message}");
+        let rule = if name.starts_with("tall") {
+            "1:3"
+        } else {
+            "4:1"
+        };
+        assert!(message.contains(rule), "{name}: {message}");
     }
     w.db.close().await;
 }
@@ -1091,6 +1100,7 @@ async fn the_quota_and_limits_report_the_fixed_emote_numbers_and_the_role_media_
         assert_eq!(quota["maxFrames"], 1000, "{q}");
         assert_eq!(quota["maxFps"], 50, "{q}");
         assert_eq!(quota["maxAspect"], 4, "{q}");
+        assert_eq!(quota["maxTall"], 3, "{q}");
     };
     let q = w.gql(&alice, MEDIA_QUOTA, json!({})).await;
     check_emote(&q);

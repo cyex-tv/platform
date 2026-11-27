@@ -65,6 +65,9 @@ pub struct Limits {
     pub max_duration_ms: u64,
     /// A picture wider than this many times its height is refused (emotes, 4); `None`: no rule.
     pub max_aspect: Option<u32>,
+    /// A picture taller than this many times its width is refused (emotes, 3, so 1:3); `None`:
+    /// no rule.
+    pub max_tall: Option<u32>,
 }
 
 impl Default for Limits {
@@ -84,6 +87,7 @@ impl Limits {
             max_total_pixels: 100_000_000,
             max_duration_ms: u64::MAX,
             max_aspect: None,
+            max_tall: None,
         }
     }
 
@@ -94,12 +98,13 @@ impl Limits {
     }
 
     /// The limits an *existing* emote original is decoded under again (the worker's transcodes):
-    /// [`Self::emote`] without the 4:1 rule. That rule is checked only when a file is uploaded
-    /// (the API), so an original that is already stored, whatever its shape, can always be made
-    /// again; the other rules stay.
+    /// [`Self::emote`] without the shape rules (4:1 wide, 1:3 tall). They are checked only when a
+    /// file is uploaded (the API), so an original that is already stored, whatever its shape, can
+    /// always be made again; the other rules stay.
     pub const fn emote_original() -> Self {
         let mut l = EmoteRules::limits();
         l.max_aspect = None;
+        l.max_tall = None;
         l
     }
 
@@ -120,6 +125,7 @@ impl Limits {
             max_total_pixels: 64_000_000,
             max_duration_ms: 10_000,
             max_aspect: None,
+            max_tall: None,
         }
     }
 
@@ -160,9 +166,11 @@ impl EmoteRules {
     /// delay (0 or 10 ms) isn't refused: browsers show it for 100 ms ([`shown_ms`]), so the rate
     /// never goes over [`Self::MAX_FPS`].
     pub const MIN_FRAME_MS: u32 = 1000 / Self::MAX_FPS;
-    /// Width is at most this many times the height (4:1). A tall picture has no rule beyond
-    /// [`Self::MAX_SIDE`]: only the width-to-height ratio is limited.
+    /// Width is at most this many times the height (4:1).
     pub const MAX_ASPECT: u32 = 4;
+    /// Height is at most this many times the width (1:3). Checked for new uploads only: an
+    /// emote stored before the rule keeps its shape and is made again as it is.
+    pub const MAX_TALL: u32 = 3;
 
     /// The limits an emote is decoded under. The cap on width × height × frames is exactly what
     /// the rules allow (1000 × 1000 px, 1000 frames), so no sixth rule hides behind them.
@@ -176,6 +184,7 @@ impl EmoteRules {
                 * (Self::MAX_FRAMES as u64),
             max_duration_ms: u64::MAX,
             max_aspect: Some(Self::MAX_ASPECT),
+            max_tall: Some(Self::MAX_TALL),
         }
     }
 }
@@ -196,7 +205,7 @@ pub enum MediaError {
     /// Over a limit.
     #[error("{0}")]
     TooLarge(String),
-    /// The wrong shape: wider than the emote rule's 4:1.
+    /// The wrong shape: wider than the emote rule's 4:1 or taller than its 1:3.
     #[error("{0}")]
     BadShape(String),
     /// Says it is an image but doesn't decode.
@@ -263,6 +272,13 @@ fn check_side(width: u32, height: u32, limits: &Limits) -> Result<(), MediaError
     {
         return Err(MediaError::BadShape(format!(
             "Emotes can be at most {aspect} times as wide as tall ({aspect}:1). This one is {width}×{height} px."
+        )));
+    }
+    if let Some(tall) = limits.max_tall
+        && u64::from(height) > u64::from(width) * u64::from(tall)
+    {
+        return Err(MediaError::BadShape(format!(
+            "Emotes can be at most {tall} times as tall as wide (1:{tall}). This one is {width}×{height} px."
         )));
     }
     Ok(())

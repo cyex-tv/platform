@@ -65,7 +65,7 @@ export function signedInRoles(op, body, v, ADMIN) {
       if (!roleOut(r).editable) return err('You can’t edit a role you hold. Someone above you has to.', 'own_role');
       const next = {};
       for (const l of v.limits ?? []) {
-        if (l.key.trim().startsWith('emote_max_')) return err(`${l.key.trim()} can’t be set: emote limits are fixed and the same for everyone (at most 1000×1000 px, 8 MB, 1000 frames, 50 fps, 4:1).`, 'bad_limit');
+        if (l.key.trim().startsWith('emote_max_')) return err(`${l.key.trim()} can’t be set: emote limits are fixed and the same for everyone (at most 1000×1000 px, 8 MB, 1000 frames, 50 fps, 4:1 wide to 1:3 tall).`, 'bad_limit');
         if (!LIMIT_DEFAULTS.some((d) => d[0] === l.key.trim())) return err(`"${l.key}" is not a limit.`, 'unknown_limit');
         if (l.value == null) continue;
         const most = limitMax(l.key.trim());
@@ -83,7 +83,7 @@ export function signedInRoles(op, body, v, ADMIN) {
       return { data: { uploadQuota: { accountId: owner, pending: pendingOf(owner), pendingMax: limitOf(owner, 'pending_emotes'),
         uploadsThisHour: [...MINE, ...PENDING].filter((e) => e.owner?.id === owner && Date.parse(e.createdAt) > hour).length,
         uploadsPerHour: limitOf(owner, 'uploads_per_hour'),
-        maxBytes: 8 * 1024 * 1024, maxSide: 1000, maxFrames: 1000, maxFps: 50, maxAspect: 4 } } };
+        maxBytes: 8 * 1024 * 1024, maxSide: 1000, maxFrames: 1000, maxFps: 50, maxAspect: 4, maxTall: 3 } } };
     }
     case 'DeleteRole': {
       const r = ROLES.find((x) => x.id === v.id);

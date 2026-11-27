@@ -11,8 +11,10 @@ export type EditorLimits = {
   maxFrames: number;
   /** No frame shorter than this (ms): 20 ms is 50 fps. */
   minDelayMs: number;
-  /** Width / height at most. */
+  /** Width / height at most (4, so 4:1). */
   maxAspect: number;
+  /** Height / width at most (3, so 1:3). */
+  maxTall: number;
   /** Width × height × frames at most (the API's decoding cap); null: none. */
   maxTotalPixels: number | null;
   /** One run of the animation at most (ms); null: none. */
@@ -25,6 +27,7 @@ export const EDITOR_LIMITS: EditorLimits = {
   maxFrames: 1000,
   minDelayMs: 20,
   maxAspect: 4,
+  maxTall: 3,
   maxTotalPixels: 100_000_000,
   maxDurationMs: null,
 };
@@ -36,9 +39,10 @@ type MediaLike = {
   maxTotalPixels?: number | null;
   maxDurationMs?: number | null;
   maxAspect?: number | null;
+  maxTall?: number | null;
   maxFps?: number | null;
 };
-type CapsLike = { maxBytes: number; maxSide: number; maxFrames: number; maxFps?: number | null; maxAspect?: number | null };
+type CapsLike = { maxBytes: number; maxSide: number; maxFrames: number; maxFps?: number | null; maxAspect?: number | null; maxTall?: number | null };
 
 /** The limits from the API's answers (either may be missing): the account's caps win. */
 export function editorLimits(emote?: MediaLike | null, caps?: CapsLike | null): EditorLimits {
@@ -51,12 +55,13 @@ export function editorLimits(emote?: MediaLike | null, caps?: CapsLike | null): 
     // 50 fps is 20 ms a frame; the API shows shorter frames for 100 ms, so the editor holds them to it.
     minDelayMs: Math.ceil(1000 / (caps?.maxFps ?? emote?.maxFps ?? 1000 / l.minDelayMs)),
     maxAspect: caps?.maxAspect ?? emote?.maxAspect ?? l.maxAspect,
+    maxTall: caps?.maxTall ?? emote?.maxTall ?? l.maxTall,
     maxTotalPixels: emote ? big(emote.maxTotalPixels) : l.maxTotalPixels,
     maxDurationMs: emote ? big(emote.maxDurationMs) : l.maxDurationMs,
   };
 }
 
-export type FixId = 'fit' | 'drop' | 'fps' | 'aspect' | 'shrink';
+export type FixId = 'fit' | 'drop' | 'fps' | 'aspect' | 'tall' | 'shrink';
 export type RuleState = 'pass' | 'fail' | 'pending';
 export type Rule = { id: string; label: string; value: string; limit: string; state: RuleState; fix: FixId | null };
 
@@ -81,6 +86,8 @@ const fps = (ms: number) => String(Math.round((1000 / ms) * 10) / 10).replace('.
 export function checkRules(o: Output, l: EditorLimits): Rule[] {
   const side = Math.max(o.width, o.height);
   const aspect = o.width / o.height;
+  const wide = aspect > l.maxAspect + 1e-9;
+  const tall = 1 / aspect > l.maxTall + 1e-9;
   const animated = o.frames > 1;
   const rules: Rule[] = [
     {
@@ -94,10 +101,10 @@ export function checkRules(o: Output, l: EditorLimits): Rule[] {
     {
       id: 'aspect',
       label: 'Shape',
-      value: aspect >= 1 ? `${String(Math.round(aspect * 100) / 100).replace('.', ',')}:1` : `1:${String(Math.round((1 / aspect) * 100) / 100).replace('.', ',')}`,
-      limit: `no wider than ${l.maxAspect}:1`,
-      state: aspect <= l.maxAspect + 1e-9 ? 'pass' : 'fail',
-      fix: aspect <= l.maxAspect + 1e-9 ? null : 'aspect',
+      value: ratioText(o.width, o.height),
+      limit: wide ? `too wide: at most ${l.maxAspect}:1` : tall ? `too tall: at most 1:${l.maxTall}` : `between 1:${l.maxTall} and ${l.maxAspect}:1`,
+      state: wide || tall ? 'fail' : 'pass',
+      fix: wide ? 'aspect' : tall ? 'tall' : null,
     },
     {
       id: 'frames',
@@ -136,6 +143,16 @@ export function checkRules(o: Output, l: EditorLimits): Rule[] {
   return rules;
 }
 
+/** A shape as a ratio, the long side over 1: `2,5:1` wide, `1:3` tall. */
+export function ratioText(w: number, h: number): string {
+  const r = w / h;
+  const n = (v: number) => String(Math.round(v * 100) / 100).replace('.', ',');
+  return r >= 1 ? `${n(r)}:1` : `1:${n(1 / r)}`;
+}
+
+/** Whether `w` × `h` is a shape the rules take. */
+export const shapeOk = (w: number, h: number, l: Pick<EditorLimits, 'maxAspect' | 'maxTall'>) => w / h <= l.maxAspect + 1e-9 && h / w <= l.maxTall + 1e-9;
+
 export const seconds = (ms: number) => `${String(Math.round(ms / 100) / 10).replace('.', ',')} s`;
 
 /**
@@ -162,6 +179,8 @@ export function fixLabel(fix: FixId, l: EditorLimits): string {
       return `Limit to ${fps(l.minDelayMs)} fps`;
     case 'aspect':
       return `Crop to ${l.maxAspect}:1`;
+    case 'tall':
+      return `Crop to 1:${l.maxTall}`;
     case 'shrink':
       return 'Scale to 75%';
   }

@@ -1383,7 +1383,7 @@ export type MediaLimits = {
   __typename?: 'MediaLimits';
   /**
    * How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for
-   * no rule at upload. Emotes have no rule for a tall picture.
+   * no rule at upload.
    */
   maxAspect?: Maybe<Scalars['Int']['output']>;
   /** The most bytes an uploaded file may be. */
@@ -1401,6 +1401,11 @@ export type MediaLimits = {
   maxServedSide: Scalars['Int']['output'];
   /** The longest side of an upload. */
   maxSide: Scalars['Int']['output'];
+  /**
+   * How many times as tall as wide a picture may be (emotes 3, so 1:3); null for no rule at
+   * upload (badges and paints have their own shape rules).
+   */
+  maxTall?: Maybe<Scalars['Int']['output']>;
   /** Width x height x frames, all frames together: the cap on decoding work. */
   maxTotalPixels: Scalars['Int']['output'];
   /** The smallest side an upload may have (badges: both sides; paints: the height); null for none. */
@@ -4320,7 +4325,7 @@ export type UploadQuota = {
   __typename?: 'UploadQuota';
   /** The account uploads go to. */
   accountId: Scalars['String']['output'];
-  /** How many times as wide as tall an emote may be (4, so 4:1). Fixed; a tall emote has no rule. */
+  /** How many times as wide as tall an emote may be (4, so 4:1). Fixed. */
   maxAspect: Scalars['Int']['output'];
   /** The most bytes one emote file may be (8 MB). Fixed, the same for everyone. */
   maxBytes: Scalars['Int']['output'];
@@ -4333,6 +4338,11 @@ export type UploadQuota = {
   maxFrames: Scalars['Int']['output'];
   /** The longest side of an emote, in px (1000). Fixed. */
   maxSide: Scalars['Int']['output'];
+  /**
+   * How many times as tall as wide an emote may be (3, so 1:3). Fixed; checked for new
+   * uploads only.
+   */
+  maxTall: Scalars['Int']['output'];
   /** Its emotes waiting for review, ones still being processed included. */
   pending: Scalars['Int']['output'];
   /** How many may wait at once; an upload at this many is refused (`too_many_pending`). Null when the caller isn't capped (the owners). */
@@ -5308,14 +5318,14 @@ export type UploadQuotaQueryVariables = Exact<{
 }>;
 
 
-export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax?: number | null, uploadsThisHour: number, uploadsPerHour: number, maxBytes: number, maxSide: number, maxFrames: number, maxFps: number, maxAspect: number } };
+export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax?: number | null, uploadsThisHour: number, uploadsPerHour: number, maxBytes: number, maxSide: number, maxFrames: number, maxFps: number, maxAspect: number, maxTall: number } };
 
-export type MediaLimitFieldsFragment = { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number };
+export type MediaLimitFieldsFragment = { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxTall?: number | null, maxServedSide: number };
 
 export type PublicLimitsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type PublicLimitsQuery = { __typename?: 'Query', limits: { __typename?: 'PublicLimits', emote: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, badge: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, paint: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, names: { __typename?: 'NameLimits', emote: { __typename?: 'TextLimit', min: number, max: number }, set: { __typename?: 'TextLimit', min: number, max: number }, badge: { __typename?: 'TextLimit', min: number, max: number }, paint: { __typename?: 'TextLimit', min: number, max: number }, tooltip: { __typename?: 'TextLimit', min: number, max: number } }, tags: { __typename?: 'TagLimits', max: number, maxLen: number }, rates: Array<{ __typename?: 'RateInfo', key: string, count: number, windowSeconds: number }>, account: Array<{ __typename?: 'EffectiveLimit', key: string, default: number, effective: number, windowSeconds?: number | null }> } };
+export type PublicLimitsQuery = { __typename?: 'Query', limits: { __typename?: 'PublicLimits', emote: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxTall?: number | null, maxServedSide: number }, badge: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxTall?: number | null, maxServedSide: number }, paint: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxFps?: number | null, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxTall?: number | null, maxServedSide: number }, names: { __typename?: 'NameLimits', emote: { __typename?: 'TextLimit', min: number, max: number }, set: { __typename?: 'TextLimit', min: number, max: number }, badge: { __typename?: 'TextLimit', min: number, max: number }, paint: { __typename?: 'TextLimit', min: number, max: number }, tooltip: { __typename?: 'TextLimit', min: number, max: number } }, tags: { __typename?: 'TagLimits', max: number, maxLen: number }, rates: Array<{ __typename?: 'RateInfo', key: string, count: number, windowSeconds: number }>, account: Array<{ __typename?: 'EffectiveLimit', key: string, default: number, effective: number, windowSeconds?: number | null }> } };
 
 export type CreateRoleMutationVariables = Exact<{
   input: CreateRoleInput;
@@ -5955,6 +5965,7 @@ export const MediaLimitFieldsFragmentDoc = new TypedDocumentString(`
   maxDurationMs
   minSide
   maxAspect
+  maxTall
   maxServedSide
 }
     `, {"fragmentName":"MediaLimitFields"}) as unknown as TypedDocumentString<MediaLimitFieldsFragment, unknown>;
@@ -8885,6 +8896,7 @@ export const UploadQuotaDocument = new TypedDocumentString(`
     maxFrames
     maxFps
     maxAspect
+    maxTall
   }
 }
     `) as unknown as TypedDocumentString<UploadQuotaQuery, UploadQuotaQueryVariables>;
@@ -8948,6 +8960,7 @@ export const PublicLimitsDocument = new TypedDocumentString(`
   maxDurationMs
   minSide
   maxAspect
+  maxTall
   maxServedSide
 }`) as unknown as TypedDocumentString<PublicLimitsQuery, PublicLimitsQueryVariables>;
 export const CreateRoleDocument = new TypedDocumentString(`

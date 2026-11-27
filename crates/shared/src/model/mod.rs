@@ -2075,8 +2075,11 @@ pub struct UploadQuota {
     /// The most frames a second (50). A frame shown for under 20 ms (a 0 or 10 ms GIF delay) is
     /// shown for 100 ms, as browsers do, so an animation never runs faster. Fixed.
     pub max_fps: i32,
-    /// How many times as wide as tall an emote may be (4, so 4:1). Fixed; a tall emote has no rule.
+    /// How many times as wide as tall an emote may be (4, so 4:1). Fixed.
     pub max_aspect: i32,
+    /// How many times as tall as wide an emote may be (3, so 1:3). Fixed; checked for new
+    /// uploads only.
+    pub max_tall: i32,
 }
 
 // Live updates (ADR 0005)

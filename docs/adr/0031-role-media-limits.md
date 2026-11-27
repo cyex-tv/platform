@@ -1,6 +1,6 @@
 # 0031: Per-role media limits (badges and paints)
 
-- Status: accepted (owner approved, 2026/11/26); amended 2026/11/26: emotes are fixed, not per role (see Amendment)
+- Status: accepted (owner approved, 2026/11/26); amended 2026/11/26: emotes are fixed, not per role (see Amendment); amended 2026/11/27: emotes are at most 1:3 tall (see Amendment 2)
 - Date: 2026/11/26
 - Amends: 0025 (badge uploads), 0026 (paint uploads); builds on the configurable media limits (`CYEX_TV_LIMIT_*`)
 
@@ -30,3 +30,10 @@ The owner decided that emote upload rules are the same for everyone, whoever upl
 - **Removed**: `emote_max_bytes`, `emote_max_side` and `emote_max_frames` from role limits (`setRoleLimits`, `roleLimits`, `limitDefaults`, `limits.account`, the role editor's File sizes group), and `CYEX_TV_LIMIT_EMOTE_*` and `CYEX_TV_LIMIT_ROLE_EMOTE_*` (ignored if still set). They were added hours before in #193 and never released. For compatibility `setRoleLimits` answers `bad_limit` ("emote limits are fixed") to an input that still names one, and a migration strips the keys from stored role limits. Badge and paint role limits are unchanged.
 - Errors: a side or frame count over the rule, or a file over 8 MB, stays `too_large` (413; the byte cap carries `details {limit, current}`, ADR 0032). The messages state the limit.
 
+## Amendment 2 (2026/11/27): at most 1:3 tall
+The owner asked for a minimum width: an emote's shape must lie between 1:3 (tall) and 4:1 (wide). This replaces "a tall picture has no ratio rule" above.
+- **Rule** (`EmoteRules::MAX_TALL` = 3, `Limits::max_tall`): height at most 3 × width. Exactly 1:3 is fine (100 × 300, 334 × 1000); 100 × 301 or 10 × 1000 is refused.
+- **Error**: as for the wide rule, `bad_dimensions` (422, "Emotes can be at most 3 times as tall as wide (1:3). This one is W×H px.").
+- **New uploads only.** The probe checks it at `POST /v1/emotes`; the worker makes files again from any stored original with `Limits::emote_original()`, which drops both shape rules, so emotes already taller than 1:3 stay valid and are made again as they are (fitted by height, as before).
+- **Reported**: `maxTall` 3 next to `maxAspect` in the `limits` query / `GET /v1/limits` (`emote`; null for badges and paints, which keep their own shape rules) and in `uploadQuota`. Additive fields.
+- **Client**: the quick upload checks it before sending, and the editor lets a picture be stretched to any shape while editing but its rules checklist blocks Continue until the result is between 1:3 and 4:1.

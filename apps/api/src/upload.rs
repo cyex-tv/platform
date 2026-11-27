@@ -308,6 +308,7 @@ pub async fn quota(
         max_frames: int(i64::from(EmoteRules::MAX_FRAMES)),
         max_fps: int(i64::from(EmoteRules::MAX_FPS)),
         max_aspect: int(i64::from(EmoteRules::MAX_ASPECT)),
+        max_tall: int(i64::from(EmoteRules::MAX_TALL)),
     })
 }
 

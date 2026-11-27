@@ -1,10 +1,11 @@
 <script lang="ts">
   // The site-wide upload dialog (upload.svelte.ts), the only way to upload (there is no upload
   // page): a modal over whatever page you're on, in two modes (owner, 2026/11/26):
-  //   Quick upload  the form (UploadForm): wide screens a 960px dialog, the form on the left, a
-  //                 large drop zone with our limits on the right.
-  //   Editor        the emote editor (lib/editor, loaded the first time you switch to it): the
-  //                 dialog grows to fit a stage, tools, frames and a panel with the upload rules.
+  //   Quick upload  the form (UploadForm): the form on the left, a large drop zone with our
+  //                 limits on the right.
+  //   Editor        the emote editor (lib/editor, loaded the first time you switch to it): a
+  //                 stage, tools, frames and a panel with the upload rules.
+  // Both modes have the same dialog size (owner, 2026/11/27): switching never resizes or moves it.
   //                 Its result goes back to Quick upload, which uploads it as any picked file.
   // Switching keeps both: the form's file and fields, the editor's work. Phones: a full-height
   // sheet, its title bar and buttons pinned. It can't close while the image is being sent (Esc and
@@ -109,7 +110,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-<dialog class="ui-dialog upload-dialog" class:wide={mode === 'editor'} bind:this={dialog} aria-labelledby="upload-title" aria-describedby="upload-line"
+<dialog class="ui-dialog upload-dialog" data-mode={mode} bind:this={dialog} aria-labelledby="upload-title" aria-describedby="upload-line"
   oncancel={cancel} onclose={closed} onclick={backdrop}
   ondragover={(e) => e.preventDefault()} ondrop={drop}>
   <div class="panel">
@@ -148,10 +149,9 @@
 
 <style>
   /* clip, not hidden: focus and scrollIntoView can't shift the panel inside the dialog. */
-  .upload-dialog { width: min(960px, calc(100vw - 32px)); height: min(680px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px); overflow: clip; padding: 0;
-    transition-property: opacity, scale, overlay, display, width, height; }
-  /* The editor: as large as the window allows, up to 1600 × 1000. */
-  .upload-dialog.wide { width: min(1600px, calc(100vw - 32px)); height: min(1000px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); }
+  /* One size for both modes: as large as the window allows, up to 1400 × 900. */
+  .upload-dialog { width: min(1400px, calc(100vw - 32px)); max-width: calc(100vw - 32px); height: min(900px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px);
+    overflow: clip; padding: 0; transition-property: opacity, scale, overlay, display; }
   @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .upload-dialog { transition-property: opacity, overlay, display; } }
   .panel { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
   .top { display: flex; align-items: center; gap: 12px; padding: 12px 16px 10px; border-bottom: 1px solid var(--border); }
@@ -173,7 +173,7 @@
   }
   /* Phones: a full-height sheet; the title bar stays put while the form scrolls. */
   @media (max-width: 639.98px) {
-    .upload-dialog, .upload-dialog.wide { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0;
+    .upload-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0;
       /* Full screen: it fades in place, with no scale (it would show the page edge behind it). */
       transition-property: opacity, overlay, display; scale: 1; }
     .top { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
