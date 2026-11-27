@@ -705,7 +705,10 @@ async fn only_staff_with_emotes_transfer_move_an_emote() {
     }
 
     let r = w.ok(&staff, TRANSFER, json!({ "id": id, "to": to })).await;
-    assert_eq!(r["transferEmote"]["owner"]["id"], to);
+    assert_eq!(
+        r["transferEmote"]["owner"]["id"],
+        w.db.public(bob.id).await.as_str()
+    );
     let rows = w.audited("emote.transferred", &id).await;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["via"], "emotes.transfer");
