@@ -1943,6 +1943,11 @@ async fn every_reference_to_an_account_is_handled_by_erase() {
         ),
         ("roles", "created_by", "who made a role"),
         ("emotes", "reviewed_by", "who reviewed an upload"),
+        (
+            "emotes",
+            "personal_reviewed_by",
+            "who decided an upload's personal use (ADR 0038)",
+        ),
         ("blocked_images", "created_by", "who blocked an image"),
         ("reports", "resolved_by", "who resolved a report"),
         (
