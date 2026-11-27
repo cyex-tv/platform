@@ -858,6 +858,65 @@ async fn a_staff_block_ends_keys_at_once_and_turns_webhooks_off() {
 }
 
 #[tokio::test]
+async fn an_account_has_at_most_two_webhooks_asking_for_cosmetics_events() {
+    let Some(w) = World::new(Rates::default()).await else {
+        return;
+    };
+    let a = w.user("6851").await;
+    let b = w.user("6852").await;
+    let vars = |id: &str, n: u32, events: Value| json!({ "id": id, "url": format!("https://hooks.example.com/{n}"), "events": events });
+    for n in 1..=2 {
+        let r = w
+            .gql(
+                As::Site(&a.site),
+                CREATE_HOOK,
+                vars("6851", n, json!(["COSMETIC_UPDATED"])),
+            )
+            .await;
+        assert!(r["data"]["createWebhook"].is_object(), "{r}");
+    }
+    // The third is refused with the limit and its numbers; channel events are still fine.
+    let r = w
+        .gql(
+            As::Site(&a.site),
+            CREATE_HOOK,
+            vars("6851", 3, json!(["COSMETIC_UPDATED"])),
+        )
+        .await;
+    assert_eq!(code(&r), "too_many_webhooks", "{r}");
+    assert_eq!(r["errors"][0]["extensions"]["limit"], 2, "{r}");
+    let r = w
+        .gql(
+            As::Site(&a.site),
+            CREATE_HOOK,
+            vars("6851", 3, json!(["SET_EMOTE_ADDED"])),
+        )
+        .await;
+    let plain = r["data"]["createWebhook"]["webhook"]["id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{r}"))
+        .to_owned();
+    // Turning that one into a cosmetics subscriber is the same third one.
+    let r = w
+        .gql(
+            As::Site(&a.site),
+            "mutation($id: String!, $events: [EventType!]!) { updateWebhook(id: $id, input: { events: $events }) { id } }",
+            json!({ "id": plain, "events": ["COSMETIC_CREATED"] }),
+        )
+        .await;
+    assert_eq!(code(&r), "too_many_webhooks", "{r}");
+    // Another account has its own two.
+    let r = w
+        .gql(
+            As::Site(&b.site),
+            CREATE_HOOK,
+            vars("6852", 1, json!(["COSMETIC_UPDATED"])),
+        )
+        .await;
+    assert!(r["data"]["createWebhook"].is_object(), "{r}");
+}
+
+#[tokio::test]
 async fn editors_see_only_the_host_of_a_webhook_url() {
     let Some(w) = World::new(Rates::default()).await else {
         return;

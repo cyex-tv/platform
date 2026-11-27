@@ -9,12 +9,13 @@
 //           Frames are scaled down while decoding when the whole would be over the budget.
 //   encode  each frame through the canvas's own WebP encoder, put together into one animated
 //           WebP (riff.ts); or a GIF with gifenc.
-import { parseGIF, decompressFrames } from 'gifuct-js';
+import { parseGIF, decompressFrame } from 'gifuct-js';
 import { GIFEncoder, applyPalette, quantize } from 'gifenc';
 import { createFile, DataStream, MP4BoxBuffer, type Movie, type Sample } from 'mp4box';
 import { muxAnimation, pictureChunks, readAnimation, stillWebp, type MuxFrame } from './riff';
 import { MIME, importScale, sniff, type Budget, type MediaKind } from './sniff';
 import type { WorkerIn, WorkerOut } from './media-protocol';
+import { Failure, assertCanvasSize, assertDecodable, assertFileSize, assertWebp, readGif } from './guard';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -34,6 +35,7 @@ class Scaler {
     readonly w: number,
     readonly h: number,
   ) {
+    assertCanvasSize(w, h, 120_000_000);
     this.canvas = new OffscreenCanvas(w, h);
     this.ctx = this.canvas.getContext('2d')!;
     this.ctx.imageSmoothingQuality = 'high';
@@ -54,6 +56,7 @@ function meta(s: Sink, kind: MediaKind, w: number, h: number, frames: number) {
 }
 
 async function decode(id: number, file: Blob, budget: Budget) {
+  assertFileSize(file.size);
   const buf = await file.arrayBuffer();
   const bytes = new Uint8Array(buf);
   const kind = sniff(bytes);
@@ -73,7 +76,7 @@ async function decode(id: number, file: Blob, budget: Budget) {
       try {
         return await viaImageDecoder(s, kind, buf, mime);
       } catch (e) {
-        if (e instanceof Cancel) throw e;
+        if (e instanceof Cancel || e instanceof Failure) throw e;
         // fall through to the other ways
       }
     }
@@ -86,8 +89,6 @@ async function decode(id: number, file: Blob, budget: Budget) {
   return still(s, kind, file);
 }
 
-class Failure extends Error {}
-
 async function viaImageDecoder(s: Sink, kind: MediaKind, buf: ArrayBuffer, type: string) {
   const dec = new ImageDecoder({ data: buf, type });
   try {
@@ -98,6 +99,7 @@ async function viaImageDecoder(s: Sink, kind: MediaKind, buf: ArrayBuffer, type:
     const first = await dec.decode({ frameIndex: 0 });
     const w = first.image.displayWidth;
     const h = first.image.displayHeight;
+    assertDecodable(w, h, n, s.budget);
     const fit = meta(s, kind, w, h, n);
     const sc = new Scaler(fit.width, fit.height);
     for (let i = 0; i < fit.frames; i++) {
@@ -115,11 +117,7 @@ async function viaImageDecoder(s: Sink, kind: MediaKind, buf: ArrayBuffer, type:
 }
 
 async function viaGifuct(s: Sink, buf: ArrayBuffer) {
-  const gif = parseGIF(buf);
-  const frames = decompressFrames(gif, true);
-  const w = gif.lsd.width;
-  const h = gif.lsd.height;
-  if (!frames.length || !w || !h) throw new Failure('That GIF has no pictures in it.');
+  const { gif, frames, width: w, height: h } = readGif(buf, s.budget);
   const fit = meta(s, 'gif', w, h, frames.length);
   const comp = new OffscreenCanvas(w, h);
   const ctx = comp.getContext('2d')!;
@@ -127,10 +125,10 @@ async function viaGifuct(s: Sink, buf: ArrayBuffer) {
   const pctx = patch.getContext('2d')!;
   const sc = new Scaler(fit.width, fit.height);
   let saved: ImageData | null = null;
+  let prev: { disposalType?: number; dims: { left: number; top: number; width: number; height: number } } | undefined;
   for (let i = 0; i < fit.frames; i++) {
     check(s.id);
-    const f = frames[i];
-    const prev = frames[i - 1];
+    const f = decompressFrame(frames[i], gif.gct, true);
     if (prev?.disposalType === 2) ctx.clearRect(prev.dims.left, prev.dims.top, prev.dims.width, prev.dims.height);
     else if (prev?.disposalType === 3 && saved) ctx.putImageData(saved, 0, 0);
     saved = f.disposalType === 3 ? ctx.getImageData(0, 0, w, h) : null;
@@ -143,6 +141,7 @@ async function viaGifuct(s: Sink, buf: ArrayBuffer) {
     }
     const bitmap = sc.bitmap(comp);
     post({ type: 'frame', id: s.id, index: i, bitmap, delay: f.delay }, [bitmap]);
+    prev = f;
     if (i % 8 === 7) await idle();
   }
   post({ type: 'done', id: s.id });
@@ -150,6 +149,7 @@ async function viaGifuct(s: Sink, buf: ArrayBuffer) {
 
 async function viaWebpFrames(s: Sink, anim: NonNullable<ReturnType<typeof readAnimation>>) {
   const { width: w, height: h } = anim;
+  assertWebp(anim, s.budget);
   const fit = meta(s, 'webp', w, h, anim.frames.length);
   const comp = new OffscreenCanvas(w, h);
   const ctx = comp.getContext('2d')!;
@@ -218,7 +218,7 @@ async function decodeMp4(s: Sink, buf: ArrayBuffer) {
     file.start();
   };
   file.onSamples = (_id: number, _user: unknown, got: Sample[]) => {
-    samples.push(...got);
+    for (const x of got) samples.push(x);
   };
   file.appendBuffer(MP4BoxBuffer.fromArrayBuffer(buf, 0), true);
   file.flush();
@@ -242,9 +242,11 @@ async function decodeMp4(s: Sink, buf: ArrayBuffer) {
 
   const scale = 1_000_000 / track.timescale;
   const times = samples.map((x) => x.cts * scale).sort((a, b) => a - b);
-  const end = Math.max(...samples.map((x) => (x.cts + x.duration) * scale));
+  let end = 0;
+  for (const x of samples) end = Math.max(end, (x.cts + x.duration) * scale);
   const w = config.codedWidth!;
   const h = config.codedHeight!;
+  assertDecodable(w, h, samples.length, s.budget);
   const fit = meta(s, 'mp4', w, h, samples.length);
   // Only the first frames (in showing order) when there are more than the budget's.
   const cutoff = fit.frames < times.length ? times[fit.frames] : Infinity;
