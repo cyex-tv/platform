@@ -998,7 +998,7 @@ async fn personal_set_capacity_comes_from_override_roles_then_default() {
     give_role(
         &mut c,
         owner,
-        "subscriber",
+        "supporter",
         json!({ "personal_set_slots": 10 }),
     )
     .await;

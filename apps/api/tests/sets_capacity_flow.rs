@@ -345,7 +345,7 @@ async fn capacity_is_one_to_the_owners_limit_and_never_below_what_it_holds() {
     // A role raises the owner's limit (a future subscriber role: 2.500).
     w.role(
         &alice,
-        "Subscriber",
+        "Big sets",
         &[],
         json!({ "set_capacity_max": 2500 }),
     )
