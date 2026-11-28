@@ -12,10 +12,12 @@ describe('Content-Security-Policy', () => {
     expect(csp['default-src']).toEqual(['self']);
   });
 
-  it('allows connections only to the site, the API and GitHub (and the dev mock in dev)', () => {
+  it('allows connections only to the site, the API, the CDN and GitHub (and the dev mock in dev)', () => {
     const allowed = csp['connect-src'].filter((s) => s !== 'self');
     expect(csp['connect-src'][0]).toBe('self');
     expect(allowed).toContain('https://api.github.com');
+    // Download and GIF export fetch the emote file from the CDN.
+    expect(allowed).toContain('https://cdn.cyex.tv');
     for (const origin of allowed) expect(origin).toMatch(/^https?:\/\/[^*]+$/); // no wildcards
   });
 
