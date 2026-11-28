@@ -71,7 +71,8 @@ export default {
         'font-src': ['self'],
         'img-src': ['self', 'data:', 'blob:', 'https://cdn.cyex.tv', ...cdn, ...AVATARS, api, ...mock],
         // GitHub's release list: the front page reads which cyex deck installer is newest (src/lib/home/deck.svelte.ts).
-        'connect-src': ['self', api, 'https://api.github.com', ...mock],
+        // The CDN: an emote's Download and GIF export fetch the file (lib/components/emote/download.ts).
+        'connect-src': ['self', api, 'https://cdn.cyex.tv', ...cdn, 'https://api.github.com', ...mock],
         'frame-src': ['self', ...PADDLE_FRAME],
         // The paint studio renders animated paints in a module worker; the dev server hands it
         // over as a blob: URL (without this, script-src blocked it and rendering fell back to the page).
